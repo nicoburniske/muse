@@ -12,6 +12,10 @@ import zio.json.*
 import zio.config.*
 import ConfigDescriptor.*
 import ZConfig.*
+import zio.config.typesafe.TypesafeConfig
+import zio.config.yaml.YamlConfig
+
+import java.io.File
 
 object Main extends ZIOAppDefault {
   val scopes = List("playlist-read-collaborative user-read-email").mkString(" ")
@@ -26,14 +30,24 @@ object Main extends ZIOAppDefault {
     given decoder: JsonDecoder[AuthData] = DeriveJsonDecoder.gen[AuthData]
   }
 
-  case class Config(clientID: String, clientSecret: String, redirectURI: String)
-  object Config {
-    val descriptor: ConfigDescriptor[Config] =
-      (string("client_id") zip string("client_secret") zip string("redirect_uri")).to[Config]
+  case class AppConfig(spotify: SpotifyConfig, sqlConfig: SqlConfig)
+  case class SpotifyConfig(clientID: String, clientSecret: String, redirectURI: String)
+  case class SqlConfig(name: String, host: String, port: Int, username: String, password: String)
+  object AppConfig {
+    val appDescriptor: ConfigDescriptor[AppConfig]         =
+      (nested("spotify")(spotifyDescriptor) zip nested("database")(sqlDescriptor)).to[AppConfig]
+    val spotifyDescriptor: ConfigDescriptor[SpotifyConfig] =
+      (string("client_id") zip string("client_secret") zip string("redirect_uri")).to[SpotifyConfig]
+    val sqlDescriptor: ConfigDescriptor[SqlConfig]         =
+      (string("name") zip
+        string("host") zip
+        ConfigDescriptor.int("port") zip
+        string("username") zip
+        string("password")).to[SqlConfig]
   }
 
-  def generateRedirectUrl(): URIO[Config, URL] = for {
-    c     <- ZIO.serviceWith[Config](identity)
+  def generateRedirectUrl(): URIO[SpotifyConfig, URL] = for {
+    c     <- ZIO.serviceWith[SpotifyConfig](identity)
     state <- Random.nextUUID
   } yield URL(
     Path.decode("authorize"),
@@ -65,17 +79,19 @@ object Main extends ZIOAppDefault {
       Response.text("YEET")
   }
 
-  def getAuthTokens(code: String): ZIO[Config & EventLoopGroup & ChannelFactory, Throwable, AuthData] = for {
-    response <- requestAccessToken(code)
-    body     <- response.bodyAsString
-    token    <- body.fromJson[AuthData] match {
-                  case Left(error) => ZIO.fail(new Exception(error))
-                  case Right(data) => ZIO.succeed(data)
-                }
-  } yield token
+  def getAuthTokens(code: String): ZIO[SpotifyConfig & EventLoopGroup & ChannelFactory, Throwable, AuthData] =
+    for {
+      response <- requestAccessToken(code)
+      body     <- response.bodyAsString
+      token    <- body.fromJson[AuthData] match {
+                    case Left(error) => ZIO.fail(new Exception(error))
+                    case Right(data) => ZIO.succeed(data)
+                  }
+    } yield token
 
-  def requestAccessToken(code: String): ZIO[Config & EventLoopGroup & ChannelFactory, Throwable, Response] =
-    ZIO.serviceWith[Config](identity).flatMap { c =>
+  def requestAccessToken(
+      code: String): ZIO[SpotifyConfig & EventLoopGroup & ChannelFactory, Throwable, Response] =
+    ZIO.serviceWith[SpotifyConfig](identity).flatMap { c =>
       val url     = URL(
         Path.decode("api/token"),
         URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
@@ -94,10 +110,12 @@ object Main extends ZIOAppDefault {
   def encodeFormBody(data: Map[String, String]): String =
     data.map { case (k, v) => s"$k=$v" }.mkString("&")
 
-  val clientLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
-  // TODO: how tf does this import work?
-  val configLayer = ZConfig.fromSystemEnv(Config.descriptor)
-  val allLayers   = clientLayer ++ configLayer ++ zio.ZEnv.live
+  val clientLayer             = EventLoopGroup.auto(8) ++ ChannelFactory.auto
+  val appConfig               = TypesafeConfig.fromHoconFile(new File("application.conf"), AppConfig.appDescriptor)
+  val flattenedAppConfigLayer = appConfig.flatMap { zlayer =>
+    ZLayer.succeed(zlayer.get.spotify) ++ ZLayer.succeed(zlayer.get.sqlConfig)
+  }
+  val allLayers               = clientLayer ++ flattenedAppConfigLayer ++ zio.ZEnv.live
 
   override def run = {
     Server.start(8883, endpoints).exitCode.provideLayer(allLayers)
