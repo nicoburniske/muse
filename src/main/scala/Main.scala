@@ -9,16 +9,18 @@ import zhttp.service.ChannelFactory
 import java.util.Base64
 import java.nio.charset.StandardCharsets
 import zio.json.*
-import zio.config.*
-import ConfigDescriptor.*
-import ZConfig.*
 import zio.config.typesafe.TypesafeConfig
-import zio.config.yaml.YamlConfig
+import io.getquill.context.ZioJdbc.*
+import io.getquill.context.ZioJdbc.DataSourceLayer
+import io.getquill.{PostgresZioJdbcContext, SnakeCase}
+import io.getquill.*
+import persist.QuillContext
 
 import java.io.File
+import zio.ZEnv
 
 object Main extends ZIOAppDefault {
-  val scopes = List("playlist-read-collaborative user-read-email").mkString(" ")
+  val scopes = List("playlist-read-collaborative", "user-read-email").mkString(" ")
 
   case class AuthData(
       @jsonField("token_type") tokenType: String,
@@ -30,24 +32,8 @@ object Main extends ZIOAppDefault {
     given decoder: JsonDecoder[AuthData] = DeriveJsonDecoder.gen[AuthData]
   }
 
-  case class AppConfig(spotify: SpotifyConfig, sqlConfig: SqlConfig)
-  case class SpotifyConfig(clientID: String, clientSecret: String, redirectURI: String)
-  case class SqlConfig(name: String, host: String, port: Int, username: String, password: String)
-  object AppConfig {
-    val appDescriptor: ConfigDescriptor[AppConfig]         =
-      (nested("spotify")(spotifyDescriptor) zip nested("database")(sqlDescriptor)).to[AppConfig]
-    val spotifyDescriptor: ConfigDescriptor[SpotifyConfig] =
-      (string("client_id") zip string("client_secret") zip string("redirect_uri")).to[SpotifyConfig]
-    val sqlDescriptor: ConfigDescriptor[SqlConfig]         =
-      (string("name") zip
-        string("host") zip
-        ConfigDescriptor.int("port") zip
-        string("username") zip
-        string("password")).to[SqlConfig]
-  }
-
   def generateRedirectUrl(): URIO[SpotifyConfig, URL] = for {
-    c     <- ZIO.serviceWith[SpotifyConfig](identity)
+    c     <- ZIO.service[SpotifyConfig]
     state <- Random.nextUUID
   } yield URL(
     Path.decode("authorize"),
@@ -67,16 +53,22 @@ object Main extends ZIOAppDefault {
         url <- generateRedirectUrl()
       } yield Response.redirect(url.encode, false)
     case req @ Method.GET -> !! / "callback" =>
-      val maybeCode = req.url.queryParams.get("code").flatMap(_.headOption)
-      for {
-        code                <- ZIO.getOrFailWith(new Exception("Missing code in response"))(maybeCode)
-        accessTokenResponse <- getAuthTokens(code)
-        _                   <- printLine(accessTokenResponse)
-      } yield
-      // TODO: yield redirect to website.
-      // TODO: add cookie for session.
-      // TODO: Save session in memory somewhere
-      Response.text("YEET")
+      req.url.queryParams.get("code").flatMap(_.headOption) match {
+        case None       =>
+          ZIO.succeed(
+            Response(
+              status = Status.BadRequest,
+              data = HttpData.fromString("Missing 'code' query parameter")))
+        case Some(code) =>
+          for {
+            accessTokenResponse <- getAuthTokens(code)
+            _                   <- printLine(accessTokenResponse)
+          } yield
+          // TODO: create cookie for session and store in memory
+          // TODO: yield redirect to actual site
+          Response.text("You're logged in fool")
+
+      }
   }
 
   def getAuthTokens(code: String): ZIO[SpotifyConfig & EventLoopGroup & ChannelFactory, Throwable, AuthData] =
@@ -91,7 +83,7 @@ object Main extends ZIOAppDefault {
 
   def requestAccessToken(
       code: String): ZIO[SpotifyConfig & EventLoopGroup & ChannelFactory, Throwable, Response] =
-    ZIO.serviceWith[SpotifyConfig](identity).flatMap { c =>
+    ZIO.service[SpotifyConfig].flatMap { c =>
       val url     = URL(
         Path.decode("api/token"),
         URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
@@ -111,13 +103,14 @@ object Main extends ZIOAppDefault {
     data.map { case (k, v) => s"$k=$v" }.mkString("&")
 
   val clientLayer             = EventLoopGroup.auto(8) ++ ChannelFactory.auto
-  val appConfig               = TypesafeConfig.fromHoconFile(new File("application.conf"), AppConfig.appDescriptor)
+  val appConfig               =
+    TypesafeConfig.fromHoconFile(new File("src/main/resources/application.conf"), AppConfig.appDescriptor)
   val flattenedAppConfigLayer = appConfig.flatMap { zlayer =>
     ZLayer.succeed(zlayer.get.spotify) ++ ZLayer.succeed(zlayer.get.sqlConfig)
   }
-  val allLayers               = clientLayer ++ flattenedAppConfigLayer ++ zio.ZEnv.live
-
-  override def run = {
-    Server.start(8883, endpoints).exitCode.provideLayer(allLayers)
+  // TODO: add DB layer.
+  val allLayers               = clientLayer ++ flattenedAppConfigLayer ++ ZEnv.live ++ QuillContext.dataSourceLayer
+  override def run            = {
+    Server.start(8883, endpoints).exitCode.provideLayer(allLayers.orDie)
   }
 }

@@ -1,0 +1,34 @@
+# scala 3
+.tasty
+*.tasty
+
+# sbt
+project/project/
+project/target/
+target/
+
+# intellij idea
+*.log
+*.iml
+*.ipr
+*.iws
+.idea
+.bsp
+
+# metals
+.bloop
+.metals
+metals.mv.db
+metals.lock.db
+metals.sbt
+
+# mac
+.DS_Store
+
+# other?
+.history
+.scala_dependencies
+.cache-main
+
+#general
+*.class
