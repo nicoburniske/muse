@@ -9,6 +9,7 @@ final case class Review(
     id: UUID,
     createdAt: Instant,
     creatorId: String,
+    reviewName: String,
     isPublic: Boolean,
     entityType: EntityType,
     entityId: String

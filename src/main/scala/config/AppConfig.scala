@@ -2,9 +2,11 @@ import zio.config.*
 import ConfigDescriptor.*
 import ZConfig.*
 
+import config.SpotifyConfig
+import config.SqlConfig
+
 final case class AppConfig(spotify: SpotifyConfig, sqlConfig: SqlConfig)
-final case class SpotifyConfig(clientID: String, clientSecret: String, redirectURI: String)
-final case class SqlConfig(database: String, host: String, port: Int, user: String, password: String)
+
 object AppConfig {
   val appDescriptor: ConfigDescriptor[AppConfig] =
     (nested("spotify")(spotifyDescriptor) zip

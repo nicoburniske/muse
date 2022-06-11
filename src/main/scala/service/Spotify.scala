@@ -1,6 +1,6 @@
 package service
 
-import domain.spotify.{Paging, PlaylistTrack}
+import domain.spotify.{MultiTrack, Paging, PlaylistTrack, Track, UserPlaylist}
 import sttp.client3.*
 import sttp.model.{Method, ResponseMetadata, Uri}
 import sttp.monad.MonadError
@@ -25,11 +25,24 @@ type SpotifyResponse[T]        = Either[SpotifyRequestError, T]
 type SpotifyPageResponse[T]    = SpotifyResponse[Paging[T]]
 type SpotifyAllPageResponse[T] = Either[SpotifyRequestError, Vector[T]]
 
-// TODO: separate Parallel queries into own domain?
-case class Spotify[F[_]: MonadError: Parallel](
+case class Spotify[F[_]: MonadError](
     backend: SttpBackend[F, Any],
     accessToken: String,
     refreshToken: String) {
+
+  def getUserPlaylists(
+      userId: String,
+      limit: Int,
+      offset: Option[Int] = None): F[SpotifyPageResponse[UserPlaylist]] = {
+    val uri = uri"${Spotify.API_BASE}/users/$userId/playlists?limit=$limit&offset=$offset"
+    execute(uri, Method.GET)
+  }
+
+  def getAllUserPlaylists(userId: String): F[SpotifyAllPageResponse[UserPlaylist]] = {
+    val MAX_PER_REQUEST = 50
+    val request         = (offset: Int) => getUserPlaylists(userId, MAX_PER_REQUEST, Some(offset))
+    getAllPaging(request, MAX_PER_REQUEST)
+  }
 
   def getSomePlaylistTracks(
       playlistId: String,
@@ -45,7 +58,7 @@ case class Spotify[F[_]: MonadError: Parallel](
     getAllPaging(request, MAX_PER_REQUEST)
   }
 
-  private def getAllPaging[T](request: Int => F[SpotifyPageResponse[T]], pageSize: Int = 50)(
+  def getAllPaging[T](request: Int => F[SpotifyPageResponse[T]], pageSize: Int = 50)(
       using decoder: JsonDecoder[T]): F[SpotifyAllPageResponse[T]] = {
     def go(acc: Vector[T], offset: Int): F[SpotifyAllPageResponse[T]] = {
       request(offset).flatMap {
@@ -62,7 +75,7 @@ case class Spotify[F[_]: MonadError: Parallel](
     go(Vector.empty, 0)
   }
 
-  private def execute[T](uri: Uri, method: Method)(using decoder: JsonDecoder[T]): F[SpotifyResponse[T]] = {
+  def execute[T](uri: Uri, method: Method)(using decoder: JsonDecoder[T]): F[SpotifyResponse[T]] = {
     val base            = basicRequest.copy[Identity, Either[String, String], Any](uri = uri, method = method)
     val withPermissions = addPermissions(base)
     val mappedResponse  = withPermissions.response.mapWithMetadata {
@@ -74,7 +87,8 @@ case class Spotify[F[_]: MonadError: Parallel](
     val finalRequest    = withPermissions.response(mappedResponse)
     backend.send(finalRequest).map(_.body)
   }
-  private def addPermissions[T](request: Request[T, Any]): Request[T, Any]                               = {
+
+  private def addPermissions[T](request: Request[T, Any]): Request[T, Any] = {
     request.auth.bearer(accessToken)
   }
 }

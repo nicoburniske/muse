@@ -1,5 +1,6 @@
 package domain.tables
 
 final case class AppUser(
-    id: String
+    id: String,
+    refreshToken: String
 )

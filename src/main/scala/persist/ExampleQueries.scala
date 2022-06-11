@@ -9,13 +9,6 @@ import io.getquill.*
 import utils.Parallel
 
 // TODO: move this somewhere
-object ParZIO {
-  given parZIO: Parallel[Task] = new Parallel[Task] {
-    def parTraverse[A, B](ta: Seq[A])(f: A => Task[B]): Task[Seq[B]] = {
-      ZIO.foreachPar(ta)(f)
-    }
-  }
-}
 
 object ExampleQueries extends ZIOAppDefault {
   override def run = {
