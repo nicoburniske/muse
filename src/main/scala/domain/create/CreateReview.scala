@@ -1,3 +1,5 @@
 package domain.create
 
-final case class CreateReview(creatorId: String, isPublic: Boolean, entityType: Int, entityId: String)
+import domain.common.EntityType
+
+final case class CreateReview(creatorId: String, isPublic: Boolean, entityType: EntityType, entityId: String)

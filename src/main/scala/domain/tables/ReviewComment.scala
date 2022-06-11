@@ -1,5 +1,7 @@
 package domain.tables
 
+import domain.common.EntityType
+
 import java.util.UUID
 import java.time.Instant
 
@@ -14,6 +16,6 @@ final case class ReviewComment(
     commenter: String,
     comment: Option[String],
     rating: Option[Int],
-    entityType: Int,
+    entityType: EntityType,
     entityId: Int
 )

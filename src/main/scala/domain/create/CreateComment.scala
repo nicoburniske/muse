@@ -1,5 +1,6 @@
 package domain.create
 
+import domain.common.EntityType
 import java.util.UUID
 
 final case class CreateComment(
@@ -9,6 +10,6 @@ final case class CreateComment(
     commenter: String,
     comment: Option[String],
     rating: Option[Int],
-    entityType: Int,
+    entityType: EntityType,
     entityId: Int
 )

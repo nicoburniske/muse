@@ -1,7 +1,6 @@
 package persist
 
-import domain.tables.{AppUser, Review, ReviewComment}
-import domain.create._
+import domain.common.EntityType
 import io.getquill.context.ZioJdbc.*
 import zio.*
 import io.getquill.*
@@ -17,6 +16,8 @@ import org.scalameta.data.data
 import javax.xml.crypto.Data
 import java.sql.Types
 import java.sql.Timestamp
+import domain.tables.{AppUser, Review, ReviewComment}
+import domain.create.{CreateComment, CreateReview}
 
 trait DatabaseQueries {
   def getUsers: IO[SQLException, List[AppUser]]
@@ -46,7 +47,12 @@ object DatabaseQueries {
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
   given instantDecoder: Decoder[Instant] = decoder((index, row, session) => row.getTimestamp(index).toInstant)
   given instantEncoder: Encoder[Instant] =
-    encoder(Types.TIMESTAMP, (idx, value, row) => row.setTimestamp(idx, Timestamp.from(value)))
+    encoder(Types.TIMESTAMP, (index, value, row) => row.setTimestamp(index, Timestamp.from(value)))
+
+  given entityTypeDecoder: Decoder[EntityType] =
+    decoder((index, row, session) => EntityType.fromOrdinal(row.getInt(index)))
+  given entityTypeEncoder: Encoder[EntityType] =
+    encoder(Types.INTEGER, (index, value, row) => row.setInt(index, value.ordinal))
 
   val dataSourceLayer: ULayer[DataSource] = DataSourceLayer.fromPrefix("database").orDie
 }
