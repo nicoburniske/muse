@@ -12,7 +12,7 @@ val protoQuill = "4.0.0-RC1"
 val postgresql = "42.3.4"
 
 lazy val root = (project in file(".")).settings(
-  name := "spotify",
+  name := "musing",
   libraryDependencies ++= Seq(
     "dev.zio"                       %% "zio"                           % zio,
     "dev.zio"                       %% "zio-json"                      % zioJson,

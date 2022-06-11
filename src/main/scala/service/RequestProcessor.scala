@@ -18,7 +18,9 @@ object RequestProcessor {
    * Handles a user login.
    *
    * @param auth
+   *   current user auth data from spotify
    * @return
+   *   true if new User was created, false if current user was created.
    */
   def handleUserLogin(auth: AuthData): ZIO[SttpBackend[Task, Any] & DatabaseQueries, Throwable, Boolean] =
     for {

@@ -8,8 +8,8 @@ import java.io.File
 import persist.QuillContext
 import server.Auth
 import persist.DatabaseQueries
-import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend.apply
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
+
 object Main extends ZIOAppDefault {
   val clientLayer             = EventLoopGroup.auto(8) ++ ChannelFactory.auto
   val appConfigLayer          =
@@ -20,13 +20,12 @@ object Main extends ZIOAppDefault {
 
   val dbLayer = QuillContext.dataSourceLayer >+> DatabaseQueries.live
 
-  val allLayers = AsyncHttpClientZioBackend
-    .layer() ++ clientLayer ++ flattenedAppConfigLayer ++ ZEnv.live ++ QuillContext.dataSourceLayer ++ dbLayer
+  val allLayers =
+    AsyncHttpClientZioBackend.layer() ++ clientLayer ++ flattenedAppConfigLayer ++ ZEnv.live ++ dbLayer
 
   val allEndpoints = Auth.endpoints
 
-  val server       = Server.start(8883, allEndpoints).exitCode.provideLayer(allLayers.orDie)
-  override def run = {
-    server
-  }
+  val server = Server.start(8883, allEndpoints).exitCode.provideLayer(allLayers.orDie)
+
+  override def run = server
 }

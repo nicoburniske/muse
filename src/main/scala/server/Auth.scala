@@ -37,8 +37,8 @@ object Auth {
             // TODO: create cookie for session and store in memory
             // TODO: yield redirect to actual site
             Response.text("You're logged in fool! " + text)
+            // Response.redirect("https://www.google.com", false)
           }
-
       }
   }
   // TODO: Error handling for routes!
