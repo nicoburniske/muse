@@ -1,9 +1,11 @@
 package persist
 
-import io.getquill.context.ZioJdbc._
-import zio._
-import io.getquill._
-import zio.ZLayer._
+import domain.tables.{AppUser, Review, ReviewComment}
+import domain.create._
+import io.getquill.context.ZioJdbc.*
+import zio.*
+import io.getquill.*
+import zio.ZLayer.*
 import zio.Console.printLine
 
 import java.sql.SQLException
@@ -11,55 +13,10 @@ import java.time.Instant
 import javax.sql.DataSource
 import java.util.UUID
 import org.scalameta.data.data
+
 import javax.xml.crypto.Data
 import java.sql.Types
 import java.sql.Timestamp
-
-final case class AppUser(
-    id: String
-)
-
-final case class Review(
-    id: UUID,
-    createdAt: Instant,
-    creatorId: String,
-    isPublic: Boolean,
-    entityType: Int,
-    entityId: String
-)
-
-final case class ReviewAccess(
-    reviewId: UUID,
-    userId: String
-)
-
-final case class ReviewComment(
-    // GUID?
-    id: Int,
-    reviewId: UUID,
-    createdAt: Instant,
-    updatedAt: Instant,
-    // If none, then it is root comment.
-    parentCommentId: Option[Int],
-    commenter: String,
-    comment: Option[String],
-    rating: Option[Int],
-    entityType: Int,
-    entityId: Int
-)
-
-final case class NewReview(creatorId: String, isPublic: Boolean, entityType: Int, entityId: String)
-
-final case class NewReviewComment(
-    reviewID: UUID,
-    // If none, then it is root comment.
-    parentCommentId: Option[Int],
-    commenter: String,
-    comment: Option[String],
-    rating: Option[Int],
-    entityType: Int,
-    entityId: Int
-)
 
 trait DatabaseQueries {
   def getUsers: IO[SQLException, List[AppUser]]
@@ -67,8 +24,10 @@ trait DatabaseQueries {
   def getUserReviews(userId: String): IO[SQLException, List[Review]]
   def getReviewComments(reviewId: UUID): IO[SQLException, List[ReviewComment]]
 
-  def createReview(review: NewReview): IO[SQLException, Unit]
-  def createReviewComment(review: NewReviewComment): IO[SQLException, Unit]
+  def createReview(review: CreateReview): IO[SQLException, Unit]
+  def createReviewComment(review: CreateComment): IO[SQLException, Unit]
+
+  // def updateReview(review: NewReview)
 }
 
 object DatabaseQueries {
@@ -78,7 +37,10 @@ object DatabaseQueries {
   def getUsers                          = ZIO.serviceWithZIO[DatabaseQueries](_.getUsers)
   def getUserReviews(userId: String)    = ZIO.serviceWithZIO[DatabaseQueries](_.getUserReviews(userId))
   def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseQueries](_.getReviewComments(reviewId))
-  def createReview(review: NewReview)   = ZIO.serviceWithZIO[DatabaseQueries](_.createReview(review))
+
+  def createReview(review: CreateReview)    = ZIO.serviceWithZIO[DatabaseQueries](_.createReview(review))
+  def createReviewComment(c: CreateComment) = ZIO.serviceWithZIO[DatabaseQueries](_.createReviewComment(c))
+
 }
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
@@ -103,15 +65,17 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
     users.filter(_.id == lift(userId))
   }.map(_.headOption).provide(layer)
 
-  def getUserReviews(userId: String) = run {
+  def getUserReviewsQuery(userId: String) = run {
     reviews.filter(_.creatorId == lift(userId))
-  }.provide(layer)
+  }
+
+  def getUserReviews(userId: String) = getUserReviewsQuery(userId).provide(layer)
 
   def getReviewComments(reviewId: UUID) = run {
     comments.filter(_.reviewId == lift(reviewId))
   }.provide(layer)
 
-  def createReview(review: NewReview) = run {
+  def createReview(review: CreateReview) = run {
     reviews.insert(
       _.creatorId  -> lift(review.creatorId),
       _.isPublic   -> lift(review.isPublic),
@@ -120,7 +84,7 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
     )
   }.provide(layer).unit
 
-  def createReviewComment(c: NewReviewComment) = run {
+  def createReviewComment(c: CreateComment): IO[SQLException, Unit] = run {
     comments.insert(
       _.reviewId        -> lift(c.reviewID),
       _.commenter       -> lift(c.commenter),
@@ -131,4 +95,5 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
       _.entityId        -> lift(c.entityId)
     )
   }.provide(layer).unit
+
 }
