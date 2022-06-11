@@ -8,7 +8,6 @@ import zio.Console.*
 import io.getquill.*
 import utils.Parallel
 
-// TODO: move this somewhere
 
 object ExampleQueries extends ZIOAppDefault {
   override def run = {

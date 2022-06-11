@@ -1,6 +1,6 @@
 package service
 
-import domain.spotify.{MultiTrack, Paging, PlaylistTrack, Track, UserPlaylist}
+import domain.spotify.{MultiTrack, Paging, PlaylistTrack, Track, UserPlaylist, User}
 import sttp.client3.*
 import sttp.model.{Method, ResponseMetadata, Uri}
 import sttp.monad.MonadError
@@ -25,16 +25,21 @@ type SpotifyResponse[T]        = Either[SpotifyRequestError, T]
 type SpotifyPageResponse[T]    = SpotifyResponse[Paging[T]]
 type SpotifyAllPageResponse[T] = Either[SpotifyRequestError, Vector[T]]
 
-case class Spotify[F[_]: MonadError](
+case class SpotifyService[F[_]: MonadError](
     backend: SttpBackend[F, Any],
     accessToken: String,
     refreshToken: String) {
+
+  def getCurrentUserProfile: F[SpotifyResponse[User]] = {
+    val uri = uri"${SpotifyService.API_BASE}/me"
+    execute(uri, Method.GET)
+  }
 
   def getUserPlaylists(
       userId: String,
       limit: Int,
       offset: Option[Int] = None): F[SpotifyPageResponse[UserPlaylist]] = {
-    val uri = uri"${Spotify.API_BASE}/users/$userId/playlists?limit=$limit&offset=$offset"
+    val uri = uri"${SpotifyService.API_BASE}/users/$userId/playlists?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
 
@@ -48,7 +53,7 @@ case class Spotify[F[_]: MonadError](
       playlistId: String,
       limit: Int,
       offset: Option[Int] = None): F[SpotifyPageResponse[PlaylistTrack]] = {
-    val uri = uri"${Spotify.API_BASE}/playlists/$playlistId/tracks?limit=$limit&offset=$offset"
+    val uri = uri"${SpotifyService.API_BASE}/playlists/$playlistId/tracks?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
 
@@ -93,6 +98,6 @@ case class Spotify[F[_]: MonadError](
   }
 }
 
-object Spotify {
+object SpotifyService {
   val API_BASE = "https://api.spotify.com/v1"
 }

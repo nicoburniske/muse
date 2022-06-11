@@ -8,24 +8,15 @@ import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import sttp.monad.MonadError
 
 object ExampleSpotify extends ZIOAppDefault {
-  val accessToken  = ""
+  val accessToken  =
+    "BQCynGsdSSxsrHDgGLMmFE5Xof7a82ibLaXFHr15ekC-dLJOUu4zFZQrUtRHwAtZNOSl2a_VC2nghPuMFBijsAKfol0f3Geq8Yzar3q8jTQWEF-EzHnwsvQFFXH9e4e6H2zPlf6gZeMoPR3_IXdNXCsTIEU4D8aHWTesUbrRYDa9k8E4M7_CYaR0Q82K-w"
   val refreshToken = ""
 
-  given zioMonadError: MonadError[Task] = new MonadError[Task] {
-    // TODO fix whatever is going on here
-    def ensure[T](f: Task[T], e: => Task[Unit]): Task[T]                                              = f
-    def error[T](t: Throwable): Task[T]                                                               = ZIO.fail(t)
-    def flatMap[A, B](fa: Task[A])(f: A => Task[B]): Task[B]                                          = fa.flatMap(f)
-    // TODO: fix this
-    protected def handleWrappedError[T](rt: Task[T])(h: PartialFunction[Throwable, Task[T]]): Task[T] = rt
-    def map[A, B](fa: Task[A])(f: A => B): Task[B]                                                    = fa.map(f)
-    def unit[T](t: T): Task[T]                                                                        = ZIO.succeed(t)
-  }
-
-  override def run             = {
+  import utils.Givens.given
+  override def run = {
     val program = for {
       backend  <- AsyncHttpClientZioBackend()
-      spotify   = Spotify[Task](backend, accessToken, refreshToken)
+      spotify   = SpotifyService[Task](backend, accessToken, refreshToken)
       response <- spotify.getAllPlaylistTracks("4FXSFL5xzbK9iSS1vpp2zd")
       _        <- printLine(response)
     } yield ()

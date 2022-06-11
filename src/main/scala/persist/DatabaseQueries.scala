@@ -23,6 +23,8 @@ trait DatabaseQueries {
   def getUserReviews(userId: String): IO[SQLException, List[Review]]
   def getReviewComments(reviewId: UUID): IO[SQLException, List[ReviewComment]]
 
+  def createUser(user: AppUser): IO[SQLException, Unit]
+  def updateUser(user: AppUser): IO[SQLException, Unit]
   def createReview(review: CreateReview): IO[SQLException, Unit]
   def createReviewComment(review: CreateComment): IO[SQLException, Unit]
 
@@ -37,9 +39,11 @@ object DatabaseQueries {
   def getUserReviews(userId: String)    = ZIO.serviceWithZIO[DatabaseQueries](_.getUserReviews(userId))
   def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseQueries](_.getReviewComments(reviewId))
 
+  def createUser(user: AppUser)             = ZIO.serviceWithZIO[DatabaseQueries](_.createUser(user))
   def createReview(review: CreateReview)    = ZIO.serviceWithZIO[DatabaseQueries](_.createReview(review))
   def createReviewComment(c: CreateComment) = ZIO.serviceWithZIO[DatabaseQueries](_.createReviewComment(c))
 
+  def updateUser(user: AppUser) = ZIO.serviceWithZIO[DatabaseQueries](_.updateUser(user))
 }
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
@@ -73,11 +77,20 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
     reviews.filter(_.creatorId == lift(userId))
   }
 
-  def getUserReviews(userId: String) = getUserReviewsQuery(userId).provide(layer)
+  def getUserReviews(userId: String) =
+    getUserReviewsQuery(userId).provide(layer)
 
   def getReviewComments(reviewId: UUID) = run {
     comments.filter(_.reviewId == lift(reviewId))
   }.provide(layer)
+
+  def createUser(user: AppUser) = run {
+    users.insert(
+      _.id           -> lift(user.id),
+      _.accessToken  -> lift(user.accessToken),
+      _.refreshToken -> lift(user.refreshToken)
+    )
+  }.provideLayer(layer).unit
 
   def createReview(review: CreateReview) = run {
     reviews.insert(
@@ -88,7 +101,7 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
     )
   }.provide(layer).unit
 
-  def createReviewComment(c: CreateComment): IO[SQLException, Unit] = run {
+  def createReviewComment(c: CreateComment) = run {
     comments.insert(
       _.reviewId        -> lift(c.reviewID),
       _.commenter       -> lift(c.commenter),
@@ -100,4 +113,7 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
     )
   }.provide(layer).unit
 
+  def updateUser(user: AppUser) = run {
+    users.filter(_.id == lift(user.id)).updateValue(lift(user))
+  }.provide(layer).unit
 }

@@ -7,6 +7,7 @@ import zhttp.service.{Client, EventLoopGroup, ChannelFactory}
 import zio.json.*
 import domain.spotify.AuthData
 import config.SpotifyConfig
+import service.RequestProcessor
 
 object Auth {
   val scopes = List("user-read-recently-played").mkString(" ")
@@ -30,13 +31,17 @@ object Auth {
             authData <- getAuthTokens(code)
             _        <- printLine(authData)
             _        <- printLine(authData.accessToken)
-          } yield
-          // TODO: create cookie for session and store in memory
-          // TODO: yield redirect to actual site
-          Response.text("You're logged in fool")
+            created  <- RequestProcessor.handleUserLogin(authData)
+          } yield {
+            val text = if (created) "New account created" else "Auth updated"
+            // TODO: create cookie for session and store in memory
+            // TODO: yield redirect to actual site
+            Response.text("You're logged in fool! " + text)
+          }
 
       }
   }
+  // TODO: Error handling for routes!
 
   def generateRedirectUrl(): URIO[SpotifyConfig, URL] = for {
     c     <- ZIO.service[SpotifyConfig]

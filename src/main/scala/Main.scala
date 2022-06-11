@@ -7,17 +7,26 @@ import java.io.File
 
 import persist.QuillContext
 import server.Auth
+import persist.DatabaseQueries
+import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend.apply
+import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 object Main extends ZIOAppDefault {
   val clientLayer             = EventLoopGroup.auto(8) ++ ChannelFactory.auto
-  val appConfig               =
+  val appConfigLayer          =
     TypesafeConfig.fromHoconFile(new File("src/main/resources/application.conf"), AppConfig.appDescriptor)
-  val flattenedAppConfigLayer = appConfig.flatMap { zlayer =>
+  val flattenedAppConfigLayer = appConfigLayer.flatMap { zlayer =>
     ZLayer.succeed(zlayer.get.spotify) ++ ZLayer.succeed(zlayer.get.sqlConfig)
   }
-  // TODO: add DB layer.
-  val allLayers               = clientLayer ++ flattenedAppConfigLayer ++ ZEnv.live ++ QuillContext.dataSourceLayer
-  val allEndpoints            = Auth.endpoints
-  override def run            = {
-    Server.start(8883, allEndpoints).exitCode.provideLayer(allLayers.orDie)
+
+  val dbLayer = QuillContext.dataSourceLayer >+> DatabaseQueries.live
+
+  val allLayers = AsyncHttpClientZioBackend
+    .layer() ++ clientLayer ++ flattenedAppConfigLayer ++ ZEnv.live ++ QuillContext.dataSourceLayer ++ dbLayer
+
+  val allEndpoints = Auth.endpoints
+
+  val server       = Server.start(8883, allEndpoints).exitCode.provideLayer(allLayers.orDie)
+  override def run = {
+    server
   }
 }
