@@ -11,9 +11,7 @@ import java.sql.SQLException
 import java.time.Instant
 import javax.sql.DataSource
 import java.util.UUID
-import org.scalameta.data.data
 
-import javax.xml.crypto.Data
 import java.sql.Types
 import java.sql.Timestamp
 import domain.tables.{AppUser, Review, ReviewComment}

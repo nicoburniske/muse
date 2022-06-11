@@ -32,3 +32,6 @@ metals.sbt
 
 #general
 *.class
+
+# config
+src/main/resources/application.conf
