@@ -29,8 +29,6 @@ object Auth {
         case Some(code) =>
           for {
             authData <- getAuthTokens(code)
-            _        <- printLine(authData)
-            _        <- printLine(authData.accessToken)
             created  <- RequestProcessor.handleUserLogin(authData)
           } yield {
             val text = if (created) "New account created" else "Auth updated"

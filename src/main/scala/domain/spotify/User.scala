@@ -15,5 +15,5 @@ final case class User(
 )
 
 object User {
-    given userDecoder: JsonDecoder[User] = DeriveJsonDecoder.gen[User]
+  given userDecoder: JsonDecoder[User] = DeriveJsonDecoder.gen[User]
 }

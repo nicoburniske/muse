@@ -28,6 +28,9 @@ lazy val root = (project in file(".")).settings(
     // Quill JDBC ZIO.
     "io.getquill"                   %% "quill-jdbc-zio"                % protoQuill,
     "org.postgresql"                 % "postgresql"                    % postgresql,
+    // Logging.
+    "dev.zio"                       %% "zio-logging"                    % "2.0.0-RC10",
+    "ch.qos.logback"                 % "logback-classic"               % "1.2.11",
     // Test Libraries.
     "dev.zio"                       %% "zio-test"                      % "2.0.0-RC6" % Test
   ),
