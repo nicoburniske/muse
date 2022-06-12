@@ -3,7 +3,7 @@ import zio.json.{DeriveJsonDecoder, JsonDecoder}
 
 final case class Paging[T](
     href: Option[String],
-    items: List[T],
+    items: Vector[T],
     limit: Option[Int],
     next: Option[String],
     offset: Option[Int],

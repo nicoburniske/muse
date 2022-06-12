@@ -2,7 +2,7 @@ package domain.spotify
 
 import zio.json.*
 
-final case class MultiTrack(tracks: List[Track])
+final case class MultiTrack(tracks: Vector[Track])
 
 object MultiTrack {
   given decoder: JsonDecoder[MultiTrack] = DeriveJsonDecoder.gen[MultiTrack]

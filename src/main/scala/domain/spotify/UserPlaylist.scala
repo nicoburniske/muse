@@ -1,7 +1,6 @@
 package domain.spotify
 
 import zio.json.*
-import domain.common.EntityType
 
 final case class UserPlaylist(
     collaborative: Boolean,
@@ -20,10 +19,10 @@ final case class UserPlaylist(
     snapshotID: String,
     tracks: PlaylistTracks,
     @jsonField("type")
-    `type`: EntityType,
-    uri:String 
+    `type`: String,
+    uri: String
 )
 
 object UserPlaylist {
-    given decodeUserPlaylist: JsonDecoder[UserPlaylist] = DeriveJsonDecoder.gen[UserPlaylist] 
+  given decodeUserPlaylist: JsonDecoder[UserPlaylist] = DeriveJsonDecoder.gen[UserPlaylist]
 }

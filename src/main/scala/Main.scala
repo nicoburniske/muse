@@ -21,7 +21,7 @@ object Main extends ZIOAppDefault {
   val dbLayer = QuillContext.dataSourceLayer >+> DatabaseQueries.live
 
   val allLayers =
-    AsyncHttpClientZioBackend.layer() ++ clientLayer ++ flattenedAppConfigLayer ++ ZEnv.live ++ dbLayer 
+    AsyncHttpClientZioBackend.layer() ++ clientLayer ++ flattenedAppConfigLayer ++ ZEnv.live ++ dbLayer
 
   val allEndpoints = Auth.endpoints
 

@@ -78,7 +78,7 @@ object Auth {
         "redirect_uri" -> c.redirectURI
       )
       val headers = Headers.basicAuthorizationHeader(c.clientID, c.clientSecret) ++
-        Headers.contentType("application/x-www-form-urlencoded")
+        Headers.contentType(HeaderValues.applicationXWWWFormUrlencoded)
       Client.request(url.encode, Method.POST, headers, HttpData.fromString(encodeFormBody(body)))
     }
 

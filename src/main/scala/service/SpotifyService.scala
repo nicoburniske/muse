@@ -15,14 +15,11 @@ enum SpotifyRequestError extends Throwable {
   case MalformedRequest(reason: String)
   case HttpError(message: String, metadata: ResponseMetadata)
   case JsonError(error: String, received: String)
-  // TODO: get rid of this error type? 
-  case MultiError(errors: List[SpotifyRequestError])
   override def getMessage: String = {
     this match {
       case MalformedRequest(reason: String) => reason
       case HttpError(message, metadata)     => s"Error Code ${metadata.code}: $message"
       case JsonError(error, received)       => s"Json Error: $error}, Json received: \n $received"
-      case MultiError(errors)               => "Errors: " + errors.map(_.getMessage()).mkString(", ")
     }
   }
 }
@@ -41,18 +38,25 @@ case class SpotifyService[F[_]: MonadError](
     execute(uri, Method.GET)
   }
 
-  def getTracks(ids: Seq[String], market: Option[String] = None): F[SpotifyResponse[Seq[Track]]] = {
+  def getPlaylist(
+      playlistId: String,
+      fields: Option[String] = None,
+      market: Option[String] = None): F[SpotifyResponse[UserPlaylist]] = {
+    val uri = uri"${SpotifyService.API_BASE}/playlists/$playlistId?fields=$fields&market=$market"
+    execute(uri, Method.GET)
+  }
+
+  def getTracks(ids: Seq[String], market: Option[String] = None): F[SpotifyResponse[Vector[Track]]] = {
     val uri = uri"${SpotifyService.API_BASE}/tracks?market=$market&ids=${ids.mkString(",")}"
     for {
       response <- execute[MultiTrack](uri, Method.GET)
     } yield {
       response.map(_.tracks)
     }
-
   }
 
   // TODO: enforce limit
-  def getArtists(ids: Seq[String]): F[SpotifyResponse[List[Artist]]] = {
+  def getArtists(ids: Seq[String]): F[SpotifyResponse[Vector[Artist]]] = {
     val uri = uri"${SpotifyService.API_BASE}/artists?ids=${ids.mkString(",")}"
     for {
       response <- execute[MultiArtist](uri, Method.GET)
@@ -60,7 +64,7 @@ case class SpotifyService[F[_]: MonadError](
   }
 
   // TODO: enforce limit
-  def getAlbums(ids: Seq[String]): F[SpotifyResponse[List[Album]]] = {
+  def getAlbums(ids: Seq[String]): F[SpotifyResponse[Vector[Album]]] = {
     val uri = uri"${SpotifyService.API_BASE}/albums?ids=${ids.mkString(",")}"
     for {
       response <- execute[MultiAlbum](uri, Method.GET)
@@ -125,9 +129,7 @@ case class SpotifyService[F[_]: MonadError](
     backend.send(finalRequest).map(_.body)
   }
 
-  private def addPermissions[T](request: Request[T, Any]): Request[T, Any] = {
-    request.auth.bearer(accessToken)
-  }
+  private def addPermissions[T](request: Request[T, Any]): Request[T, Any] = request.auth.bearer(accessToken)
 }
 
 object SpotifyService {
