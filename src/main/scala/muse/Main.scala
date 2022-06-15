@@ -8,7 +8,7 @@ import zio.config.typesafe.TypesafeConfig
 
 import java.io.File
 import muse.persist.QuillContext
-import muse.server.Auth
+import muse.server.{Auth, Protected}
 import muse.persist.DatabaseQueries
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 
@@ -27,7 +27,7 @@ object Main extends ZIOAppDefault {
     AsyncHttpClientZioBackend
       .layer() ++ clientLayer ++ flattenedAppConfigLayer ++ ZEnv.live ++ dbLayer ++ users
 
-  val allEndpoints = Auth.endpoints
+  val allEndpoints = Auth.endpoints ++ Protected.endpoints
 
   val server = Server.start(8883, allEndpoints).exitCode.provideLayer(allLayers.orDie)
 

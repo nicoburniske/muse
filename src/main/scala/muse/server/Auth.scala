@@ -38,12 +38,13 @@ object Auth {
               session  <- Random.nextUUID
               usersRef <- ZIO.service[Ref[Map[String, AppUser]]]
               _        <- usersRef.update(_ + (session.toString -> appUser))
-
+              users    <- usersRef.get
+              _        <- printLine("Users:\n" + users.mkString("\n"))
             } yield {
-              // val text = if (created) "New account created" else "Auth updated"
               // TODO: yield redirect to actual site
-              // TODO: should make httponly?
-              Response.text("You're logged in fool!").addCookie(Cookie("xsession", session.toString))
+              // TODO: should make httponly? Cookie is not updating in browse?
+              val cookie = Cookie("xsession", session.toString, domain = Some("muse.io"))
+              Response.text("You're logged in fool!").addCookie(cookie)
             }
         }
     }

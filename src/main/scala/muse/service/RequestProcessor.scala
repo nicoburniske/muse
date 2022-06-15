@@ -64,10 +64,10 @@ object RequestProcessor {
     filteredReviews = if (publicOnly) reviews.filter(_.isPublic) else reviews
     groupedByType   = filteredReviews.groupMap(_.entityType)(_.entityId)
 
-    albumsRequests   = getAlbumsPar(groupedByType(EntityType.Album))
-    tracksRequest    = getTracksPar(groupedByType(EntityType.Track))
-    artistRequest    = getArtistsPar(groupedByType(EntityType.Track))
-    playlistsRequest = getPlaylistsPar(groupedByType(EntityType.Playlist))
+    albumsRequests   = getAlbumsPar(groupedByType.getOrElse(EntityType.Album, Vector.empty))
+    tracksRequest    = getTracksPar(groupedByType.getOrElse(EntityType.Track, Vector.empty))
+    artistRequest    = getArtistsPar(groupedByType.getOrElse(EntityType.Artist, Vector.empty))
+    playlistsRequest = getPlaylistsPar(groupedByType.getOrElse(EntityType.Playlist, Vector.empty))
     results         <- albumsRequests <&> artistRequest <&> tracksRequest <&> playlistsRequest
 
     (albums, artists, tracks, playlists) = results
@@ -125,14 +125,6 @@ object RequestProcessor {
         else
           ZIO.fail(MultiError(errors.toList))
       }
-
-  // This is confusing? should this be unfailable ZIO?
-  // def getThingsPar[I, R](ids: Seq[String], maxPerRequest: Int, singleRequest: Seq[String] => Task[SpotifyResponse[Seq[R]]]) = {
-  //   for {
-  //     spotify <- ZIO.service[SpotifyService[Task]]
-  //     res <- parallelRequest(ids, 20, singleRequest)
-  //   } yield res
-  // }
 
   case class MultiError(errors: List[SpotifyRequestError]) extends Exception {
     override def getMessage = "Errors: " + errors.map(_.getMessage()).mkString(", ")
