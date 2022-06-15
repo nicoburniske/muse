@@ -12,6 +12,7 @@ final case class Artist(
     images: Option[List[Image]],
     name: String,
     popularity: Option[Int],
+    @jsonField("type")
     `type`: String,
     uri: String
 )

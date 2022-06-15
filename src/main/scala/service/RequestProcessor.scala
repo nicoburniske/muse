@@ -69,6 +69,8 @@ object RequestProcessor {
     results         <- albumsRequests <&> artistRequest <&> tracksRequest <&> playlistsRequest
 
     (albums, artists, tracks, playlists) = results
+    // val nameAndImage = 
+    //   albums.map(a => a.name -> a.images).distinct
 
 //    allReviewSummaries = Seq(
 //      albums.map(a => ReviewSummary(a,_))

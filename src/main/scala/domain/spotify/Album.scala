@@ -1,6 +1,7 @@
 package domain.spotify
 
 import zio.json.*
+import domain.common.Entity
 
 final case class Album(
     @jsonField("album_group")
@@ -28,8 +29,9 @@ final case class Album(
     //                 restrictions: Option[Restrictions] ,
     tracks: Option[Paging[Track]],
     @jsonField("type")
-    objectType: String,
-    uri: String)
+    entityType: String,
+    uri: String) 
+    extends Entity(id, entityType)
 
 object Album {
   given decodeAlbumType: JsonDecoder[AlbumType] =

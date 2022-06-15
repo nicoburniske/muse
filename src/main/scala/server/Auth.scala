@@ -5,6 +5,7 @@ import zio.Console.printLine
 import zhttp.http.{Http, Method, Request, Response, Scheme, URL, *}
 import zhttp.service.{Client, EventLoopGroup, ChannelFactory}
 import zio.json.*
+import zhttp.http.Middleware.csrfGenerate
 import domain.spotify.AuthData
 import config.SpotifyConfig
 import service.RequestProcessor
@@ -36,9 +37,9 @@ object Auth {
             // TODO: yield redirect to actual site
             Response.text("You're logged in fool! " + text)
             // Response.redirect("https://www.google.com", false)
-          }
+          } 
       }
-  }
+  } // @@ csrfGenerate() // TODO: get this working? 
   // TODO: Error handling for routes!
 
   def generateRedirectUrl(): URIO[SpotifyConfig, URL] = for {
