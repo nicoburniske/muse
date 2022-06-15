@@ -20,12 +20,14 @@ import muse.domain.create.{CreateComment, CreateReview}
 trait DatabaseQueries {
 
   def createUser(user: AppUser): IO[SQLException, Unit]
-  def createReview(review: CreateReview): IO[SQLException, Unit]
-  def createReviewComment(review: CreateComment): IO[SQLException, Unit]
+  def createReview(id: String, review: CreateReview): IO[SQLException, Unit]
+  def createReviewComment(id: String, review: CreateComment): IO[SQLException, Unit]
 
   def getUsers: IO[SQLException, List[AppUser]]
   def getUserById(userId: String): IO[SQLException, Option[AppUser]]
+  // Reviews that the given user created.
   def getUserReviews(userId: String): IO[SQLException, List[Review]]
+  // Reviews that the given user has access to.
   def getAllUserReviews(userId: String): IO[SQLException, List[Review]]
   def getReviewComments(reviewId: UUID): IO[SQLException, List[ReviewComment]]
 
@@ -34,11 +36,13 @@ trait DatabaseQueries {
 }
 
 object DatabaseQueries {
-  val live = ZLayer(for { a <- ZIO.service[DataSource] } yield DataServiceLive(a))
+  val live = ZLayer(for { ds <- ZIO.service[DataSource] } yield DataServiceLive(ds))
 
-  def createUser(user: AppUser)             = ZIO.serviceWithZIO[DatabaseQueries](_.createUser(user))
-  def createReview(review: CreateReview)    = ZIO.serviceWithZIO[DatabaseQueries](_.createReview(review))
-  def createReviewComment(c: CreateComment) = ZIO.serviceWithZIO[DatabaseQueries](_.createReviewComment(c))
+  def createUser(user: AppUser)                         = ZIO.serviceWithZIO[DatabaseQueries](_.createUser(user))
+  def createReview(id: String, review: CreateReview)    =
+    ZIO.serviceWithZIO[DatabaseQueries](_.createReview(id, review))
+  def createReviewComment(id: String, c: CreateComment) =
+    ZIO.serviceWithZIO[DatabaseQueries](_.createReviewComment(id, c))
 
   def getUserById(userId: String)       = ZIO.serviceWithZIO[DatabaseQueries](_.getUserById(userId))
   def getUsers                          = ZIO.serviceWithZIO[DatabaseQueries](_.getUsers)
@@ -59,6 +63,7 @@ object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, Low
   given entityTypeEncoder: Encoder[EntityType] =
     encoder(Types.INTEGER, (index, value, row) => row.setInt(index, value.ordinal))
 
+  // TODO: move this somewhere else
   val dataSourceLayer: ULayer[DataSource] = DataSourceLayer.fromPrefix("database").orDie
 }
 
@@ -105,19 +110,20 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
     )
   }.provideLayer(layer).unit
 
-  def createReview(review: CreateReview) = run {
+  def createReview(id: String, review: CreateReview) = run {
     reviews.insert(
-      _.creatorId  -> lift(review.creatorId),
+      _.creatorId  -> lift(id),
+      _.reviewName -> lift(review.name),
       _.isPublic   -> lift(review.isPublic),
       _.entityType -> lift(review.entityType),
       _.entityId   -> lift(review.entityId)
     )
   }.provide(layer).unit
 
-  def createReviewComment(c: CreateComment) = run {
+  def createReviewComment(id: String, c: CreateComment) = run {
     comments.insert(
       _.reviewId        -> lift(c.reviewID),
-      _.commenter       -> lift(c.commenter),
+      _.commenter       -> lift(id),
       _.parentCommentId -> lift(c.parentCommentId),
       _.comment         -> lift(c.comment),
       _.rating          -> lift(c.rating),

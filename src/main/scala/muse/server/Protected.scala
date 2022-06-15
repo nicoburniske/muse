@@ -45,8 +45,10 @@ object Protected {
       dbQueries   <- ZIO.service[DatabaseQueries]
       spotify      = SpotifyService(sttpBackend, appUser.accessToken, appUser.refreshToken)
       spotifyEnv   = ZEnvironment(spotify).add(dbQueries)
-      reviews     <- RequestProcessor.getUserReviews(appUser.id, false).provideEnvironment(spotifyEnv)
-    } yield Response.text(reviews.toJson)
+      reviews     <- RequestProcessor
+                       .getUserReviews(appUser.id, RequestProcessor.ReviewOptions.UserAccessReviews)
+                       .provideEnvironment(spotifyEnv)
+    } yield Response.text(reviews.toJsonPretty)
   }
 
   type SignedIn = Ref[Map[String, AppUser]]

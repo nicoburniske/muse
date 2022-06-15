@@ -53,16 +53,31 @@ object RequestProcessor {
     _       <- func(appUser)
   } yield userRes.isEmpty
 
+  enum ReviewOptions {
+    case UserOwnedReviewsPublic, UserOwnedReviewsPrivate, UserOwnedReviewsAll, UserAccessReviews
+  }
+
+  def userReviewsOptions(userId: String, options: ReviewOptions) = options match
+    case ReviewOptions.UserOwnedReviewsPublic  =>
+      DatabaseQueries.getUserReviews(userId).map(_.filter(_.isPublic))
+    case ReviewOptions.UserOwnedReviewsPrivate =>
+      DatabaseQueries.getUserReviews(userId).map(_.filterNot(_.isPublic))
+    case ReviewOptions.UserOwnedReviewsAll     =>
+      DatabaseQueries.getUserReviews(userId)
+    case ReviewOptions.UserAccessReviews       =>
+      DatabaseQueries.getAllUserReviews(userId)
+
   /**
-   * Get's all the user reviews
+   * Gets reviews for the given user.
+   *
    * @param userId
+   *   user id
    * @param publicOnly
    * @return
    */
-  def getUserReviews(userId: String, publicOnly: Boolean) = for {
-    reviews        <- DatabaseQueries.getAllUserReviews(userId)
-    filteredReviews = if (publicOnly) reviews.filter(_.isPublic) else reviews
-    groupedByType   = filteredReviews.groupMap(_.entityType)(_.entityId)
+  def getUserReviews(userId: String, options: ReviewOptions) = for {
+    reviews      <- userReviewsOptions(userId, options)
+    groupedByType = reviews.groupMap(_.entityType)(_.entityId)
 
     albumsRequests   = getAlbumsPar(groupedByType.getOrElse(EntityType.Album, Vector.empty))
     tracksRequest    = getTracksPar(groupedByType.getOrElse(EntityType.Track, Vector.empty))
@@ -79,14 +94,14 @@ object RequestProcessor {
         tracks.map(extractNameAndImages) ++
         playlists.map(extractNameAndImages)).groupBy(_._1).view.mapValues(_.head).toMap
 
-  } yield filteredReviews.map { r =>
+  } yield reviews.map { r =>
     val (_, name, images) = entities(r.entityId)
     ReviewSummary.fromReview(r, name, images)
   }
 
   type IdNameImages = (String, String, List[Image])
 
-  def extractNameAndImages(e: Album | Artist | UserPlaylist | Track): (String, String, List[Image]) =
+  def extractNameAndImages(e: Album | Artist | UserPlaylist | Track): IdNameImages =
     e match {
       case (a: Album)        => (a.id, a.name, a.images)
       case (a: Artist)       => (a.id, a.name, a.images.getOrElse(Nil))

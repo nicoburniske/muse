@@ -10,6 +10,7 @@ final case class Artist(
     genres: Option[List[String]],
     href: String,
     id: String,
+    // Is nullable because is references from different entities like Album.
     images: Option[List[Image]],
     name: String,
     popularity: Option[Int],

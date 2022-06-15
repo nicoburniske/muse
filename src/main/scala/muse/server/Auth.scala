@@ -14,7 +14,7 @@ import muse.service.RequestProcessor.UserLoginEnv
 import sttp.client3.SttpBackend
 
 object Auth {
-  val scopes = List("user-read-recently-played").mkString(" ")
+  val scopes = List("user-read-recently-played", "user-follow-read", "ugc-image-upload").mkString(" ")
 
   type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory
 
@@ -37,14 +37,16 @@ object Auth {
               appUser  <- RequestProcessor.handleUserLogin(authData)
               session  <- Random.nextUUID
               usersRef <- ZIO.service[Ref[Map[String, AppUser]]]
+              _        <- usersRef.update(_.filterNot(_._2.id == appUser.id))
               _        <- usersRef.update(_ + (session.toString -> appUser))
               users    <- usersRef.get
               _        <- printLine("Users:\n" + users.mkString("\n"))
             } yield {
               // TODO: yield redirect to actual site
               // TODO: should make httponly? Cookie is not updating in browse?
-              val cookie = Cookie("xsession", session.toString, domain = Some("muse.io"))
-              Response.text("You're logged in fool!").addCookie(cookie)
+              // TODO: add domain to cookie.
+              val cookie = Cookie("xsession", session.toString)
+              Response.text("You're logged in fool!").addCookie(cookie).withSetCookie(cookie)
             }
         }
     }
