@@ -15,7 +15,8 @@ import muse.domain.common.EntityType
 import muse.domain.response.ReviewSummary
 
 object RequestProcessor {
-  type UserLoginEnv = SttpBackend[Task, Any] & DatabaseQueries & Ref[Map[String, AppUser]]
+  type UserLoginEnv = SttpBackend[Task, Any] & DatabaseQueries
+  val XSESSION = "xsession"
 
   /**
    * Handles a user login.
@@ -25,8 +26,7 @@ object RequestProcessor {
    * @return
    *   true if new User was created, false if current user was updated.
    */
-
-  def handleUserLogin(auth: AuthData): ZIO[UserLoginEnv, Throwable, Boolean] =
+  def handleUserLogin(auth: AuthData): ZIO[UserLoginEnv, Throwable, AppUser] =
     for {
       backend       <- ZIO.service[SttpBackend[Task, Any]]
       spotifyService = SpotifyService[Task](backend, auth.accessToken, auth.refreshToken)
@@ -34,11 +34,11 @@ object RequestProcessor {
       userInfo      <- ZIO.fromEither(maybeUserInfo)
       asTableRow     = AppUser(userInfo.id, auth.accessToken, auth.refreshToken)
       res           <- createOrUpdateUser(asTableRow)
-      // Update user sessions.
-      usersRef      <- ZIO.service[Ref[Map[String, AppUser]]]
-      _             <- usersRef.update(_ + (asTableRow.id -> asTableRow))
-      _             <- ZIO.logInfo(s"Successfully logged in ${userInfo.displayName}. Access Token = ${auth.accessToken}")
-    } yield res
+      resText        = if (res) "Created" else "Updated"
+      _             <-
+        ZIO.logInfo(
+          s"Successfully logged in ${userInfo.displayName}.${resText} account. Access Token = ${auth.accessToken}")
+    } yield asTableRow
 
   /**
    * If username already exists, update existing row's auth information. Otherwise create user.

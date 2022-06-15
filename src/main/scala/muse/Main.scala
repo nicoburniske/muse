@@ -21,7 +21,7 @@ object Main extends ZIOAppDefault {
   }
 
   val dbLayer = QuillContext.dataSourceLayer >+> DatabaseQueries.live
-  val users   = ZLayer.succeed(Ref.make(Map.empty[String, AppUser]))
+  val users   = ZLayer.fromZIO(Ref.make(Map.empty[String, AppUser]))
 
   val allLayers =
     AsyncHttpClientZioBackend

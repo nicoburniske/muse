@@ -29,9 +29,9 @@ object Protected {
         case (token, req) => getSession(token, req)
       }
       .contramapZIO[ProtectedEndpointEnv, HttpError, Request] { req =>
-        req.bearerToken match {
-          case Some(token) => ZIO.succeed(token -> req)
-          case _           => ZIO.fail(HttpError.Unauthorized("Missing Bearer Token"))
+        req.cookieValue("xsession") match {
+          case Some(token) => ZIO.succeed(token.toString -> req)
+          case _           => ZIO.fail(HttpError.Unauthorized("Missing Session Cookie"))
         }
       }
       .catchAll(error => Http.response(error.toResponse))
@@ -59,7 +59,7 @@ object Protected {
   def getUserSessionFromToken(token: String): ZIO[SignedIn, String, AppUser] = for {
     usersRef <- ZIO.service[SignedIn]
     users    <- usersRef.get
-    res      <- ZIO.fromOption(users.get(token)).orElseFail("Invalid Bearer Token")
+    res      <- ZIO.fromOption(users.get(token)).orElseFail("Invalid Session Cookie")
   } yield res
 
 }
