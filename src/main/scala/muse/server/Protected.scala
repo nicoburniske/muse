@@ -42,13 +42,16 @@ object Protected {
 
   private def getUserReviews(appUser: AppUser) = {
     for {
-      sttpBackend <- ZIO.service[SttpBackend[Task, Any]]
-      dbQueries   <- ZIO.service[DatabaseQueries]
-      spotify      = SpotifyServiceLive(sttpBackend, appUser.accessToken, appUser.refreshToken)
-      spotifyEnv   = ZEnvironment(spotify).add(dbQueries)
-      reviews     <- RequestProcessor
-                       .getUserReviews(appUser.id, RequestProcessor.ReviewOptions.UserAccessReviews)
-                       .provideEnvironment(spotifyEnv)
+      sttpBackend        <- ZIO.service[SttpBackend[Task, Any]]
+      dbQueries          <- ZIO.service[DatabaseQueries]
+      spotify             = SpotifyServiceLive(sttpBackend, appUser.accessToken, appUser.refreshToken)
+      spotifyEnv          = ZEnvironment(spotify).add(dbQueries)
+      res                <- RequestProcessor
+                              .getUserReviews(appUser.id, RequestProcessor.ReviewOptions.UserAccessReviews)
+                              .provideEnvironment(spotifyEnv)
+                              .timed
+      (duration, reviews) = res
+      _                  <- printLine(s"Took ${duration.toMillis}ms")
     } yield Response.text(reviews.toJsonPretty)
   }
 

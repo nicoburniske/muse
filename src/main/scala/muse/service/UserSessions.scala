@@ -34,9 +34,10 @@ final case class UserSessionsLive(sessionsR: Ref[Map[String, AppUser]]) extends 
   val SESSION_LENGTH = 30
 
   override final def addUserSession(user: AppUser) = for {
-    _          <- deleteUserSessionByUserId(user.id)
-    newSession <- Random.nextString(SESSION_LENGTH)
-    _          <- sessionsR.update(_ + (newSession -> user))
+    _         <- deleteUserSessionByUserId(user.id)
+    guid      <- Random.nextUUID
+    newSession = guid.toString
+    _         <- sessionsR.update(_ + (newSession -> user))
   } yield newSession
 
   override final def getUserSession(sessionId: String)         = sessionsR.get.map(_.get(sessionId))

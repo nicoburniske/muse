@@ -20,11 +20,11 @@ object Main extends ZIOAppDefault {
     ZLayer.succeed(zlayer.get.spotify) ++ ZLayer.succeed(zlayer.get.sqlConfig)
   }
 
-  val dbLayer     = QuillContext.dataSourceLayer >+> DatabaseQueries.live
-  val clientLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
-  val allLayers   =
+  val dbLayer    = QuillContext.dataSourceLayer >+> DatabaseQueries.live
+  val zhttpLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
+  val allLayers  =
     AsyncHttpClientZioBackend.layer() ++
-      clientLayer ++
+      zhttpLayer ++
       flattenedAppConfigLayer ++
       ZEnv.live ++
       dbLayer ++
@@ -32,7 +32,7 @@ object Main extends ZIOAppDefault {
 
   val allEndpoints = Auth.endpoints ++ Protected.endpoints
 
-  val server = Server.start(8883, allEndpoints).exitCode.provideLayer(allLayers.orDie)
+  val server = Server.start(8883, allEndpoints).forever.exitCode.provideLayer(allLayers.orDie)
 
   override def run = server
 }

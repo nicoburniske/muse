@@ -36,6 +36,7 @@ object Auth {
               authData <- getAuthTokens(code)
               appUser  <- RequestProcessor.handleUserLogin(authData)
               session  <- UserSessions.addUserSession(appUser)
+              _        <- printLine(session)
             } yield {
               // TODO: yield redirect to actual site
               // TODO: should make httponly? Cookie is not updating in browse?
