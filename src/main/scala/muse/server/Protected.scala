@@ -1,22 +1,23 @@
 package muse.server
 
-import zio.{Layer, Random, Ref, System, Task, URIO, ZEnvironment, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Layer, Random, Ref, System, Task, UIO, URIO, ZEnvironment, ZIO, ZIOAppDefault, ZLayer}
 import zio.Console.printLine
-import zhttp.http.{Http, Method, Request, Response, Scheme, URL, *}
+import zhttp.http.{Request, Http, HttpError, Method, Response, *}
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zhttp.http.Middleware.{bearerAuthZIO, csrfValidate}
 import zhttp.http.*
 import zio.json.*
 import muse.domain.tables.AppUser
 import muse.persist.DatabaseQueries
-import muse.service.{RequestProcessor, SpotifyService}
+import muse.service.{RequestProcessor, SpotifyServiceLive, UserSessions}
 import sttp.client3.SttpBackend
 import muse.utils.Givens.given
+import sttp.monad.MonadError
 
 object Protected {
   val USER_PATH = "user"
 
-  type ProtectedEndpointEnv = SignedIn & DatabaseQueries & SttpBackend[Task, Any]
+  type ProtectedEndpointEnv = UserSessions & DatabaseQueries & SttpBackend[Task, Any]
   val endpoints =
     Http
       .collectZIO[RequestWithSession[AppUser]] {
@@ -43,7 +44,7 @@ object Protected {
     for {
       sttpBackend <- ZIO.service[SttpBackend[Task, Any]]
       dbQueries   <- ZIO.service[DatabaseQueries]
-      spotify      = SpotifyService(sttpBackend, appUser.accessToken, appUser.refreshToken)
+      spotify      = SpotifyServiceLive(sttpBackend, appUser.accessToken, appUser.refreshToken)
       spotifyEnv   = ZEnvironment(spotify).add(dbQueries)
       reviews     <- RequestProcessor
                        .getUserReviews(appUser.id, RequestProcessor.ReviewOptions.UserAccessReviews)
@@ -51,17 +52,15 @@ object Protected {
     } yield Response.text(reviews.toJsonPretty)
   }
 
-  // TODO: Move this to be an interface
-  type SignedIn = Ref[Map[String, AppUser]]
   case class RequestWithSession[A](session: A, request: Request)
 
-  def getSession(token: String, req: Request): ZIO[SignedIn, HttpError, RequestWithSession[AppUser]] =
-    getUserSessionFromToken(token).mapBoth(HttpError.Unauthorized(_), RequestWithSession(_, req))
+  def getSession(token: String, req: Request): ZIO[UserSessions, HttpError, RequestWithSession[AppUser]] =
+    for {
+      maybeUser <- UserSessions.getUserSession(token)
+      maybe     <- ZIO.fromOption(maybeUser).orElseFail("Invalid Session Cookie").either
+      res       <- maybe match
+                     case Left(value)  => ZIO.fail(HttpError.Unauthorized(value))
+                     case Right(value) => ZIO.succeed(RequestWithSession(value, req))
+    } yield res
 
-  // TODO: check for expiration
-  def getUserSessionFromToken(token: String): ZIO[SignedIn, String, AppUser] = for {
-    usersRef <- ZIO.service[SignedIn]
-    users    <- usersRef.get
-    res      <- ZIO.fromOption(users.get(token)).orElseFail("Invalid Session Cookie")
-  } yield res
 }

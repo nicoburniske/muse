@@ -9,14 +9,14 @@ import zhttp.http.Middleware.csrfGenerate
 import muse.domain.spotify.AuthData
 import muse.config.SpotifyConfig
 import muse.domain.tables.AppUser
-import muse.service.RequestProcessor
+import muse.service.{RequestProcessor, UserSessions}
 import muse.service.RequestProcessor.UserLoginEnv
 import sttp.client3.SttpBackend
 
 object Auth {
   val scopes = List("user-read-recently-played", "user-follow-read", "ugc-image-upload").mkString(" ")
 
-  type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory
+  type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory & UserSessions
 
   val endpoints = Http
     .collectZIO[Request] {
@@ -35,18 +35,13 @@ object Auth {
             for {
               authData <- getAuthTokens(code)
               appUser  <- RequestProcessor.handleUserLogin(authData)
-              session  <- Random.nextUUID
-              usersRef <- ZIO.service[Ref[Map[String, AppUser]]]
-              _        <- usersRef.update(_.filterNot(_._2.id == appUser.id))
-              _        <- usersRef.update(_ + (session.toString -> appUser))
-              users    <- usersRef.get
-              _        <- printLine("Users:\n" + users.mkString("\n"))
+              session  <- UserSessions.addUserSession(appUser)
             } yield {
               // TODO: yield redirect to actual site
               // TODO: should make httponly? Cookie is not updating in browse?
               // TODO: add domain to cookie.
-              val cookie = Cookie("xsession", session.toString)
-              Response.text("You're logged in fool!").addCookie(cookie).withSetCookie(cookie)
+              val cookie = Cookie("xsession", session)
+              Response.text("You're logged in fool!").addCookie(cookie)
             }
         }
     }

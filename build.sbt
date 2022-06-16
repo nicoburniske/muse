@@ -1,6 +1,5 @@
 ThisBuild / version      := "0.1.0-SNAPSHOT"
 ThisBuild / organization := "io.nicoburniske"
-// ThisBuild / names        := "spotify"
 
 ThisBuild / scalaVersion := "3.1.0"
 

@@ -6,7 +6,7 @@ import sttp.client3.SttpBackend
 import javax.sql.DataSource
 import muse.domain.tables.AppUser
 import muse.domain.spotify.{Album, Artist, AuthData, Image, Track, UserPlaylist}
-import muse.service.SpotifyService
+import muse.service.SpotifyServiceLive
 import muse.persist.DatabaseQueries
 import muse.utils.Givens.given
 
@@ -29,9 +29,8 @@ object RequestProcessor {
   def handleUserLogin(auth: AuthData): ZIO[UserLoginEnv, Throwable, AppUser] =
     for {
       backend       <- ZIO.service[SttpBackend[Task, Any]]
-      spotifyService = SpotifyService[Task](backend, auth.accessToken, auth.refreshToken)
-      maybeUserInfo <- spotifyService.getCurrentUserProfile
-      userInfo      <- ZIO.fromEither(maybeUserInfo)
+      spotifyService = SpotifyServiceLive[Task](backend, auth.accessToken, auth.refreshToken)
+      userInfo      <- spotifyService.getCurrentUserProfile
       asTableRow     = AppUser(userInfo.id, auth.accessToken, auth.refreshToken)
       res           <- createOrUpdateUser(asTableRow)
       resText        = if (res) "Created" else "Updated"
@@ -68,12 +67,14 @@ object RequestProcessor {
       DatabaseQueries.getAllUserReviews(userId)
 
   /**
-   * Gets reviews for the given user.
+   * Gets review sumamaries for the given user.
    *
    * @param userId
    *   user id
-   * @param publicOnly
+   * @param options
+   *   the options for which reviews to retrieve
    * @return
+   *   the ReviewSummaries
    */
   def getUserReviews(userId: String, options: ReviewOptions) = for {
     reviews      <- userReviewsOptions(userId, options)
@@ -110,56 +111,34 @@ object RequestProcessor {
       case (a: Track)        => (a.id, a.name, a.album.map(_.images).getOrElse(Nil))
     }
 
-  def getTracksPar(ids: Seq[String]): ZIO[SpotifyService[Task], Throwable, Vector[Track]] = {
+  def getTracksPar(ids: Seq[String]): ZIO[SpotifyServiceLive[Task], Throwable, Vector[Track]] = {
     for {
-      spotify <- ZIO.service[SpotifyService[Task]]
+      spotify <- ZIO.service[SpotifyServiceLive[Task]]
       res     <- parallelRequest(ids, 50, spotify.getTracks(_))
     } yield res
   }
 
-  def getAlbumsPar(ids: Seq[String]): ZIO[SpotifyService[Task], Throwable, Vector[Album]] = for {
-    spotify            <- ZIO.service[SpotifyService[Task]]
-    res: Vector[Album] <- parallelRequest(ids, 20, spotify.getAlbums)
+  def getAlbumsPar(ids: Seq[String]): ZIO[SpotifyServiceLive[Task], Throwable, Vector[Album]] = for {
+    spotify <- ZIO.service[SpotifyServiceLive[Task]]
+    res     <- parallelRequest(ids, 20, spotify.getAlbums)
   } yield res
 
-  def getArtistsPar(ids: Seq[String]): ZIO[SpotifyService[Task], Throwable, Vector[Artist]] = for {
-    spotify <- ZIO.service[SpotifyService[Task]]
+  def getArtistsPar(ids: Seq[String]): ZIO[SpotifyServiceLive[Task], Throwable, Vector[Artist]] = for {
+    spotify <- ZIO.service[SpotifyServiceLive[Task]]
     res     <- parallelRequest(ids, 50, spotify.getArtists)
   } yield res
 
   // This sucks. Might need to cache this.
   // Is different from the others because you can only get one playlist at a time.
-  def getPlaylistsPar(ids: Seq[String]): ZIO[SpotifyService[Task], Throwable, Vector[UserPlaylist]] =
-    ZIO
-      .service[SpotifyService[Task]]
-      .flatMap { spotify => ZIO.foreachPar(ids)(id => spotify.getPlaylist(id)) }
-      .flatMap { values =>
-        val (errors, successes) = values.partitionMap(identity)
-        if (errors.isEmpty)
-          ZIO.succeed(successes.toVector)
-        else
-          ZIO.fail(MultiError(errors.toList))
-      }
+  def getPlaylistsPar(ids: Seq[String]): ZIO[SpotifyServiceLive[Task], Throwable, Vector[UserPlaylist]] =
+    ZIO.service[SpotifyServiceLive[Task]].flatMap { spotify =>
+      ZIO.foreachPar(ids.toVector)(id => spotify.getPlaylist(id))
+    }
 
-  case class MultiError(errors: List[SpotifyRequestError]) extends Exception {
-    override def getMessage = "Errors: " + errors.map(_.getMessage()).mkString(", ")
-  }
-
-  // TODO: Change return error type to only be MultiError?
-  // Need to use ZIO Http Client instead of STTP
   def parallelRequest[I, R](
       ids: Seq[I],
       maxPerRequest: Int,
-      singleRequest: Seq[I] => Task[SpotifyResponse[Vector[R]]]): ZIO[Any, Throwable, Vector[R]] = {
-    for {
-      responses <- ZIO.foreachPar(ids.grouped(maxPerRequest).toVector)(singleRequest)
-      res       <- {
-        val (errors, successes) = responses.partitionMap(identity)
-        if (errors.isEmpty)
-          ZIO.succeed(successes.flatten)
-        else
-          ZIO.fail(MultiError(errors.toList))
-      }
-    } yield res
-  }
+      singleRequest: Seq[I] => Task[Vector[R]]): ZIO[Any, Throwable, Vector[R]] = for {
+    responses <- ZIO.foreachPar(ids.grouped(maxPerRequest).toVector)(singleRequest)
+  } yield responses.flatten
 }

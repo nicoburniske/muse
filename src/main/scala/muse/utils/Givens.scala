@@ -1,19 +1,17 @@
 package muse.utils
 
-import sttp.monad.MonadError
 import zio.{Task, ZIO}
 
 object Givens {
-  // TODO: change this to be IO. Don't want throwable as error bound.
-  given zioMonadError: MonadError[Task] = new MonadError[Task] {
-    // TODO fix whatever is going on here
-    def ensure[T](f: Task[T], e: => Task[Unit]): Task[T]                                              = f
-    def error[T](t: Throwable): Task[T]                                                               = ZIO.fail(t)
-    def flatMap[A, B](fa: Task[A])(f: A => Task[B]): Task[B]                                          = fa.flatMap(f)
-    // TODO: fix this
-    protected def handleWrappedError[T](rt: Task[T])(h: PartialFunction[Throwable, Task[T]]): Task[T] = rt
-    def map[A, B](fa: Task[A])(f: A => B): Task[B]                                                    = fa.map(f)
-    def unit[T](t: T): Task[T]                                                                        = ZIO.succeed(t)
-  }
+  given zioMonadError[R, E]: MonadError[[A] =>> ZIO[R, E, A], E] = new MonadErrorZIO[R, E]
+  given taskMonadError: MonadError[Task, Throwable]              = zioMonadError[Any, Throwable]
+}
 
+private class MonadErrorZIO[R, E]() extends MonadError[[A] =>> ZIO[R, E, A], E] {
+  type F[A] = ZIO[R, E, A]
+  override final def pure[A](a: A): F[A]                              = ZIO.succeed(a)
+  override final def map[A, B](fa: F[A])(f: A => B): F[B]             = fa.map(f)
+  override final def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B]      = fa.flatMap(f)
+  override final def raiseError[A](e: E): F[A]                        = ZIO.fail(e)
+  override final def handleErrorWith[A](fa: F[A])(f: E => F[A]): F[A] = fa.catchAll(f)
 }
