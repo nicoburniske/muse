@@ -52,7 +52,6 @@ object Auth {
     }
     .catchAll(error => Http.error(HttpError.InternalServerError(cause = Some(error))))
   // @@ csrfGenerate() // TODO: get this working?
-  // TODO: Error handling for routes!
 
   def generateRedirectUrl(): URIO[SpotifyConfig, URL] = for {
     c     <- ZIO.service[SpotifyConfig]

@@ -11,8 +11,11 @@ val zhttp      = "2.0.0-RC9"
 val protoQuill = "4.0.0-RC1"
 val postgresql = "42.3.4"
 
+lazy val mainMethod = "Main"
+
 lazy val root = (project in file(".")).settings(
-  name := "musing",
+  name                := "muse",
+  reStart / mainClass := Some(mainMethod),
   libraryDependencies ++= Seq(
     "dev.zio"                       %% "zio"                           % zio,
     "dev.zio"                       %% "zio-json"                      % zioJson,
@@ -29,7 +32,7 @@ lazy val root = (project in file(".")).settings(
     "io.getquill"                   %% "quill-jdbc-zio"                % protoQuill,
     "org.postgresql"                 % "postgresql"                    % postgresql,
     // Logging.
-    "dev.zio"                       %% "zio-logging"                    % "2.0.0-RC10",
+    "dev.zio"                       %% "zio-logging"                   % "2.0.0-RC10",
     "ch.qos.logback"                 % "logback-classic"               % "1.2.11",
     // Test Libraries.
     "dev.zio"                       %% "zio-test"                      % "2.0.0-RC6" % Test

@@ -24,7 +24,8 @@ enum SpotifyRequestError extends Throwable {
   }
 }
 
-type SpotifyResponse[T]        = Either[SpotifyRequestError, T]
+//  TODO: Change this to leverage MonadError.
+type SpotifyResponse[T] = Either[SpotifyRequestError, T]
 type SpotifyPageResponse[T]    = SpotifyResponse[Paging[T]]
 type SpotifyAllPageResponse[T] = Either[SpotifyRequestError, Vector[T]]
 

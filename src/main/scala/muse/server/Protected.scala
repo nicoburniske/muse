@@ -51,6 +51,7 @@ object Protected {
     } yield Response.text(reviews.toJsonPretty)
   }
 
+  // TODO: Move this to be an interface
   type SignedIn = Ref[Map[String, AppUser]]
   case class RequestWithSession[A](session: A, request: Request)
 
@@ -63,5 +64,4 @@ object Protected {
     users    <- usersRef.get
     res      <- ZIO.fromOption(users.get(token)).orElseFail("Invalid Session Cookie")
   } yield res
-
 }

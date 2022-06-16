@@ -4,6 +4,7 @@ import sttp.monad.MonadError
 import zio.{Task, ZIO}
 
 object Givens {
+  // TODO: change this to be IO. Don't want throwable as error bound.
   given zioMonadError: MonadError[Task] = new MonadError[Task] {
     // TODO fix whatever is going on here
     def ensure[T](f: Task[T], e: => Task[Unit]): Task[T]                                              = f
