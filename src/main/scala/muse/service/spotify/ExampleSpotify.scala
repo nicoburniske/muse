@@ -1,11 +1,8 @@
-package muse.service
+package muse.service.spotify
 
-import zio.*
-import zio.Task
-import zio.Console.*
-import sttp.client3.*
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
-import sttp.monad.MonadError
+import zio.Console.printLine
+import zio.{Task, ZIOAppDefault}
 import muse.utils.Givens.given
 
 object ExampleSpotify extends ZIOAppDefault {
@@ -16,7 +13,7 @@ object ExampleSpotify extends ZIOAppDefault {
   override def run = {
     val program = for {
       backend  <- AsyncHttpClientZioBackend()
-      spotify   = SpotifyServiceLive[Task](backend, accessToken, refreshToken)
+      spotify   = SpotifyServiceLive[Task](backend, accessToken)
       response <- spotify.getAllPlaylistTracks("4FXSFL5xzbK9iSS1vpp2zd")
       _        <- printLine(response)
     } yield ()

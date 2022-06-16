@@ -9,7 +9,8 @@ import zhttp.http.*
 import zio.json.*
 import muse.domain.tables.AppUser
 import muse.persist.DatabaseQueries
-import muse.service.{RequestProcessor, SpotifyServiceLive, UserSessions}
+import muse.service.spotify.SpotifyServiceLive
+import muse.service.{RequestProcessor, UserSessions}
 import sttp.client3.SttpBackend
 import muse.utils.Givens.given
 import sttp.monad.MonadError
@@ -22,20 +23,21 @@ object Protected {
     Http
       .collectZIO[RequestWithSession[AppUser]] {
         case RequestWithSession(appUser, Method.GET -> !! / USER_PATH / "reviews") =>
-          getUserReviews(appUser).catchAll { e =>
-            ZIO.succeed(HttpError.InternalServerError(cause = Some(e)).toResponse)
-          }
+          getUserReviews(appUser)
       }
-      .contramapZIO[ProtectedEndpointEnv, HttpError, (String, Request)] {
+      .contramapZIO[ProtectedEndpointEnv, Throwable, (String, Request)] {
         case (token, req) => getSession(token, req)
       }
-      .contramapZIO[ProtectedEndpointEnv, HttpError, Request] { req =>
+      .contramapZIO[ProtectedEndpointEnv, Throwable, Request] { req =>
         req.cookieValue("xsession") match {
           case Some(token) => ZIO.succeed(token.toString -> req)
           case _           => ZIO.fail(HttpError.Unauthorized("Missing Session Cookie"))
         }
       }
-      .catchAll(error => Http.response(error.toResponse))
+      .catchAll {
+        case e: HttpError => Http.response(e.toResponse)
+        case e: Throwable => Http.error(HttpError.InternalServerError(cause = Some(e)))
+      }
 
   // Introduce this after auth session middleware
   // @@ csrfValidate()
@@ -44,7 +46,7 @@ object Protected {
     for {
       sttpBackend        <- ZIO.service[SttpBackend[Task, Any]]
       dbQueries          <- ZIO.service[DatabaseQueries]
-      spotify             = SpotifyServiceLive(sttpBackend, appUser.accessToken, appUser.refreshToken)
+      spotify             = SpotifyServiceLive(sttpBackend, appUser.accessToken)
       spotifyEnv          = ZEnvironment(spotify).add(dbQueries)
       res                <- RequestProcessor
                               .getUserReviews(appUser.id, RequestProcessor.ReviewOptions.UserAccessReviews)

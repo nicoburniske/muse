@@ -1,47 +1,13 @@
-package muse.service
+package muse.service.spotify
 
-import muse.domain.spotify.{MultiArtist, MultiTrack, Paging, PlaylistTrack, Track, User, UserPlaylist}
+import muse.domain.spotify.*
+import muse.utils.MonadError
 import sttp.client3.*
 import sttp.model.{Method, ResponseMetadata, Uri}
-import zio.json.*
-import muse.domain.spotify.Artist
-import muse.domain.spotify.MultiAlbum
-import muse.domain.spotify.Album
-import muse.utils.MonadError
 import zio.Task
+import zio.json.*
 
-enum SpotifyRequestError extends Throwable {
-  case MalformedRequest(reason: String)
-  case HttpError(message: String, metadata: ResponseMetadata)
-  case JsonError(error: String, received: String)
-  override def getMessage: String = {
-    this match {
-      case MalformedRequest(reason: String) => reason
-      case HttpError(message, metadata)     => s"Error Code ${metadata.code}: $message"
-      case JsonError(error, received)       => s"Json Error: $error}, Json received: \n $received"
-    }
-  }
-}
-
-trait SpotifyService {
-  def getCurrentUserProfile: Task[User]
-  def getPlaylist(
-      playlistId: String,
-      fields: Option[String] = None,
-      market: Option[String] = None): Task[UserPlaylist]
-  def getTracks(ids: Seq[String], market: Option[String] = None): Task[Vector[Track]]
-  def getArtists(ids: Seq[String]): Task[Vector[Artist]]
-  def getAlbums(ids: Seq[String]): Task[Vector[Album]]
-  def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None): Task[Paging[UserPlaylist]]
-  def getAllUserPlaylists(userId: String): Task[Vector[UserPlaylist]]
-  def getSomePlaylistTracks(
-      playlistId: String,
-      limit: Int,
-      offset: Option[Int] = None): Task[Paging[PlaylistTrack]]
-  def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]]
-}
-
-case class SpotifyServiceLive[F[_]](backend: SttpBackend[F, Any], accessToken: String, refreshToken: String)(
+case class SpotifyServiceLive[F[_]](backend: SttpBackend[F, Any], accessToken: String)(
     using m: MonadError[F, Throwable]) {
 
   def getCurrentUserProfile: F[User] = {
@@ -62,15 +28,18 @@ case class SpotifyServiceLive[F[_]](backend: SttpBackend[F, Any], accessToken: S
     m.map(execute[MultiTrack](uri, Method.GET))(_.tracks)
   }
 
-  // TODO: enforce limit
   def getArtists(ids: Seq[String]): F[Vector[Artist]] = {
-    val uri = uri"${SpotifyServiceLive.API_BASE}/artists?ids=${ids.mkString(",")}"
-    m.map(execute[MultiArtist](uri, Method.GET))(_.artists)
+    if (ids.length > 50) {
+      m.raiseError(SpotifyError.MalformedRequest("Too many Artist IDs. Maximum allowed is 50"))
+    } else {
+      val uri = uri"${SpotifyServiceLive.API_BASE}/artists?ids=${ids.mkString(",")}"
+      m.map(execute[MultiArtist](uri, Method.GET))(_.artists)
+    }
   }
 
   def getAlbums(ids: Seq[String]): F[Vector[Album]] = {
     if (ids.length > 20) {
-      m.raiseError(SpotifyRequestError.MalformedRequest("Too many Album IDs. Maximum allowed is 20"))
+      m.raiseError(SpotifyError.MalformedRequest("Too many Album IDs. Maximum allowed is 20"))
     } else {
       val uri = uri"${SpotifyServiceLive.API_BASE}/albums?ids=${ids.mkString(",")}"
       m.map(execute[MultiAlbum](uri, Method.GET))(_.albums)
@@ -121,9 +90,9 @@ case class SpotifyServiceLive[F[_]](backend: SttpBackend[F, Any], accessToken: S
     val withPermissions = addPermissions(base)
     val mappedResponse  = withPermissions.response.mapWithMetadata {
       case (Left(error), metadata) =>
-        Left(SpotifyRequestError.HttpError(error, metadata))
+        Left(SpotifyError.HttpError(error, metadata))
       case (Right(response), _)    =>
-        response.fromJson[T].left.map(SpotifyRequestError.JsonError(_, response))
+        response.fromJson[T].left.map(SpotifyError.JsonError(_, response))
     }
     val finalRequest    = withPermissions.response(mappedResponse)
     val sent            = backend.send(finalRequest)

@@ -6,13 +6,13 @@ import sttp.client3.SttpBackend
 import javax.sql.DataSource
 import muse.domain.tables.AppUser
 import muse.domain.spotify.{Album, Artist, AuthData, Image, Track, UserPlaylist}
-import muse.service.SpotifyServiceLive
 import muse.persist.DatabaseQueries
 import muse.utils.Givens.given
 
 import java.sql.SQLException
 import muse.domain.common.EntityType
 import muse.domain.response.ReviewSummary
+import muse.service.spotify.SpotifyServiceLive
 
 object RequestProcessor {
   type UserLoginEnv = SttpBackend[Task, Any] & DatabaseQueries
@@ -29,7 +29,7 @@ object RequestProcessor {
   def handleUserLogin(auth: AuthData): ZIO[UserLoginEnv, Throwable, AppUser] =
     for {
       backend       <- ZIO.service[SttpBackend[Task, Any]]
-      spotifyService = SpotifyServiceLive[Task](backend, auth.accessToken, auth.refreshToken)
+      spotifyService = SpotifyServiceLive[Task](backend, auth.accessToken)
       userInfo      <- spotifyService.getCurrentUserProfile
       asTableRow     = AppUser(userInfo.id, auth.accessToken, auth.refreshToken)
       res           <- createOrUpdateUser(asTableRow)
@@ -111,26 +111,26 @@ object RequestProcessor {
       case (a: Track)        => (a.id, a.name, a.album.map(_.images).getOrElse(Nil))
     }
 
-  def getTracksPar(ids: Seq[String]): ZIO[SpotifyServiceLive[Task], Throwable, Vector[Track]] = {
+  def getTracksPar(ids: Seq[String]) = {
     for {
       spotify <- ZIO.service[SpotifyServiceLive[Task]]
       res     <- parallelRequest(ids, 50, spotify.getTracks(_))
     } yield res
   }
 
-  def getAlbumsPar(ids: Seq[String]): ZIO[SpotifyServiceLive[Task], Throwable, Vector[Album]] = for {
+  def getAlbumsPar(ids: Seq[String]) = for {
     spotify <- ZIO.service[SpotifyServiceLive[Task]]
     res     <- parallelRequest(ids, 20, spotify.getAlbums)
   } yield res
 
-  def getArtistsPar(ids: Seq[String]): ZIO[SpotifyServiceLive[Task], Throwable, Vector[Artist]] = for {
+  def getArtistsPar(ids: Seq[String]) = for {
     spotify <- ZIO.service[SpotifyServiceLive[Task]]
     res     <- parallelRequest(ids, 50, spotify.getArtists)
   } yield res
 
   // This sucks. Might need to cache this.
   // Is different from the others because you can only get one playlist at a time.
-  def getPlaylistsPar(ids: Seq[String]): ZIO[SpotifyServiceLive[Task], Throwable, Vector[UserPlaylist]] =
+  def getPlaylistsPar(ids: Seq[String]) =
     ZIO.service[SpotifyServiceLive[Task]].flatMap { spotify =>
       ZIO.foreachPar(ids.toVector)(id => spotify.getPlaylist(id))
     }
