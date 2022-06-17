@@ -1,16 +1,20 @@
 package muse.service
 
-import muse.domain.tables.AppUser
-import muse.persist.DatabaseQueries
+import muse.domain.session.UserSession
+import muse.domain.spotify.InitialAuthData
+import muse.utils.Utils
 import zio.*
 
 import java.sql.SQLException
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 trait UserSessions {
-  def addUserSession(user: AppUser): UIO[String]
-  def getUserSession(sessionId: String): UIO[Option[AppUser]]
+  def addUserSession(userId: String, authData: InitialAuthData): UIO[String]
+  def getUserSession(sessionId: String): UIO[Option[UserSession]]
   def deleteUserSession(sessionId: String): UIO[Unit]
   def deleteUserSessionByUserId(userId: String): UIO[Unit]
+  def updateUserSession(sessionId: String)(f: UserSession => UserSession): UIO[Option[UserSession]]
 
   // TODO: should there be persistence?
   def loadSessions: UIO[Unit]
@@ -23,27 +27,49 @@ trait UserSessions {
 object UserSessions {
   val live = ZLayer(Ref.make(Map.empty).map(UserSessionsLive.apply(_)))
 
-  def addUserSession(user: AppUser)             = ZIO.serviceWithZIO[UserSessions](_.addUserSession(user))
-  def getUserSession(sessionId: String)         = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
-  def deleteUserSession(sessionId: String)      = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
+  def addUserSession(userId: String, authData: InitialAuthData) =
+    ZIO.serviceWithZIO[UserSessions](_.addUserSession(userId, authData))
+
+  def getUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
+
+  def updateUserSession(sessionId: String)(f: UserSession => UserSession) =
+    ZIO.serviceWithZIO[UserSessions](_.updateUserSession(sessionId)(f))
+
+  def deleteUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
+
   def deleteUserSessionByUserId(userId: String) =
     ZIO.serviceWithZIO[UserSessions](_.deleteUserSessionByUserId(userId))
 }
 
-final case class UserSessionsLive(sessionsR: Ref[Map[String, AppUser]]) extends UserSessions {
-  val SESSION_LENGTH = 30
+// TODO: should this ref be synchronized?
+final case class UserSessionsLive(sessionsR: Ref[Map[String, UserSession]]) extends UserSessions {
 
-  override final def addUserSession(user: AppUser) = for {
-    _         <- deleteUserSessionByUserId(user.id)
-    guid      <- Random.nextUUID
-    newSession = guid.toString
-    _         <- sessionsR.update(_ + (newSession -> user))
+  // TODO: think about how to incorporate multiple sessions.
+  override final def addUserSession(userId: String, authData: InitialAuthData) = for {
+    expiration <- Utils.getExpirationInstant(authData.expiresIn)
+    _          <- deleteUserSessionByUserId(userId)
+    guid       <- Random.nextUUID
+    newSession  = guid.toString
+    session     = UserSession(newSession, userId, expiration, authData.accessToken, authData.refreshToken)
+    _          <- sessionsR.update(_ + (newSession -> session))
   } yield newSession
 
-  override final def getUserSession(sessionId: String)         = sessionsR.get.map(_.get(sessionId))
-  override final def deleteUserSession(sessionId: String)      = sessionsR.update(_.removed(sessionId))
+  override final def getUserSession(sessionId: String) = sessionsR.get.map(_.get(sessionId))
+
+  override final def deleteUserSession(sessionId: String) = sessionsR.update(_.removed(sessionId))
+
   override final def deleteUserSessionByUserId(userId: String) =
     sessionsR.update(_.filterNot(_._2.id == userId))
+
+  override final def updateUserSession(sessionId: String)(f: UserSession => UserSession) = {
+    sessionsR
+      .getAndUpdate { sessions =>
+        sessions.get(sessionId) match
+          case None                 => sessions
+          case Some(currentSession) => sessions.updated(sessionId, f(currentSession))
+      }
+      .map(_.get(sessionId))
+  }
 
   def loadSessions: UIO[Unit] = ???
 }

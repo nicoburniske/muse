@@ -2,13 +2,14 @@ package muse.server
 
 import zio.{Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
 import zio.Console.printLine
-import zhttp.http.{Http, Method, Request, Response, Scheme, URL, *}
+import zhttp.http.*
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.json.*
 import zhttp.http.Middleware.csrfGenerate
-import muse.domain.spotify.AuthData
+import muse.domain.spotify.InitialAuthData
 import muse.config.SpotifyConfig
 import muse.domain.tables.AppUser
+import muse.service.spotify.SpotifyAuthServiceLive
 import muse.service.{RequestProcessor, UserSessions}
 import muse.service.RequestProcessor.UserLoginEnv
 import sttp.client3.SttpBackend
@@ -33,13 +34,13 @@ object Auth {
                 data = HttpData.fromString("Missing 'code' query parameter")))
           case Some(code) =>
             for {
-              authData <- getAuthTokens(code)
-              appUser  <- RequestProcessor.handleUserLogin(authData)
-              session  <- UserSessions.addUserSession(appUser)
-              _        <- printLine(session)
+              authData    <- SpotifyAuthServiceLive.getAuthTokens(code)
+              spotifyUser <- RequestProcessor.handleUserLogin(authData)
+              session     <- UserSessions.addUserSession(spotifyUser.id, authData)
+              _           <- printLine(session)
             } yield {
               // TODO: yield redirect to actual site
-              // TODO: should make httponly? Cookie is not updating in browse?
+              // TODO: should make httponly?
               // TODO: add domain to cookie.
               val cookie = Cookie("xsession", session)
               Response.text("You're logged in fool!").addCookie(cookie)
@@ -63,35 +64,4 @@ object Auth {
       "state"         -> List(state.toString.take(15))
     )
   )
-
-  def getAuthTokens(code: String): ZIO[AuthEnv, Throwable, AuthData] =
-    for {
-      response <- requestAccessToken(code)
-      body     <- response.bodyAsString
-      token    <- body.fromJson[AuthData] match {
-                    case Left(error) => ZIO.fail(new Exception(error))
-                    case Right(data) => ZIO.succeed(data)
-                  }
-    } yield token
-
-  def requestAccessToken(code: String): ZIO[AuthEnv, Throwable, Response] =
-    ZIO.service[SpotifyConfig].flatMap { c =>
-      val url     = URL(
-        Path.decode("api/token"),
-        URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
-      )
-      val body    = Map(
-        "grant_type"   -> "authorization_code",
-        "code"         -> code,
-        "redirect_uri" -> c.redirectURI
-      )
-      val headers = Headers.basicAuthorizationHeader(c.clientID, c.clientSecret) ++
-        Headers.contentType(HeaderValues.applicationXWWWFormUrlencoded)
-      Client.request(url.encode, Method.POST, headers, HttpData.fromString(encodeFormBody(body)))
-    }
-
-  // TODO: add to ZIO-HTTP
-  def encodeFormBody(data: Map[String, String]): String =
-    data.map { case (k, v) => s"$k=$v" }.mkString("&")
-
 }

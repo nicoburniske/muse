@@ -5,7 +5,7 @@ import sttp.client3.SttpBackend
 
 import javax.sql.DataSource
 import muse.domain.tables.AppUser
-import muse.domain.spotify.{Album, Artist, AuthData, Image, Track, UserPlaylist}
+import muse.domain.spotify.{Album, Artist, InitialAuthData, Image, Track, User, UserPlaylist}
 import muse.persist.DatabaseQueries
 import muse.utils.Givens.given
 
@@ -26,7 +26,7 @@ object RequestProcessor {
    * @return
    *   true if new User was created, false if current user was updated.
    */
-  def handleUserLogin(auth: AuthData): ZIO[UserLoginEnv, Throwable, AppUser] =
+  def handleUserLogin(auth: InitialAuthData): ZIO[UserLoginEnv, Throwable, User] =
     for {
       backend       <- ZIO.service[SttpBackend[Task, Any]]
       spotifyService = SpotifyServiceLive[Task](backend, auth.accessToken)
@@ -37,7 +37,7 @@ object RequestProcessor {
       _             <-
         ZIO.logInfo(
           s"Successfully logged in ${userInfo.displayName}.${resText} account. Access Token = ${auth.accessToken}")
-    } yield asTableRow
+    } yield userInfo
 
   /**
    * If username already exists, update existing row's auth information. Otherwise create user.
