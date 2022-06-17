@@ -42,7 +42,7 @@ object Auth {
               // TODO: yield redirect to actual site
               // TODO: should make httponly?
               // TODO: add domain to cookie.
-              val cookie = Cookie("xsession", session)
+              val cookie = Cookie(COOKIE_KEY, session)
               Response.text("You're logged in fool!").addCookie(cookie)
             }
         }

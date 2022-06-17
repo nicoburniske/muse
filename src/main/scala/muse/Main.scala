@@ -1,3 +1,5 @@
+package muse
+
 import muse.config.AppConfig
 import muse.domain.tables.AppUser
 import zhttp.service.Server
@@ -7,10 +9,9 @@ import zio.{Ref, ZEnv, ZIOAppDefault, ZLayer}
 import zio.config.typesafe.TypesafeConfig
 
 import java.io.File
-import muse.persist.QuillContext
 import muse.server.{Auth, Protected}
-import muse.persist.DatabaseQueries
 import muse.service.UserSessions
+import muse.service.persist.{DatabaseQueries, QuillContext}
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 
 object Main extends ZIOAppDefault {

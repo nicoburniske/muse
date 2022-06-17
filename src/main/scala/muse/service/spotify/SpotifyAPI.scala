@@ -8,7 +8,7 @@ import sttp.model.{Method, ResponseMetadata, Uri}
 import zio.Task
 import zio.json.*
 
-case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: String)(
+final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: String)(
     using m: MonadError[F, Throwable]) {
 
   def getCurrentUserProfile: F[User] = {

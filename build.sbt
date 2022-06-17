@@ -10,7 +10,7 @@ val zhttp      = "2.0.0-RC9"
 val protoQuill = "4.0.0-RC1"
 val postgresql = "42.3.4"
 
-lazy val mainMethod = "Main"
+lazy val mainMethod = "muse.Main"
 
 lazy val root = (project in file(".")).settings(
   name                := "muse",

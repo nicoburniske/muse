@@ -1,8 +1,8 @@
 package muse.server
 
 import muse.domain.create.{CreateComment, CreateReview}
-import muse.domain.session.UserSession
-import muse.persist.DatabaseQueries
+import muse.domain.session.{RequestWithSession, UserSession}
+import muse.service.persist.DatabaseQueries
 import muse.service.spotify.SpotifyAuthServiceLive.AuthEnv
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive}
 import muse.service.{RequestProcessor, UserSessions}
@@ -39,7 +39,7 @@ object Protected {
         case (cookie, req) => getSession(cookie, req)
       }
       .contramapZIO[ProtectedEndpointEnv & AuthEnv, Throwable, Request] { req =>
-        req.cookieValue("xsession") match {
+        req.cookieValue(COOKIE_KEY) match {
           case Some(token) => ZIO.succeed(token.toString -> req)
           case _           => ZIO.fail(HttpError.Unauthorized("Missing Session Cookie"))
         }
@@ -58,14 +58,7 @@ object Protected {
 
   private def getUserReviews(user: UserSession) = {
     for {
-      sttpBackend        <- ZIO.service[SttpBackend[Task, Any]]
-      dbQueries          <- ZIO.service[DatabaseQueries]
-      spotify             = SpotifyAPI(sttpBackend, user.accessToken)
-      spotifyEnv          = ZEnvironment(spotify).add(dbQueries)
-      res                <- RequestProcessor
-                              .getUserReviews(user.id, RequestProcessor.ReviewOptions.UserAccessReviews)
-                              .provideEnvironment(spotifyEnv)
-                              .timed
+      res                <- RequestProcessor.getUserReviews(user, RequestProcessor.ReviewOptions.UserAccessReviews).timed
       (duration, reviews) = res
       _                  <- ZIO.logDebug(s" Fetching user reviews took ${duration.toMillis}ms")
     } yield Response.text(reviews.toJsonPretty)
@@ -95,14 +88,12 @@ object Protected {
       case Right(data) => ZIO.succeed(data)
     }
 
-  final case class RequestWithSession[A](session: A, request: Request)
-
   def getSession(cookie: String, req: Request): ZIO[AuthEnv, Throwable, RequestWithSession[UserSession]] =
     for {
       maybeUser <- UserSessions.getUserSession(cookie)
       session   <- ZIO.fromOption(maybeUser).orElseFail(HttpError.Unauthorized("Invalid Session Cookie"))
       res       <- if (session.expiration.isAfter(Instant.now())) for {
-                     _ <- ZIO.log(s"Session Retrieved ${session.toString}")
+                     _ <- ZIO.logInfo(s"Session Retrieved: ${session.conciseString}")
                      r <- ZIO.succeed(RequestWithSession(session, req))
                    } yield r
                    else

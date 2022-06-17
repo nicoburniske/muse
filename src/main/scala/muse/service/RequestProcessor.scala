@@ -6,7 +6,8 @@ import muse.domain.response.ReviewSummary
 import muse.domain.session.UserSession
 import muse.domain.spotify.{Album, Artist, Image, InitialAuthData, Track, User, UserPlaylist}
 import muse.domain.tables.AppUser
-import muse.persist.DatabaseQueries
+import muse.service.persist.DatabaseQueries
+import muse.service.spotify.SpotifyService.*
 import muse.service.spotify.{SpotifyAPI, SpotifyService}
 import muse.utils.Givens.given
 import sttp.client3.SttpBackend
@@ -18,7 +19,6 @@ import javax.sql.DataSource
 
 object RequestProcessor {
   type UserLoginEnv = SttpBackend[Task, Any] & DatabaseQueries
-  val XSESSION = "xsession"
 
   /**
    * Handles a user login.
@@ -32,8 +32,8 @@ object RequestProcessor {
     for {
       spotifyService <- SpotifyService.live(auth.accessToken)
       userInfo       <- spotifyService.getCurrentUserProfile
-      asTableRow      = AppUser(userInfo.id, auth.accessToken, auth.refreshToken)
-      res            <- createOrUpdateUser(asTableRow)
+      asTableUser     = AppUser(userInfo.id, auth.accessToken, auth.refreshToken)
+      res            <- createOrUpdateUser(asTableUser)
       resText         = if (res) "Created" else "Updated"
       _              <-
         ZIO.logInfo(
@@ -41,25 +41,25 @@ object RequestProcessor {
     } yield userInfo
 
   def createReview(user: UserSession, review: CreateReview) = for {
-    _ <- validateEntityOrDie(user, review.entityId, review.entityType)
+    _ <- validateEntityOrDie(user.accessToken, review.entityId, review.entityType)
     _ <- DatabaseQueries.createReview(user.id, review)
   } yield ()
 
   def createReviewComment(user: UserSession, comment: CreateComment) = for {
-    _ <- validateEntityOrDie(user, comment.entityId, comment.entityType)
+    _ <- validateEntityOrDie(user.accessToken, comment.entityId, comment.entityType)
     _ <- DatabaseQueries.createReviewComment(user.id, comment)
   } yield ()
 
-  def validateEntityOrDie(user: UserSession, entityId: String, entityType: EntityType) =
-    validateEntity(user, entityId, entityType).flatMap {
+  def validateEntityOrDie(accessToken: String, entityId: String, entityType: EntityType) =
+    validateEntity(accessToken, entityId, entityType).flatMap {
       case true  => ZIO.unit
       case false =>
         ZIO.fail(
           HttpError.BadRequest(s"Invalid Entity ID. ${entityType.toString} ${entityId} does not exist."))
     }
 
-  def validateEntity(user: UserSession, entityId: String, entityType: EntityType) = for {
-    spotifyService <- SpotifyService.live(user.accessToken)
+  def validateEntity(accessToken: String, entityId: String, entityType: EntityType) = for {
+    spotifyService <- SpotifyService.live(accessToken)
     res            <- spotifyService.isValidEntity(entityId, entityType)
   } yield res
 
@@ -101,20 +101,22 @@ object RequestProcessor {
    * @return
    *   the ReviewSummaries
    */
-  def getUserReviews(userId: String, options: ReviewOptions) = for {
-    reviews      <- userReviewsOptions(userId, options)
+  def getUserReviews(user: UserSession, options: ReviewOptions) = for {
+    reviews      <- userReviewsOptions(user.id, options)
     groupedByType = reviews.groupMap(_.entityType)(_.entityId)
+    token         = user.accessToken
 
-    albumsRequests   = getAlbumsPar(groupedByType.getOrElse(EntityType.Album, Vector.empty))
-    tracksRequest    = getTracksPar(groupedByType.getOrElse(EntityType.Track, Vector.empty))
-    artistRequest    = getArtistsPar(groupedByType.getOrElse(EntityType.Artist, Vector.empty))
-    playlistsRequest = getPlaylistsPar(groupedByType.getOrElse(EntityType.Playlist, Vector.empty))
-    results         <- albumsRequests <&> artistRequest <&> tracksRequest <&> playlistsRequest
+    albumsRequests   = getAlbumsPar(token, groupedByType.getOrElse(EntityType.Album, Vector.empty))
+    tracksRequest    = getTracksPar(token, groupedByType.getOrElse(EntityType.Track, Vector.empty))
+    artistRequest    = getArtistsPar(token, groupedByType.getOrElse(EntityType.Artist, Vector.empty))
+    playlistsRequest = getPlaylistsPar(token, groupedByType.getOrElse(EntityType.Playlist, Vector.empty))
 
+    results                             <- albumsRequests <&> artistRequest <&> tracksRequest <&> playlistsRequest
     (albums, artists, tracks, playlists) = results
 
     // Group by entityId.
-    entities: Map[String, IdNameImages] =
+    // (ID, Name, Images)
+    entities: Map[String, (String, String, List[Image])] =
       (albums.map(extractNameAndImages) ++
         artists.map(extractNameAndImages) ++
         tracks.map(extractNameAndImages) ++
@@ -125,45 +127,12 @@ object RequestProcessor {
     ReviewSummary.fromReview(r, name, images)
   }
 
-  type IdNameImages = (String, String, List[Image])
-
-  def extractNameAndImages(e: Album | Artist | UserPlaylist | Track): IdNameImages =
+  def extractNameAndImages(e: Album | Artist | UserPlaylist | Track) =
     e match {
       case (a: Album)        => (a.id, a.name, a.images)
       case (a: Artist)       => (a.id, a.name, a.images.getOrElse(Nil))
       case (a: UserPlaylist) => (a.id, a.name, a.images)
-      // See how much detail is in each album. Could be missing stuff.
       case (a: Track)        => (a.id, a.name, a.album.map(_.images).getOrElse(Nil))
     }
 
-  def getTracksPar(ids: Seq[String]) = {
-    for {
-      spotify <- ZIO.service[SpotifyAPI[Task]]
-      res     <- parallelRequest(ids, 50, spotify.getTracks(_))
-    } yield res
-  }
-
-  def getAlbumsPar(ids: Seq[String]) = for {
-    spotify <- ZIO.service[SpotifyAPI[Task]]
-    res     <- parallelRequest(ids, 20, spotify.getAlbums)
-  } yield res
-
-  def getArtistsPar(ids: Seq[String]) = for {
-    spotify <- ZIO.service[SpotifyAPI[Task]]
-    res     <- parallelRequest(ids, 50, spotify.getArtists)
-  } yield res
-
-  // This sucks. Might need to cache this.
-  // Is different from the others because you can only get one playlist at a time.
-  def getPlaylistsPar(ids: Seq[String]) =
-    ZIO.service[SpotifyAPI[Task]].flatMap { spotify =>
-      ZIO.foreachPar(ids.toVector)(id => spotify.getPlaylist(id))
-    }
-
-  def parallelRequest[I, R](
-      ids: Seq[I],
-      maxPerRequest: Int,
-      singleRequest: Seq[I] => Task[Vector[R]]): ZIO[Any, Throwable, Vector[R]] = for {
-    responses <- ZIO.foreachPar(ids.grouped(maxPerRequest).toVector)(singleRequest)
-  } yield responses.flatten
 }

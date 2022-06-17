@@ -7,7 +7,7 @@ import java.time.temporal.ChronoUnit
 
 object Utils {
   val DEFAULT_EXPIRATION_PADDING = 30
-  // Should this go in package object?
+  // TODO: Should this go in package object?
 
   /**
    * @param expiresIn
@@ -15,6 +15,7 @@ object Utils {
    * @param padding
    *   Amount of padding expiration should be created with. Must be greater than expiresIn
    * @return
+   *   The instant when something has expired
    */
   def getExpirationInstant(expiresIn: Int, padding: Int = DEFAULT_EXPIRATION_PADDING) =
     ZIO.succeed(Instant.now().plus(expiresIn - padding, ChronoUnit.SECONDS))

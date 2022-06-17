@@ -1,4 +1,4 @@
-package muse.persist
+package muse.service.persist
 
 import io.getquill.*
 import io.getquill.context.ZioJdbc.*
