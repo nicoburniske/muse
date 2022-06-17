@@ -14,4 +14,8 @@ trait MonadError[F[_], E] {
   def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B]
   def raiseError[A](e: E): F[A]
   def handleErrorWith[A](fa: F[A])(f: E => F[A]): F[A]
+  final def isSuccess[A](fa: F[A]) = {
+    val ignoreSuccess = map(fa)(_ => true)
+    handleErrorWith(ignoreSuccess)(_ => pure(false))
+  }
 }

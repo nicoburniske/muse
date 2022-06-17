@@ -13,7 +13,7 @@ object ExampleSpotify extends ZIOAppDefault {
   override def run = {
     val program = for {
       backend  <- AsyncHttpClientZioBackend()
-      spotify   = SpotifyServiceLive[Task](backend, accessToken)
+      spotify   = SpotifyAPI[Task](backend, accessToken)
       response <- spotify.getAllPlaylistTracks("4FXSFL5xzbK9iSS1vpp2zd")
       _        <- printLine(response)
     } yield ()

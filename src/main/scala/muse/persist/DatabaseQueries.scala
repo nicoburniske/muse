@@ -38,16 +38,22 @@ trait DatabaseQueries {
 object DatabaseQueries {
   val live = ZLayer(for { ds <- ZIO.service[DataSource] } yield DataServiceLive(ds))
 
-  def createUser(user: AppUser)                         = ZIO.serviceWithZIO[DatabaseQueries](_.createUser(user))
-  def createReview(id: String, review: CreateReview)    =
-    ZIO.serviceWithZIO[DatabaseQueries](_.createReview(id, review))
-  def createReviewComment(id: String, c: CreateComment) =
-    ZIO.serviceWithZIO[DatabaseQueries](_.createReviewComment(id, c))
+  def createUser(user: AppUser) = ZIO.serviceWithZIO[DatabaseQueries](_.createUser(user))
 
-  def getUserById(userId: String)       = ZIO.serviceWithZIO[DatabaseQueries](_.getUserById(userId))
-  def getUsers                          = ZIO.serviceWithZIO[DatabaseQueries](_.getUsers)
-  def getUserReviews(userId: String)    = ZIO.serviceWithZIO[DatabaseQueries](_.getUserReviews(userId))
+  def createReview(userId: String, review: CreateReview) =
+    ZIO.serviceWithZIO[DatabaseQueries](_.createReview(userId, review))
+
+  def createReviewComment(userId: String, c: CreateComment) =
+    ZIO.serviceWithZIO[DatabaseQueries](_.createReviewComment(userId, c))
+
+  def getUserById(userId: String) = ZIO.serviceWithZIO[DatabaseQueries](_.getUserById(userId))
+
+  def getUsers = ZIO.serviceWithZIO[DatabaseQueries](_.getUsers)
+
+  def getUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseQueries](_.getUserReviews(userId))
+
   def getAllUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseQueries](_.getAllUserReviews(userId))
+
   def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseQueries](_.getReviewComments(reviewId))
 
   def updateUser(user: AppUser) = ZIO.serviceWithZIO[DatabaseQueries](_.updateUser(user))
@@ -110,9 +116,9 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
     )
   }.provideLayer(layer).unit
 
-  def createReview(id: String, review: CreateReview) = run {
+  def createReview(userId: String, review: CreateReview) = run {
     reviews.insert(
-      _.creatorId  -> lift(id),
+      _.creatorId  -> lift(userId),
       _.reviewName -> lift(review.name),
       _.isPublic   -> lift(review.isPublic),
       _.entityType -> lift(review.entityType),

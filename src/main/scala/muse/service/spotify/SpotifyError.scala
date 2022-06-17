@@ -12,7 +12,7 @@ enum SpotifyError extends Throwable {
     this match {
       case MalformedRequest(reason: String) => reason
       case HttpError(message, metadata)     => s"Error Code ${metadata.code}: $message"
-      case JsonError(error, received)       => s"Json Error: $error}, Json received: \n $received"
+      case JsonError(error, received)       => s"Json Error: $error\nJson received: $received"
     }
   }
 }

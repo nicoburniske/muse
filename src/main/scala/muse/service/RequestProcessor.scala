@@ -5,17 +5,20 @@ import sttp.client3.SttpBackend
 
 import javax.sql.DataSource
 import muse.domain.tables.AppUser
-import muse.domain.spotify.{Album, Artist, InitialAuthData, Image, Track, User, UserPlaylist}
+import muse.domain.spotify.{Album, Artist, Image, InitialAuthData, Track, User, UserPlaylist}
 import muse.persist.DatabaseQueries
 import muse.utils.Givens.given
 
 import java.sql.SQLException
 import muse.domain.common.EntityType
+import muse.domain.create.{CreateComment, CreateReview}
 import muse.domain.response.ReviewSummary
-import muse.service.spotify.SpotifyServiceLive
+import muse.domain.session.UserSession
+import muse.service.spotify.{SpotifyAPI, SpotifyService}
+import zhttp.http.HttpError
 
 object RequestProcessor {
-  type UserLoginEnv = SttpBackend[Task, Any] & DatabaseQueries
+  type UserLoginEnv = SttpBackend[Task, Throwable] & DatabaseQueries
   val XSESSION = "xsession"
 
   /**
@@ -28,19 +31,42 @@ object RequestProcessor {
    */
   def handleUserLogin(auth: InitialAuthData): ZIO[UserLoginEnv, Throwable, User] =
     for {
-      backend       <- ZIO.service[SttpBackend[Task, Any]]
-      spotifyService = SpotifyServiceLive[Task](backend, auth.accessToken)
-      userInfo      <- spotifyService.getCurrentUserProfile
-      asTableRow     = AppUser(userInfo.id, auth.accessToken, auth.refreshToken)
-      res           <- createOrUpdateUser(asTableRow)
-      resText        = if (res) "Created" else "Updated"
-      _             <-
+      spotifyService <- SpotifyService.live(auth.accessToken)
+      userInfo       <- spotifyService.getCurrentUserProfile
+      asTableRow      = AppUser(userInfo.id, auth.accessToken, auth.refreshToken)
+      res            <- createOrUpdateUser(asTableRow)
+      resText         = if (res) "Created" else "Updated"
+      _              <-
         ZIO.logInfo(
-          s"Successfully logged in ${userInfo.displayName}.${resText} account. Access Token = ${auth.accessToken}")
+          s"Successfully logged in ${userInfo.id}. ${resText} account. Access Token = ${auth.accessToken}")
     } yield userInfo
+
+  def createReview(user: UserSession, review: CreateReview) = for {
+    _ <- validateEntityOrDie(user, review.entityId, review.entityType)
+    _ <- DatabaseQueries.createReview(user.id, review)
+  } yield ()
+
+  def createReviewComment(user: UserSession, comment: CreateComment) = for {
+    _ <- validateEntityOrDie(user, comment.entityId, comment.entityType)
+    _ <- DatabaseQueries.createReviewComment(user.id, comment)
+  } yield ()
+
+  def validateEntityOrDie(user: UserSession, entityId: String, entityType: EntityType) =
+    validateEntity(user, entityId, entityType).flatMap {
+      case true  => ZIO.unit
+      case false =>
+        ZIO.fail(
+          HttpError.BadRequest(s"Invalid Entity ID. ${entityType.toString} ${entityId} does not exist."))
+    }
+
+  def validateEntity(user: UserSession, entityId: String, entityType: EntityType) = for {
+    spotifyService <- SpotifyService.live(user.accessToken)
+    res            <- spotifyService.isValidEntity(entityId, entityType)
+  } yield res
 
   /**
    * If username already exists, update existing row's auth information. Otherwise create user.
+   *
    * @param appUser
    *   current user request
    * @return
@@ -113,25 +139,25 @@ object RequestProcessor {
 
   def getTracksPar(ids: Seq[String]) = {
     for {
-      spotify <- ZIO.service[SpotifyServiceLive[Task]]
+      spotify <- ZIO.service[SpotifyAPI[Task]]
       res     <- parallelRequest(ids, 50, spotify.getTracks(_))
     } yield res
   }
 
   def getAlbumsPar(ids: Seq[String]) = for {
-    spotify <- ZIO.service[SpotifyServiceLive[Task]]
+    spotify <- ZIO.service[SpotifyAPI[Task]]
     res     <- parallelRequest(ids, 20, spotify.getAlbums)
   } yield res
 
   def getArtistsPar(ids: Seq[String]) = for {
-    spotify <- ZIO.service[SpotifyServiceLive[Task]]
+    spotify <- ZIO.service[SpotifyAPI[Task]]
     res     <- parallelRequest(ids, 50, spotify.getArtists)
   } yield res
 
   // This sucks. Might need to cache this.
   // Is different from the others because you can only get one playlist at a time.
   def getPlaylistsPar(ids: Seq[String]) =
-    ZIO.service[SpotifyServiceLive[Task]].flatMap { spotify =>
+    ZIO.service[SpotifyAPI[Task]].flatMap { spotify =>
       ZIO.foreachPar(ids.toVector)(id => spotify.getPlaylist(id))
     }
 

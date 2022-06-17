@@ -1,5 +1,6 @@
 package muse.service.spotify
 
+import muse.domain.common.EntityType
 import muse.domain.spotify.*
 import muse.utils.MonadError
 import sttp.client3.*
@@ -7,24 +8,31 @@ import sttp.model.{Method, ResponseMetadata, Uri}
 import zio.Task
 import zio.json.*
 
-case class SpotifyServiceLive[F[_]](backend: SttpBackend[F, Any], accessToken: String)(
+case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: String)(
     using m: MonadError[F, Throwable]) {
 
   def getCurrentUserProfile: F[User] = {
-    val uri = uri"${SpotifyServiceLive.API_BASE}/me"
+    val uri = uri"${SpotifyAPI.API_BASE}/me"
     execute(uri, Method.GET)
   }
+
+  def isValidEntity(entityId: String, entityType: EntityType): F[Boolean] =
+    entityType match
+      case EntityType.Album    => m.isSuccess(getAlbums(List(entityId)))
+      case EntityType.Artist   => m.isSuccess(getArtists(List(entityId)))
+      case EntityType.Playlist => m.isSuccess(getPlaylist(entityId))
+      case EntityType.Track    => m.isSuccess(getTracks(List(entityId)))
 
   def getPlaylist(
       playlistId: String,
       fields: Option[String] = None,
       market: Option[String] = None): F[UserPlaylist] = {
-    val uri = uri"${SpotifyServiceLive.API_BASE}/playlists/$playlistId?fields=$fields&market=$market"
+    val uri = uri"${SpotifyAPI.API_BASE}/playlists/$playlistId?fields=$fields&market=$market"
     execute(uri, Method.GET)
   }
 
   def getTracks(ids: Seq[String], market: Option[String] = None): F[Vector[Track]] = {
-    val uri = uri"${SpotifyServiceLive.API_BASE}/tracks?market=$market&ids=${ids.mkString(",")}"
+    val uri = uri"${SpotifyAPI.API_BASE}/tracks?market=$market&ids=${ids.mkString(",")}"
     m.map(execute[MultiTrack](uri, Method.GET))(_.tracks)
   }
 
@@ -32,7 +40,7 @@ case class SpotifyServiceLive[F[_]](backend: SttpBackend[F, Any], accessToken: S
     if (ids.length > 50) {
       m.raiseError(SpotifyError.MalformedRequest("Too many Artist IDs. Maximum allowed is 50"))
     } else {
-      val uri = uri"${SpotifyServiceLive.API_BASE}/artists?ids=${ids.mkString(",")}"
+      val uri = uri"${SpotifyAPI.API_BASE}/artists?ids=${ids.mkString(",")}"
       m.map(execute[MultiArtist](uri, Method.GET))(_.artists)
     }
   }
@@ -41,13 +49,13 @@ case class SpotifyServiceLive[F[_]](backend: SttpBackend[F, Any], accessToken: S
     if (ids.length > 20) {
       m.raiseError(SpotifyError.MalformedRequest("Too many Album IDs. Maximum allowed is 20"))
     } else {
-      val uri = uri"${SpotifyServiceLive.API_BASE}/albums?ids=${ids.mkString(",")}"
+      val uri = uri"${SpotifyAPI.API_BASE}/albums?ids=${ids.mkString(",")}"
       m.map(execute[MultiAlbum](uri, Method.GET))(_.albums)
     }
   }
 
   def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None): F[Paging[UserPlaylist]] = {
-    val uri = uri"${SpotifyServiceLive.API_BASE}/users/$userId/playlists?limit=$limit&offset=$offset"
+    val uri = uri"${SpotifyAPI.API_BASE}/users/$userId/playlists?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
 
@@ -61,7 +69,7 @@ case class SpotifyServiceLive[F[_]](backend: SttpBackend[F, Any], accessToken: S
       playlistId: String,
       limit: Int,
       offset: Option[Int] = None): F[Paging[PlaylistTrack]] = {
-    val uri = uri"${SpotifyServiceLive.API_BASE}/playlists/$playlistId/tracks?limit=$limit&offset=$offset"
+    val uri = uri"${SpotifyAPI.API_BASE}/playlists/$playlistId/tracks?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
 
@@ -106,6 +114,6 @@ case class SpotifyServiceLive[F[_]](backend: SttpBackend[F, Any], accessToken: S
   private def addPermissions[T](request: Request[T, Any]): Request[T, Any] = request.auth.bearer(accessToken)
 }
 
-object SpotifyServiceLive {
+object SpotifyAPI {
   val API_BASE = "https://api.spotify.com/v1"
 }

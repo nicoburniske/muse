@@ -63,7 +63,7 @@ final case class UserSessionsLive(sessionsR: Ref[Map[String, UserSession]]) exte
 
   override final def updateUserSession(sessionId: String)(f: UserSession => UserSession) = {
     sessionsR
-      .getAndUpdate { sessions =>
+      .updateAndGet { sessions =>
         sessions.get(sessionId) match
           case None                 => sessions
           case Some(currentSession) => sessions.updated(sessionId, f(currentSession))

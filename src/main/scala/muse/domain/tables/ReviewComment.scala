@@ -17,5 +17,5 @@ final case class ReviewComment(
     comment: Option[String],
     rating: Option[Int],
     entityType: EntityType,
-    entityId: Int
+    entityId: String
 )

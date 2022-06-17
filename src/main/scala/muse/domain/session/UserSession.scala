@@ -3,7 +3,7 @@ package muse.domain.session
 import java.time.Instant
 
 /**
- * @param cookie
+ * @param sessionCookie
  *   the user's session cookie
  * @param id
  *   the user's spotify id
@@ -15,7 +15,7 @@ import java.time.Instant
  *   the spotify refresh token
  */
 final case class UserSession(
-    cookie: String,
+    sessionCookie: String,
     id: String,
     expiration: Instant,
     accessToken: String,
