@@ -1,8 +1,9 @@
 package muse.domain.create
 
-import java.util.UUID
-import zio.json.*
 import muse.domain.common.EntityType
+import zio.json.*
+
+import java.util.UUID
 
 final case class CreateComment(
     reviewID: UUID,

@@ -1,6 +1,7 @@
 package muse.domain.spotify
 
 import zio.json.*
+
 import java.time.Instant
 
 final case class PlaylistTrack(

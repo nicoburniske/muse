@@ -1,24 +1,23 @@
 package muse.service
 
-import zio.*
-import sttp.client3.SttpBackend
-
-import javax.sql.DataSource
-import muse.domain.tables.AppUser
-import muse.domain.spotify.{Album, Artist, Image, InitialAuthData, Track, User, UserPlaylist}
-import muse.persist.DatabaseQueries
-import muse.utils.Givens.given
-
-import java.sql.SQLException
 import muse.domain.common.EntityType
 import muse.domain.create.{CreateComment, CreateReview}
 import muse.domain.response.ReviewSummary
 import muse.domain.session.UserSession
+import muse.domain.spotify.{Album, Artist, Image, InitialAuthData, Track, User, UserPlaylist}
+import muse.domain.tables.AppUser
+import muse.persist.DatabaseQueries
 import muse.service.spotify.{SpotifyAPI, SpotifyService}
+import muse.utils.Givens.given
+import sttp.client3.SttpBackend
 import zhttp.http.HttpError
+import zio.*
+
+import java.sql.SQLException
+import javax.sql.DataSource
 
 object RequestProcessor {
-  type UserLoginEnv = SttpBackend[Task, Throwable] & DatabaseQueries
+  type UserLoginEnv = SttpBackend[Task, Any] & DatabaseQueries
   val XSESSION = "xsession"
 
   /**

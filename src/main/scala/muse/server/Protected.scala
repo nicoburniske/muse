@@ -1,28 +1,27 @@
 package muse.server
 
 import muse.domain.create.{CreateComment, CreateReview}
-import zio.{Cause, Layer, Random, Ref, System, Task, UIO, URIO, ZEnvironment, ZIO, ZIOAppDefault, ZLayer}
-import zio.Console.printLine
-import zhttp.http.{Http, HttpError, Method, Request, Response, *}
-import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
-import zhttp.http.Middleware.csrfValidate
-import zhttp.http.*
-import zio.json.*
 import muse.domain.session.UserSession
 import muse.persist.DatabaseQueries
 import muse.service.spotify.SpotifyAuthServiceLive.AuthEnv
-import muse.service.spotify.{SpotifyAuthServiceLive, SpotifyAPI}
+import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive}
 import muse.service.{RequestProcessor, UserSessions}
+import muse.utils.Givens.given
 import muse.utils.Utils
 import sttp.client3.SttpBackend
-import muse.utils.Givens.given
 import sttp.monad.MonadError
+import zhttp.http.Middleware.csrfValidate
+import zhttp.http.*
+import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
+import zio.Console.printLine
+import zio.json.*
+import zio.{Cause, Layer, Random, Ref, System, Task, UIO, URIO, ZEnvironment, ZIO, ZIOAppDefault, ZLayer}
 
 import java.time.Instant
 
 object Protected {
   val USER_PATH = "user"
-  type ProtectedEndpointEnv = UserSessions & DatabaseQueries & SttpBackend[Task, Throwable]
+  type ProtectedEndpointEnv = UserSessions & DatabaseQueries & SttpBackend[Task, Any]
 
   val endpoints =
     Http

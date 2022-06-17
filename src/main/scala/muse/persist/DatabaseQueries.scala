@@ -1,21 +1,18 @@
 package muse.persist
 
-import muse.domain.common.EntityType
-import io.getquill.context.ZioJdbc.*
-import zio.*
 import io.getquill.*
-import zio.ZLayer.*
-import zio.Console.printLine
-
-import java.sql.SQLException
-import java.time.Instant
-import javax.sql.DataSource
-import java.util.UUID
-
-import java.sql.Types
-import java.sql.Timestamp
-import muse.domain.tables.{AppUser, Review, ReviewAccess, ReviewComment}
+import io.getquill.context.ZioJdbc.*
+import muse.domain.common.EntityType
 import muse.domain.create.{CreateComment, CreateReview}
+import muse.domain.tables.{AppUser, Review, ReviewAccess, ReviewComment}
+import zio.*
+import zio.Console.printLine
+import zio.ZLayer.*
+
+import java.sql.{SQLException, Timestamp, Types}
+import java.time.Instant
+import java.util.UUID
+import javax.sql.DataSource
 
 trait DatabaseQueries {
 

@@ -1,7 +1,7 @@
 package muse.domain.spotify
 
-import zio.json.*
 import muse.domain.common.{Entity, EntityType}
+import zio.json.*
 
 final case class Album(
     @jsonField("album_group")

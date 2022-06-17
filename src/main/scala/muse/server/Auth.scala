@@ -1,18 +1,18 @@
 package muse.server
 
-import zio.{Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
-import zio.Console.printLine
-import zhttp.http.*
-import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
-import zio.json.*
-import zhttp.http.Middleware.csrfGenerate
-import muse.domain.spotify.InitialAuthData
 import muse.config.SpotifyConfig
+import muse.domain.spotify.InitialAuthData
 import muse.domain.tables.AppUser
+import muse.service.RequestProcessor.UserLoginEnv
 import muse.service.spotify.SpotifyAuthServiceLive
 import muse.service.{RequestProcessor, UserSessions}
-import muse.service.RequestProcessor.UserLoginEnv
 import sttp.client3.SttpBackend
+import zhttp.http.*
+import zhttp.http.Middleware.csrfGenerate
+import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
+import zio.Console.printLine
+import zio.json.*
+import zio.{Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
 
 object Auth {
   val scopes = List("user-read-recently-played", "user-follow-read", "ugc-image-upload").mkString(" ")

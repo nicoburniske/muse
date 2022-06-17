@@ -1,12 +1,11 @@
 package muse.persist
 
+import io.getquill.*
 import muse.domain.common.EntityType
 import muse.domain.create.CreateReview
-import zio.ZIOAppDefault
-import zio.*
-import zio.Console.*
-import io.getquill.*
 import muse.utils.Parallel
+import zio.Console.*
+import zio.*
 
 object ExampleQueries extends ZIOAppDefault {
   override def run = {

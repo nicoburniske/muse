@@ -1,9 +1,9 @@
 package muse.service.spotify
 
+import muse.utils.Givens.given
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.Console.printLine
 import zio.{Task, ZIOAppDefault}
-import muse.utils.Givens.given
 
 object ExampleSpotify extends ZIOAppDefault {
   val accessToken  =

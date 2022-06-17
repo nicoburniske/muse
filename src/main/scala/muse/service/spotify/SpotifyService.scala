@@ -13,10 +13,10 @@ import zio.{Schedule, Task, ZIO}
 object SpotifyService {
   val live = for {
     user    <- ZIO.service[UserSession]
-    backend <- ZIO.service[SttpBackend[Task, Throwable]]
+    backend <- ZIO.service[SttpBackend[Task, Any]]
   } yield SpotifyAPI(backend, user.accessToken)
 
   def live(accessToken: String) = for {
-    backend <- ZIO.service[SttpBackend[Task, Throwable]]
+    backend <- ZIO.service[SttpBackend[Task, Any]]
   } yield SpotifyAPI(backend, accessToken)
 }

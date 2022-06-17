@@ -1,12 +1,12 @@
 package muse.domain.response
 
-import java.time.Instant
-import java.util.UUID
-import zio.json.*
-
 import muse.domain.common.EntityType
 import muse.domain.spotify.Image
 import muse.domain.tables.Review
+import zio.json.*
+
+import java.time.Instant
+import java.util.UUID
 
 final case class ReviewSummary(
     id: UUID,
