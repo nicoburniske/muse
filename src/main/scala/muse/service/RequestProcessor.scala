@@ -32,8 +32,7 @@ object RequestProcessor {
     for {
       spotifyService <- SpotifyService.live(auth.accessToken)
       userInfo       <- spotifyService.getCurrentUserProfile
-      asTableUser     = AppUser(userInfo.id, auth.accessToken, auth.refreshToken)
-      res            <- createOrUpdateUser(asTableUser)
+      res            <- createOrUpdateUser(userInfo.id)
       resText         = if (res) "Created" else "Updated"
       _              <-
         ZIO.logInfo(
@@ -71,15 +70,14 @@ object RequestProcessor {
    * @return
    *   true if new User was created, false if current user was updated.
    */
-  def createOrUpdateUser(appUser: AppUser): ZIO[DatabaseQueries, SQLException, Boolean] = for {
-    userRes <- DatabaseQueries.getUserById(appUser.id)
-    func     = if (userRes.nonEmpty) DatabaseQueries.updateUser else DatabaseQueries.createUser
+  def createOrUpdateUser(appUser: String): ZIO[DatabaseQueries, SQLException, Boolean] = for {
+    userRes <- DatabaseQueries.getUserById(appUser)
+    func     = if (userRes.nonEmpty) (u: String) => ZIO.succeed(u) else DatabaseQueries.createUser
     _       <- func(appUser)
   } yield userRes.isEmpty
 
-  enum ReviewOptions {
+  enum ReviewOptions:
     case UserOwnedReviewsPublic, UserOwnedReviewsPrivate, UserOwnedReviewsAll, UserAccessReviews
-  }
 
   def userReviewsOptions(userId: String, options: ReviewOptions) = options match
     case ReviewOptions.UserOwnedReviewsPublic  =>

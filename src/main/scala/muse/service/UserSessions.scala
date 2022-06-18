@@ -44,10 +44,9 @@ object UserSessions {
 // TODO: should this ref be synchronized?
 final case class UserSessionsLive(sessionsR: Ref[Map[String, UserSession]]) extends UserSessions {
 
-  // TODO: think about how to incorporate multiple sessions.
+  // TODO: confirm this works for multiple sessions.
   override final def addUserSession(userId: String, authData: InitialAuthData) = for {
     expiration <- Utils.getExpirationInstant(authData.expiresIn)
-    _          <- deleteUserSessionByUserId(userId)
     guid       <- Random.nextUUID
     newSession  = guid.toString
     session     = UserSession(newSession, userId, expiration, authData.accessToken, authData.refreshToken)

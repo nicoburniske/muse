@@ -1,8 +1,8 @@
 package muse.domain.tables
 
+import java.time.Instant
+
 final case class AppUser(
     id: String,
-    // TODO: remove access token.
-    accessToken: String,
-    refreshToken: String
+    createdAt: Instant
 )

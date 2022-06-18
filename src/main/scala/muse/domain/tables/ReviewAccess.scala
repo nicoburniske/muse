@@ -4,5 +4,11 @@ import java.util.UUID
 
 final case class ReviewAccess(
     reviewId: UUID,
-    userId: String
+    userId: String,
+    accessLevel: AccessLevel
 )
+
+enum AccessLevel:
+  case Collaborator
+  case Suggester
+  case Viewer

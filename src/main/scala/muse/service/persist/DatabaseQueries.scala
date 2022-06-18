@@ -4,7 +4,7 @@ import io.getquill.*
 import io.getquill.context.ZioJdbc.*
 import muse.domain.common.EntityType
 import muse.domain.create.{CreateComment, CreateReview}
-import muse.domain.tables.{AppUser, Review, ReviewAccess, ReviewComment}
+import muse.domain.tables.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
 import zio.*
 import zio.Console.printLine
 import zio.ZLayer.*
@@ -16,7 +16,7 @@ import javax.sql.DataSource
 
 trait DatabaseQueries {
 
-  def createUser(user: AppUser): IO[SQLException, Unit]
+  def createUser(userId: String): IO[SQLException, Unit]
   def createReview(id: String, review: CreateReview): IO[SQLException, Unit]
   def createReviewComment(id: String, review: CreateComment): IO[SQLException, Unit]
 
@@ -28,14 +28,14 @@ trait DatabaseQueries {
   def getAllUserReviews(userId: String): IO[SQLException, List[Review]]
   def getReviewComments(reviewId: UUID): IO[SQLException, List[ReviewComment]]
 
-  def updateUser(user: AppUser): IO[SQLException, Unit]
+  // def updateUser(user: AppUser): IO[SQLException, Unit]
   // def updateReview(review: NewReview)
 }
 
 object DatabaseQueries {
   val live = ZLayer(for { ds <- ZIO.service[DataSource] } yield DataServiceLive(ds))
 
-  def createUser(user: AppUser) = ZIO.serviceWithZIO[DatabaseQueries](_.createUser(user))
+  def createUser(userId: String) = ZIO.serviceWithZIO[DatabaseQueries](_.createUser(userId))
 
   def createReview(userId: String, review: CreateReview) =
     ZIO.serviceWithZIO[DatabaseQueries](_.createReview(userId, review))
@@ -53,17 +53,25 @@ object DatabaseQueries {
 
   def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseQueries](_.getReviewComments(reviewId))
 
-  def updateUser(user: AppUser) = ZIO.serviceWithZIO[DatabaseQueries](_.updateUser(user))
+  //  def updateUser(user: String) = ZIO.serviceWithZIO[DatabaseQueries](_.updateUser(user))
 }
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
   given instantDecoder: Decoder[Instant] = decoder((index, row, session) => row.getTimestamp(index).toInstant)
+
   given instantEncoder: Encoder[Instant] =
     encoder(Types.TIMESTAMP, (index, value, row) => row.setTimestamp(index, Timestamp.from(value)))
 
   given entityTypeDecoder: Decoder[EntityType] =
     decoder((index, row, session) => EntityType.fromOrdinal(row.getInt(index)))
+
   given entityTypeEncoder: Encoder[EntityType] =
+    encoder(Types.INTEGER, (index, value, row) => row.setInt(index, value.ordinal))
+
+  given reviewAccessDecoder: Decoder[AccessLevel] =
+    decoder((index, row, session) => AccessLevel.fromOrdinal(row.getInt(index)))
+
+  given reviewAccessEncoder: Encoder[AccessLevel] =
     encoder(Types.INTEGER, (index, value, row) => row.setInt(index, value.ordinal))
 
   // TODO: move this somewhere else
@@ -105,11 +113,9 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
     comments.filter(_.reviewId == lift(reviewId))
   }.provide(layer)
 
-  def createUser(user: AppUser) = run {
+  def createUser(userId: String) = run {
     users.insert(
-      _.id           -> lift(user.id),
-      _.accessToken  -> lift(user.accessToken),
-      _.refreshToken -> lift(user.refreshToken)
+      _.id -> lift(userId)
     )
   }.provideLayer(layer).unit
 
