@@ -11,13 +11,15 @@ import muse.domain.spotify.{
   Track as STrack
 }
 import muse.domain.tables.{Review, ReviewComment}
-import zio.json.{DeriveJsonCodec, JsonCodec}
+import zio.json.*
 
 import java.util.UUID
 
 final case class ReviewDetailed[T](review: Review, comments: List[ReviewComment], entity: T)
 
 object ReviewDetailed {
-  given reviewSummaryCodec[T](using d: JsonCodec[T]): JsonCodec[ReviewDetailed[T]] =
-    DeriveJsonCodec.gen[ReviewDetailed[T]]
+  //  given reviewSummaryCodec[T](using d: JsonCodec[T]): JsonCodec[ReviewDetailed[T]] =
+  //    DeriveJsonCodec.gen[ReviewDetailed[T]]
+  given reviewSummaryEncoder[T](using d: JsonEncoder[T]): JsonEncoder[ReviewDetailed[T]] =
+    DeriveJsonEncoder.gen[ReviewDetailed[T]]
 }

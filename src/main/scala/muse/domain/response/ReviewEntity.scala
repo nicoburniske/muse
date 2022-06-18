@@ -9,9 +9,23 @@ import muse.domain.spotify.{
   Artist as SArtist,
   Track as STrack
 }
+import zio.json.*
 
 sealed trait ReviewEntity
 
+object ReviewEntity {
+  given encodeAlbumType: JsonEncoder[AlbumType] = JsonEncoder[String].contramap(_.toString.toLowerCase)
+
+  given deriveDetailedAlbum: JsonEncoder[DetailedAlbum] = DeriveJsonEncoder.gen[DetailedAlbum]
+
+  given deriveDetailedArtist: JsonEncoder[DetailedArtist] = DeriveJsonEncoder.gen[DetailedArtist]
+
+  given deriveDetailedPlaylist: JsonEncoder[DetailedPlaylist] = DeriveJsonEncoder.gen[DetailedPlaylist]
+
+  given deriveDetailedTrack: JsonEncoder[DetailedTrack] = DeriveJsonEncoder.gen[DetailedTrack]
+}
+
+// TODO: Find a way to include low-res versions of sub-fields.
 case class DetailedAlbum(
     albumGroup: Option[String],
     albumType: AlbumType,
@@ -27,6 +41,7 @@ case class DetailedAlbum(
     releaseDate: String,
     tracks: List[STrack],
     entityType: EntityType)
+    extends ReviewEntity
 
 case class DetailedTrack(
     album: SAlbum,
@@ -42,9 +57,8 @@ case class DetailedTrack(
     previewUrl: String,
     trackNumber: Int,
     isLocal: Boolean
-)
+) extends ReviewEntity
 
-// TODO: Add albums + Top tracks to artist?
 case class DetailedArtist(
     externalUrls: Map[String, String],
     numFollowers: Int,
@@ -57,7 +71,7 @@ case class DetailedArtist(
     entityType: EntityType,
     albums: List[SAlbum],
     topTracks: List[STrack]
-)
+) extends ReviewEntity
 
 case class DetailedPlaylist(
     collaborative: Boolean,
@@ -71,4 +85,4 @@ case class DetailedPlaylist(
     public: Boolean,
     tracks: List[PlaylistTrack],
     entityType: EntityType
-)
+) extends ReviewEntity

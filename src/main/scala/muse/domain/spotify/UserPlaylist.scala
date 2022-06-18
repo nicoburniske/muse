@@ -25,5 +25,5 @@ final case class UserPlaylist(
 ) extends Entity(id, EntityType.Playlist)
 
 object UserPlaylist {
-  given decodeUserPlaylist: JsonDecoder[UserPlaylist] = DeriveJsonDecoder.gen[UserPlaylist]
+  given decodeUserPlaylist: JsonCodec[UserPlaylist] = DeriveJsonCodec.gen[UserPlaylist]
 }

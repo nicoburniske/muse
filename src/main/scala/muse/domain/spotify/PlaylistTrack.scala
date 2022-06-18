@@ -15,5 +15,5 @@ final case class PlaylistTrack(
 )
 
 object PlaylistTrack {
-  given decodePlaylistTrack: JsonDecoder[PlaylistTrack] = DeriveJsonDecoder.gen[PlaylistTrack]
+  given decodePlaylistTrack: JsonCodec[PlaylistTrack] = DeriveJsonCodec.gen[PlaylistTrack]
 }

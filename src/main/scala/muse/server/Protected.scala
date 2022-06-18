@@ -40,8 +40,7 @@ object Protected {
         case RequestWithSession(session, req @ Method.POST -> !! / USER_PATH / "review" / "comment") =>
           createComment(session, req)
         case RequestWithSession(session, Method.GET -> !! / USER_PATH / "review" / id)               =>
-          //          RequestProcessor.getDetailedReview(session, id).map(r => Response.text(r.toJson))
-          ???
+          RequestProcessor.getDetailedReview(session, id).map(r => Response.text(r))
       }
       .contramapZIO[ProtectedEndpointEnv & AuthEnv, Throwable, (String, Request)] {
         case (cookie, req) => getSession(cookie, req)

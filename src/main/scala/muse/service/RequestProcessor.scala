@@ -2,10 +2,18 @@ package muse.service
 
 import muse.domain.common.EntityType
 import muse.domain.create.{CreateComment, CreateReview}
-import muse.domain.response.{ReviewDetailed, ReviewSummary}
+import muse.domain.response.{
+  DetailedAlbum,
+  DetailedArtist,
+  DetailedPlaylist,
+  DetailedTrack,
+  ReviewDetailed,
+  ReviewEntity,
+  ReviewSummary
+}
 import muse.domain.session.UserSession
 import muse.domain.spotify.{Album, Artist, Image, InitialAuthData, Track, User, UserPlaylist}
-import muse.domain.tables.AppUser
+import muse.domain.tables.{AppUser, Review, ReviewComment}
 import muse.service.persist.DatabaseQueries
 import muse.service.spotify.SpotifyService.*
 import muse.service.spotify.{SpotifyAPI, SpotifyService}
@@ -13,6 +21,7 @@ import muse.utils.Givens.given
 import sttp.client3.SttpBackend
 import zhttp.http.HttpError
 import zio.*
+import zio.json.*
 
 import java.sql.SQLException
 import java.util.UUID
@@ -141,17 +150,23 @@ object RequestProcessor {
       response          <- reviewOrError <&> DatabaseQueries.getReviewComments(reviewId)
       (review, comments) = response
       entity            <- getEntity(session.accessToken, review.entityId, review.entityType)
-    } yield ReviewDetailed(review, comments, entity)
+    } yield detailedReviewToJson(review, comments, entity)
   }
 
+  // TODO: this is trash how can i fix it?
+  def detailedReviewToJson(review: Review, comments: List[ReviewComment], r: ReviewEntity) =
+    r match
+      case d: DetailedAlbum    => ReviewDetailed(review, comments, d).toJsonPretty
+      case d: DetailedTrack    => ReviewDetailed(review, comments, d).toJsonPretty
+      case d: DetailedArtist   => ReviewDetailed(review, comments, d).toJsonPretty
+      case d: DetailedPlaylist => ReviewDetailed(review, comments, d).toJsonPretty
+
   private def getEntity(accessToken: String, entityId: String, entityType: EntityType) =
-    SpotifyService.live(accessToken).flatMap { spotify =>
-      entityType match {
-        case EntityType.Album    => spotify.getAlbums(List(entityId)).map(_.head)
-        case EntityType.Artist   => spotify.getArtists(List(entityId)).map(_.head)
-        case EntityType.Playlist => spotify.getPlaylist(entityId)
-        case EntityType.Track    => spotify.getTracks(List(entityId)).map(_.head)
-      }
+    entityType match {
+      case EntityType.Album    => SpotifyService.getDetailedAlbum(accessToken, entityId)
+      case EntityType.Artist   => SpotifyService.getDetailedArtist(accessToken, entityId)
+      case EntityType.Playlist => SpotifyService.getDetailedPlaylist(accessToken, entityId)
+      case EntityType.Track    => SpotifyService.getDetailedTrack(accessToken, entityId)
     }
 
   def extractNameAndImages(e: Album | Artist | UserPlaylist | Track) =

@@ -62,7 +62,7 @@ object SpotifyService {
 
   def getDetailedArtist(accessToken: String, artistId: String) = for {
     s                       <- live(accessToken)
-    res                     <- s.getArtists(List(artistId)).map(_.head) <&>
+    res                     <- s.getArtist(artistId) <&>
                                  s.getArtistAlbums(artistId) <&>
                                  s.getArtistTopTracks(artistId)
     (artist, albums, tracks) = res
@@ -77,7 +77,26 @@ object SpotifyService {
     artist.popularity.get,
     EntityType.Artist,
     albums.items.toList,
-    tracks.items.toList
+    tracks.toList
+  )
+
+  def getDetailedTrack(accessToken: String, trackId: String) = for {
+    s   <- live(accessToken)
+    res <- s.getTracks(List(trackId)).map(_.head)
+  } yield DetailedTrack(
+    res.album.get,
+    res.artists,
+    res.discNumber,
+    res.durationMs,
+    res.explicit,
+    res.externalUrls,
+    res.id,
+    res.isPlayable.getOrElse(false),
+    res.name,
+    res.popularity.get,
+    res.previewUrl.get,
+    res.trackNumber,
+    res.isLocal
   )
 
   def getAlbumsPar(accessToken: String, ids: Seq[String]) = for {

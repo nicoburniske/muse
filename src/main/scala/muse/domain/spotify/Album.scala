@@ -10,7 +10,7 @@ final case class Album(
     albumType: AlbumType,
     artists: List[Artist],
     @jsonField("available_markets")
-    availableMarkets: List[String],
+    availableMarkets: Option[List[String]],
     // copyrights: Option[List[Copyright]] = None,
     @jsonField("external_ids")
     externalIds: Option[Map[String, String]],
@@ -36,7 +36,10 @@ final case class Album(
 object Album {
   given decodeAlbumType: JsonDecoder[AlbumType] =
     JsonDecoder[String].map(AlbumType.fromString)
-  given decodeAlbum: JsonDecoder[Album]         = DeriveJsonDecoder.gen[Album]
+
+  given encodeAlbumType: JsonEncoder[AlbumType] = JsonEncoder[String].contramap(_.toString.dropRight(1))
+
+  given decodeAlbum: JsonCodec[Album] = DeriveJsonCodec.gen[Album]
 }
 
 object AlbumType {

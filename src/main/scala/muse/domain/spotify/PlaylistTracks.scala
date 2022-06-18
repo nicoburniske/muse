@@ -7,5 +7,5 @@ final case class PlaylistTracks(
 )
 
 object PlaylistTracks {
-  given decodePlaylistTracks: JsonDecoder[PlaylistTracks] = DeriveJsonDecoder.gen[PlaylistTracks]
+  given decodePlaylistTracks: JsonCodec[PlaylistTracks] = DeriveJsonCodec.gen[PlaylistTracks]
 }

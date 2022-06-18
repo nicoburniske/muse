@@ -18,10 +18,10 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
 
   def isValidEntity(entityId: String, entityType: EntityType): F[Boolean] =
     entityType match
-      case EntityType.Album    => getAlbums(List(entityId)).isSuccess
-      case EntityType.Artist   => getArtists(List(entityId)).isSuccess
+      case EntityType.Album    => getAlbum(entityId).isSuccess
+      case EntityType.Artist   => getArtist(entityId).isSuccess
       case EntityType.Playlist => getPlaylist(entityId).isSuccess
-      case EntityType.Track    => getTracks(List(entityId)).isSuccess
+      case EntityType.Track    => getTrack(entityId).isSuccess
 
   def getPlaylist(
       playlistId: String,
@@ -31,10 +31,18 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     execute(uri, Method.GET)
   }
 
+  def getTrack(id: String, market: Option[String] = None): F[Track] = {
+    val uri = uri"${SpotifyAPI.API_BASE}/tracks?$id?market=$market"
+    execute[Track](uri, Method.GET)
+  }
+
   def getTracks(ids: Seq[String], market: Option[String] = None): F[Vector[Track]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/tracks?market=$market&ids=${ids.mkString(",")}"
     execute[MultiTrack](uri, Method.GET).map(_.tracks)
   }
+
+  // TODO: fix this
+  def getArtist(id: String): F[Artist] = getArtists(List(id)).map(_.head)
 
   def getArtists(ids: Seq[String]): F[Vector[Artist]] = {
     if (ids.length > 50) {
@@ -44,6 +52,9 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       execute[MultiArtist](uri, Method.GET).map(_.artists)
     }
   }
+
+  // TODO: fix this
+  def getAlbum(id: String): F[Album] = getAlbums(List(id)).map(_.head)
 
   def getAlbums(ids: Seq[String]): F[Vector[Album]] = {
     if (ids.length > 20) {
@@ -101,12 +112,15 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     execute(uri, Method.GET)
   }
 
+  // TODO: this endpoint is not documented properly by spotify. Country is a required parameter.
   def getArtistTopTracks(
       artistId: String,
+      country: String = "US",
       limit: Option[Int] = None,
-      offset: Option[Int] = None): F[Paging[Track]] = {
-    val uri = uri"${SpotifyAPI.API_BASE}/artists/$artistId/top-tracks?limit=$limit&offset=$offset"
-    execute(uri, Method.GET)
+      offset: Option[Int] = None): F[Vector[Track]] = {
+    val uri =
+      uri"${SpotifyAPI.API_BASE}/artists/$artistId/top-tracks?country=$country&limit=$limit&offset=$offset"
+    execute[MultiTrack](uri, Method.GET).map(_.tracks)
   }
 
   def getAllPaging[T](request: Int => F[Paging[T]], pageSize: Int = 50)(
@@ -133,8 +147,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
         response.fromJson[T].left.map(SpotifyError.JsonError(_, response))
     }
     val finalRequest    = withPermissions.response(mappedResponse)
-    val sent            = backend.send(finalRequest)
-    sent.map(_.body).flatMap {
+    backend.send(finalRequest).map(_.body).flatMap {
       case Left(error) => error.raiseError
       case Right(r)    => r.pure
     }

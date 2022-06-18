@@ -7,7 +7,7 @@ final case class Track(
     album: Option[Album],
     artists: List[Artist],
     @jsonField("available_markets")
-    availableMarkets: List[String],
+    availableMarkets: Option[List[String]],
     @jsonField("disc_number")
     discNumber: Int,
     @jsonField("duration_ms")
@@ -38,5 +38,5 @@ final case class Track(
 ) extends Entity(id, EntityType.Track)
 
 object Track {
-  given decodeTrack: JsonDecoder[Track] = DeriveJsonDecoder.gen[Track]
+  given decodeTrack: JsonCodec[Track] = DeriveJsonCodec.gen[Track]
 }
