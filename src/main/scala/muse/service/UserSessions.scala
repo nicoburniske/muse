@@ -60,15 +60,11 @@ final case class UserSessionsLive(sessionsR: Ref[Map[String, UserSession]]) exte
   override final def deleteUserSessionByUserId(userId: String) =
     sessionsR.update(_.filterNot(_._2.id == userId))
 
-  override final def updateUserSession(sessionId: String)(f: UserSession => UserSession) = {
-    sessionsR
-      .updateAndGet { sessions =>
-        sessions.get(sessionId) match
-          case None                 => sessions
-          case Some(currentSession) => sessions.updated(sessionId, f(currentSession))
-      }
-      .map(_.get(sessionId))
-  }
+  override final def updateUserSession(sessionId: String)(f: UserSession => UserSession) = sessionsR
+    .updateAndGet { sessions =>
+      sessions.get(sessionId).fold(sessions) { current => sessions.updated(sessionId, f(current)) }
+    }
+    .map(_.get(sessionId))
 
   def loadSessions: UIO[Unit] = ???
 }

@@ -25,14 +25,16 @@ object Protected {
   val endpoints =
     Http
       .collectZIO[RequestWithSession[UserSession]] {
-        case RequestWithSession(userSession, Method.POST -> !! / USER_PATH / "logout")                   =>
-          logoutUser(userSession)
-        case RequestWithSession(userSession, Method.GET -> !! / USER_PATH / "reviews")                   =>
-          getUserReviews(userSession)
-        case RequestWithSession(userSession, req @ Method.POST -> !! / USER_PATH / "review")             =>
-          createReview(userSession, req)
-        case RequestWithSession(userSession, req @ Method.POST -> !! / USER_PATH / "review" / "comment") =>
-          createComment(userSession, req)
+        case RequestWithSession(session, Method.GET -> !! / USER_PATH / "me")                        =>
+          RequestProcessor.getUserInfo(session.accessToken).map(user => Response.text(user.toJson))
+        case RequestWithSession(userSession, Method.POST -> !! / USER_PATH / "logout")               =>
+          UserSessions.deleteUserSession(userSession.sessionCookie).as(Response.ok)
+        case RequestWithSession(session, Method.GET -> !! / USER_PATH / "reviews")                   =>
+          getUserReviews(session)
+        case RequestWithSession(session, req @ Method.POST -> !! / USER_PATH / "review")             =>
+          createReview(session, req)
+        case RequestWithSession(session, req @ Method.POST -> !! / USER_PATH / "review" / "comment") =>
+          createComment(session, req)
       }
       .contramapZIO[ProtectedEndpointEnv & AuthEnv, Throwable, (String, Request)] {
         case (cookie, req) => getSession(cookie, req)
@@ -79,32 +81,27 @@ object Protected {
     _       <- RequestProcessor.createReviewComment(user, comment)
   } yield Response.ok
 
-  private def deserializeBodyOrFail[T](body: String)(using decoder: JsonDecoder[T]) =
-    body.fromJson[T] match {
-      case Left(error) =>
-        val message = s"Invalid Request Body: $error"
-        ZIO.fail(HttpError.BadRequest(message))
-      case Right(data) => ZIO.succeed(data)
-    }
+  private def deserializeBodyOrFail[T](body: String)(using decoder: JsonDecoder[T]) = body
+    .fromJson[T]
+    .fold(error => ZIO.fail(HttpError.BadRequest(s"Invalid Request Body: $error")), ZIO.succeed(_))
 
   def getSession(cookie: String, req: Request): ZIO[AuthEnv, Throwable, RequestWithSession[UserSession]] =
     for {
-      maybeUser <- UserSessions.getUserSession(cookie)
-      session   <- ZIO.fromOption(maybeUser).orElseFail(HttpError.Unauthorized("Invalid Session Cookie"))
-      res       <- if (session.expiration.isAfter(Instant.now())) for {
-                     _           <- ZIO.logInfo(s"Session Retrieved: ${session.conciseString}")
-                     reqWithSesh <- ZIO.succeed(RequestWithSession(session, req))
-                   } yield reqWithSesh
-                   else
-                     for {
-                       _             <- ZIO.log(s"Session Retrieved ${session.toString}")
-                       authData      <- SpotifyAuthServiceLive.getAccessToken(session.refreshToken)
-                       newExpiration <- Utils.getExpirationInstant(authData.expiresIn)
-                       newSession    <- UserSessions.updateUserSession(session.sessionCookie) {
-                                          _.copy(accessToken = authData.accessToken, expiration = newExpiration)
-                                        }
-                       // This 'get' call should be a-ok.
-                     } yield RequestWithSession(newSession.get, req)
-    } yield res
+      maybeUser   <- UserSessions.getUserSession(cookie)
+      session     <- ZIO.fromOption(maybeUser).orElseFail(HttpError.Unauthorized("Invalid Session Cookie"))
+      withSession <-
+        if (session.expiration.isAfter(Instant.now()))
+          ZIO.logInfo(s"Session Retrieved: ${session.conciseString}").as(RequestWithSession(session, req))
+        else
+          for {
+            authData      <- SpotifyAuthServiceLive.requestNewAccessToken(session.refreshToken)
+            newExpiration <- Utils.getExpirationInstant(authData.expiresIn)
+            newSession    <- UserSessions.updateUserSession(session.sessionCookie) {
+                               _.copy(accessToken = authData.accessToken, expiration = newExpiration)
+                             }
+            // These 'get' calls should be a-ok.
+            _             <- ZIO.logInfo(s"Session Updated ${newSession.get.conciseString}")
+          } yield RequestWithSession(newSession.get, req)
+    } yield withSession
 
 }

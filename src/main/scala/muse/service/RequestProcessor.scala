@@ -57,6 +57,11 @@ object RequestProcessor {
           HttpError.BadRequest(s"Invalid Entity ID. ${entityType.toString} ${entityId} does not exist."))
     }
 
+  def getUserInfo(accessToken: String) = for {
+    spotifyService <- SpotifyService.live(accessToken)
+    user           <- spotifyService.getCurrentUserProfile
+  } yield user
+
   def validateEntity(accessToken: String, entityId: String, entityType: EntityType) = for {
     spotifyService <- SpotifyService.live(accessToken)
     res            <- spotifyService.isValidEntity(entityId, entityType)

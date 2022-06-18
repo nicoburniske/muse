@@ -27,18 +27,19 @@ object SpotifyAuthServiceLive {
       authData <- deserializeBodyOrFail[InitialAuthData](body)
     } yield authData
 
-  def getAccessToken(refreshToken: String): ZIO[AuthEnv, Throwable, RefreshAuthData] =
+  def requestNewAccessToken(refreshToken: String): ZIO[AuthEnv, Throwable, RefreshAuthData] =
     for {
       response <- refreshAccessToken(refreshToken)
       body     <- response.bodyAsString
       authData <- deserializeBodyOrFail[RefreshAuthData](body)
     } yield authData
 
-  private def deserializeBodyOrFail[T](body: String)(using decoder: JsonDecoder[T]) =
-    body.fromJson[T] match {
-      case Left(error) => ZIO.fail(SpotifyError.JsonError(error, body))
-      case Right(data) => ZIO.succeed(data)
-    }
+  private def deserializeBodyOrFail[T](body: String)(using decoder: JsonDecoder[T]) = body
+    .fromJson[T]
+    .fold(
+      e => ZIO.fail(SpotifyError.JsonError(e, body)),
+      ZIO.succeed(_)
+    )
 
   def requestAccessToken(code: String): ZIO[AuthEnv, Throwable, Response] =
     ZIO.service[SpotifyConfig].flatMap { c =>

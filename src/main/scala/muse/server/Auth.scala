@@ -22,35 +22,36 @@ object Auth {
   val endpoints = Http
     .collectZIO[Request] {
       case Method.GET -> !! / "login"          =>
-        for {
-          url <- generateRedirectUrl()
-        } yield Response.redirect(url.encode, false)
+        generateRedirectUrl.map(url => Response.redirect(url.encode, false))
       case req @ Method.GET -> !! / "callback" =>
-        req.url.queryParams.get("code").flatMap(_.headOption) match {
-          case None       =>
+        req
+          .url
+          .queryParams
+          .get("code")
+          .flatMap(_.headOption)
+          .fold {
             ZIO.succeed(
               Response(
                 status = Status.BadRequest,
                 data = HttpData.fromString("Missing 'code' query parameter")))
-          case Some(code) =>
+          } { code =>
             for {
               authData    <- SpotifyAuthServiceLive.getAuthTokens(code)
               spotifyUser <- RequestProcessor.handleUserLogin(authData)
               session     <- UserSessions.addUserSession(spotifyUser.id, authData)
-              _           <- printLine(session)
+              _           <- ZIO.logInfo(session)
             } yield {
               // TODO: yield redirect to actual site
-              // TODO: should make httponly?
               // TODO: add domain to cookie.
-              val cookie = Cookie(COOKIE_KEY, session)
-              Response.text("You're logged in fool!").addCookie(cookie)
+              val cookie = Cookie(COOKIE_KEY, session, isSecure = true, isHttpOnly = true)
+              Response.redirect("http://localhost:3000").addCookie(cookie)
             }
-        }
+          }
     }
     .catchAll(error => Http.error(HttpError.InternalServerError(cause = Some(error))))
   // @@ csrfGenerate() // TODO: get this working?
 
-  def generateRedirectUrl(): URIO[SpotifyConfig, URL] = for {
+  val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {
     c     <- ZIO.service[SpotifyConfig]
     state <- Random.nextUUID
   } yield URL(

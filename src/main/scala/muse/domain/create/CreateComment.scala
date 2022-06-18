@@ -16,7 +16,5 @@ final case class CreateComment(
 )
 
 object CreateComment {
-  given reviewSummaryDecoder: JsonDecoder[CreateComment] = DeriveJsonDecoder.gen[CreateComment]
-
-  given reviewSummaryEncoder: JsonEncoder[CreateComment] = DeriveJsonEncoder.gen[CreateComment]
+  given reviewSummaryCodec: JsonCodec[CreateComment] = DeriveJsonCodec.gen[CreateComment]
 }

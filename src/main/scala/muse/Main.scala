@@ -5,6 +5,10 @@ import muse.domain.tables.AppUser
 import zhttp.service.Server
 import zhttp.service.EventLoopGroup
 import zhttp.service.ChannelFactory
+import zhttp.http.Method
+import zhttp.http.Middleware.cors
+import zhttp.http.middleware.Cors.CorsConfig
+import zhttp.*
 import zio.{Ref, ZEnv, ZIOAppDefault, ZLayer}
 import zio.config.typesafe.TypesafeConfig
 
@@ -21,7 +25,7 @@ object Main extends ZIOAppDefault {
     ZLayer.succeed(zlayer.get.spotify) ++ ZLayer.succeed(zlayer.get.sqlConfig)
   }
 
-  val dbLayer    = QuillContext.dataSourceLayer >+> DatabaseQueries.live
+  val dbLayer    = QuillContext.dataSourceLayer >>> DatabaseQueries.live
   val zhttpLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
   val allLayers  =
     AsyncHttpClientZioBackend.layer() ++
@@ -31,7 +35,12 @@ object Main extends ZIOAppDefault {
       dbLayer ++
       UserSessions.live
 
-  val allEndpoints = Auth.endpoints ++ Protected.endpoints
+  val config: CorsConfig =
+    CorsConfig(
+      allowedOrigins = _ == "localhost",
+      allowedMethods = Some(Set(Method.GET, Method.PUT, Method.DELETE)))
+
+  val allEndpoints = (Auth.endpoints ++ Protected.endpoints) @@ cors(config)
 
   val server = Server.start(8883, allEndpoints).forever.exitCode.provideLayer(allLayers.orDie)
 

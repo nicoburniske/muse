@@ -22,8 +22,7 @@ final case class ReviewSummary(
 )
 
 object ReviewSummary {
-  given reviewSummaryDecoder: JsonDecoder[ReviewSummary] = DeriveJsonDecoder.gen[ReviewSummary]
-  given reviewSummaryEncoder: JsonEncoder[ReviewSummary] = DeriveJsonEncoder.gen[ReviewSummary]
+  given reviewSummaryCodec: JsonCodec[ReviewSummary] = DeriveJsonCodec.gen[ReviewSummary]
 
   def fromReview(r: Review, entityName: String, images: List[Image]): ReviewSummary = {
     val imageUrls = images.flatMap(_.url)
