@@ -7,11 +7,13 @@ object Givens {
   given taskMonadError: MonadError[Task, Throwable]              = zioMonadError[Any, Throwable]
 }
 
-private class MonadErrorZIO[R, E]() extends MonadError[[A] =>> ZIO[R, E, A], E] {
+private class MonadErrorZIO[R, E] extends MonadError[[A] =>> ZIO[R, E, A], E] {
   type F[A] = ZIO[R, E, A]
-  override final def pure[A](a: A): F[A]                              = ZIO.succeed(a)
-  override final def map[A, B](fa: F[A])(f: A => B): F[B]             = fa.map(f)
-  override final def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B]      = fa.flatMap(f)
-  override final def raiseError[A](e: E): F[A]                        = ZIO.fail(e)
-  override final def handleErrorWith[A](fa: F[A])(f: E => F[A]): F[A] = fa.catchAll(f)
+
+  extension [A](a: A) def pure: F[A]                             = ZIO.succeed(a)
+  extension [A, B](a: F[A]) def map(f: A => B): F[B]             = a.map(f)
+  extension [A, B](a: F[A]) def flatMap(f: A => F[B]): F[B]      = a.flatMap(f)
+  extension [A](e: E) def raiseError: F[A]                       = ZIO.fail(e)
+  extension [A](a: F[A]) def handleErrorWith(f: E => F[A]): F[A] = a.catchAll(f)
+
 }

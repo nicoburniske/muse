@@ -9,7 +9,6 @@ import muse.service.{RequestProcessor, UserSessions}
 import muse.utils.Givens.given
 import muse.utils.Utils
 import sttp.client3.SttpBackend
-import sttp.monad.MonadError
 import zhttp.http.Middleware.csrfValidate
 import zhttp.http.*
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
@@ -93,9 +92,9 @@ object Protected {
       maybeUser <- UserSessions.getUserSession(cookie)
       session   <- ZIO.fromOption(maybeUser).orElseFail(HttpError.Unauthorized("Invalid Session Cookie"))
       res       <- if (session.expiration.isAfter(Instant.now())) for {
-                     _ <- ZIO.logInfo(s"Session Retrieved: ${session.conciseString}")
-                     r <- ZIO.succeed(RequestWithSession(session, req))
-                   } yield r
+                     _           <- ZIO.logInfo(s"Session Retrieved: ${session.conciseString}")
+                     reqWithSesh <- ZIO.succeed(RequestWithSession(session, req))
+                   } yield reqWithSesh
                    else
                      for {
                        _             <- ZIO.log(s"Session Retrieved ${session.toString}")

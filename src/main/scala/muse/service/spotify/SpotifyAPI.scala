@@ -33,7 +33,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
 
   def getTracks(ids: Seq[String], market: Option[String] = None): F[Vector[Track]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/tracks?market=$market&ids=${ids.mkString(",")}"
-    m.map(execute[MultiTrack](uri, Method.GET))(_.tracks)
+    execute[MultiTrack](uri, Method.GET).map(_.tracks)
   }
 
   def getArtists(ids: Seq[String]): F[Vector[Artist]] = {
@@ -41,7 +41,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       m.raiseError(SpotifyError.MalformedRequest("Too many Artist IDs. Maximum allowed is 50"))
     } else {
       val uri = uri"${SpotifyAPI.API_BASE}/artists?ids=${ids.mkString(",")}"
-      m.map(execute[MultiArtist](uri, Method.GET))(_.artists)
+      execute[MultiArtist](uri, Method.GET).map(_.artists)
     }
   }
 
@@ -50,7 +50,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       m.raiseError(SpotifyError.MalformedRequest("Too many Album IDs. Maximum allowed is 20"))
     } else {
       val uri = uri"${SpotifyAPI.API_BASE}/albums?ids=${ids.mkString(",")}"
-      m.map(execute[MultiAlbum](uri, Method.GET))(_.albums)
+      execute[MultiAlbum](uri, Method.GET).map(_.albums)
     }
   }
 
@@ -82,9 +82,9 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
   def getAllPaging[T](request: Int => F[Paging[T]], pageSize: Int = 50)(
       using decoder: JsonDecoder[T]): F[Vector[T]] = {
     def go(acc: Vector[T], offset: Int): F[Vector[T]] = {
-      m.flatMap(request(offset)) { (paging: Paging[T]) =>
+      request(offset).flatMap { (paging: Paging[T]) =>
         paging.next match {
-          case None    => m.pure(acc ++ paging.items)
+          case None    => (acc ++ paging.items).pure
           case Some(_) => go(acc ++ paging.items, offset + pageSize)
         }
       }
@@ -104,10 +104,9 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     }
     val finalRequest    = withPermissions.response(mappedResponse)
     val sent            = backend.send(finalRequest)
-    val body            = m.map(sent)(_.body)
-    m.flatMap(body) {
-      case Left(error) => m.raiseError(error)
-      case Right(r)    => m.pure(r)
+    sent.map(_.body).flatMap {
+      case Left(error) => error.raiseError
+      case Right(r)    => r.pure
     }
   }
 
