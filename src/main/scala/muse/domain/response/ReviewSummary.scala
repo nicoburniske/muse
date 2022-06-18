@@ -25,7 +25,7 @@ object ReviewSummary {
   given reviewSummaryCodec: JsonCodec[ReviewSummary] = DeriveJsonCodec.gen[ReviewSummary]
 
   def fromReview(r: Review, entityName: String, images: List[Image]): ReviewSummary = {
-    val imageUrls = images.flatMap(_.url)
+    val imageUrls = images.map(_.url)
     ReviewSummary(
       r.id,
       r.createdAt,

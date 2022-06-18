@@ -3,10 +3,12 @@ package muse.domain.spotify
 import muse.domain.common.{Entity, EntityType}
 import zio.json.*
 
+final case class Followers(href: String, total: Int)
+
 final case class Artist(
     @jsonField("external_urls")
     externalUrls: Map[String, String],
-    // followers: Option[Followers],
+    followers: Option[Followers],
     genres: Option[List[String]],
     href: String,
     id: String,
@@ -21,4 +23,6 @@ final case class Artist(
 
 object Artist {
   given decodeArtist: JsonDecoder[Artist] = DeriveJsonDecoder.gen[Artist]
+
+  given decodeFollowers: JsonDecoder[Followers] = DeriveJsonDecoder.gen[Followers]
 }

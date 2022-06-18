@@ -2,7 +2,7 @@ package muse.service
 
 import muse.domain.common.EntityType
 import muse.domain.create.{CreateComment, CreateReview}
-import muse.domain.response.ReviewSummary
+import muse.domain.response.{ReviewDetailed, ReviewSummary}
 import muse.domain.session.UserSession
 import muse.domain.spotify.{Album, Artist, Image, InitialAuthData, Track, User, UserPlaylist}
 import muse.domain.tables.AppUser
@@ -15,6 +15,7 @@ import zhttp.http.HttpError
 import zio.*
 
 import java.sql.SQLException
+import java.util.UUID
 import javax.sql.DataSource
 
 object RequestProcessor {
@@ -129,6 +130,29 @@ object RequestProcessor {
     val (_, name, images) = entities(r.entityId)
     ReviewSummary.fromReview(r, name, images)
   }
+
+  // TODO: permission check.
+  def getDetailedReview(session: UserSession, reviewIdString: String) = {
+    val reviewId      = UUID.fromString(reviewIdString)
+    val reviewOrError = DatabaseQueries
+      .getReview(reviewId)
+      .flatMap(_.fold(ZIO.fail(HttpError.BadRequest("Invalid Review Id")))(ZIO.succeed(_)))
+    for {
+      response          <- reviewOrError <&> DatabaseQueries.getReviewComments(reviewId)
+      (review, comments) = response
+      entity            <- getEntity(session.accessToken, review.entityId, review.entityType)
+    } yield ReviewDetailed(review, comments, entity)
+  }
+
+  private def getEntity(accessToken: String, entityId: String, entityType: EntityType) =
+    SpotifyService.live(accessToken).flatMap { spotify =>
+      entityType match {
+        case EntityType.Album    => spotify.getAlbums(List(entityId)).map(_.head)
+        case EntityType.Artist   => spotify.getArtists(List(entityId)).map(_.head)
+        case EntityType.Playlist => spotify.getPlaylist(entityId)
+        case EntityType.Track    => spotify.getTracks(List(entityId)).map(_.head)
+      }
+    }
 
   def extractNameAndImages(e: Album | Artist | UserPlaylist | Track) =
     e match {

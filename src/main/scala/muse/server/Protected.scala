@@ -2,6 +2,7 @@ package muse.server
 
 import muse.domain.create.{CreateComment, CreateReview}
 import muse.domain.session.{RequestWithSession, UserSession}
+import muse.domain.tables.{Review, ReviewComment}
 import muse.service.persist.DatabaseQueries
 import muse.service.spotify.SpotifyAuthServiceLive.AuthEnv
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive}
@@ -14,9 +15,11 @@ import zhttp.http.*
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.Console.printLine
 import zio.json.*
-import zio.{Cause, Layer, Random, Ref, System, Task, UIO, URIO, ZEnvironment, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, IO, Layer, Random, Ref, System, Task, UIO, URIO, ZEnvironment, ZIO, ZIOAppDefault, ZLayer}
 
+import java.sql.SQLException
 import java.time.Instant
+import java.util.UUID
 
 object Protected {
   val USER_PATH = "user"
@@ -28,6 +31,7 @@ object Protected {
         case RequestWithSession(session, Method.GET -> !! / USER_PATH / "me")                        =>
           RequestProcessor.getUserInfo(session.accessToken).map(user => Response.text(user.toJson))
         case RequestWithSession(userSession, Method.POST -> !! / USER_PATH / "logout")               =>
+          // TODO: need to clear cookie in response?
           UserSessions.deleteUserSession(userSession.sessionCookie).as(Response.ok)
         case RequestWithSession(session, Method.GET -> !! / USER_PATH / "reviews")                   =>
           getUserReviews(session)
@@ -35,6 +39,9 @@ object Protected {
           createReview(session, req)
         case RequestWithSession(session, req @ Method.POST -> !! / USER_PATH / "review" / "comment") =>
           createComment(session, req)
+        case RequestWithSession(session, Method.GET -> !! / USER_PATH / "review" / id)               =>
+          //          RequestProcessor.getDetailedReview(session, id).map(r => Response.text(r.toJson))
+          ???
       }
       .contramapZIO[ProtectedEndpointEnv & AuthEnv, Throwable, (String, Request)] {
         case (cookie, req) => getSession(cookie, req)
@@ -64,10 +71,6 @@ object Protected {
       _                  <- ZIO.logDebug(s" Fetching user reviews took ${duration.toMillis}ms")
     } yield Response.text(reviews.toJsonPretty)
   }
-
-  private def logoutUser(user: UserSession) = for {
-    _ <- UserSessions.deleteUserSession(user.sessionCookie)
-  } yield Response.ok
 
   private def createReview(user: UserSession, req: Request) = for {
     body   <- req.bodyAsString

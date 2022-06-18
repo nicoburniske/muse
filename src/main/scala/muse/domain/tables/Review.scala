@@ -1,6 +1,7 @@
 package muse.domain.tables
 
 import muse.domain.common.EntityType
+import zio.json.*
 
 import java.time.Instant
 import java.util.UUID
@@ -14,3 +15,7 @@ final case class Review(
     entityType: EntityType,
     entityId: String
 )
+
+object Review {
+  given reviewSummaryCodec: JsonCodec[Review] = DeriveJsonCodec.gen[Review]
+}

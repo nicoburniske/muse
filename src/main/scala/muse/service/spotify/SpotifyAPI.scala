@@ -18,10 +18,10 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
 
   def isValidEntity(entityId: String, entityType: EntityType): F[Boolean] =
     entityType match
-      case EntityType.Album    => m.isSuccess(getAlbums(List(entityId)))
-      case EntityType.Artist   => m.isSuccess(getArtists(List(entityId)))
-      case EntityType.Playlist => m.isSuccess(getPlaylist(entityId))
-      case EntityType.Track    => m.isSuccess(getTracks(List(entityId)))
+      case EntityType.Album    => getAlbums(List(entityId)).isSuccess
+      case EntityType.Artist   => getArtists(List(entityId)).isSuccess
+      case EntityType.Playlist => getPlaylist(entityId).isSuccess
+      case EntityType.Track    => getTracks(List(entityId)).isSuccess
 
   def getPlaylist(
       playlistId: String,
@@ -77,6 +77,36 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val MAX_PER_REQUEST = 100
     val request         = (offset: Int) => getSomePlaylistTracks(playlistId, MAX_PER_REQUEST, Some(offset))
     getAllPaging(request, MAX_PER_REQUEST)
+  }
+
+  def getSomeAlbumTracks(
+      album: String,
+      limit: Option[Int] = None,
+      offset: Option[Int] = None): F[Paging[Track]] = {
+    val uri = uri"${SpotifyAPI.API_BASE}/albums/$album/tracks?limit=$limit&offset=$offset"
+    execute(uri, Method.GET)
+  }
+
+  def getAllAlbumTracks(albumId: String): F[Vector[Track]] = {
+    val MAX_PER_REQUEST = 20
+    val request         = (offset: Int) => getSomeAlbumTracks(albumId, Some(MAX_PER_REQUEST), Some(offset))
+    getAllPaging(request, MAX_PER_REQUEST)
+  }
+
+  def getArtistAlbums(
+      artistId: String,
+      limit: Option[Int] = None,
+      offset: Option[Int] = None): F[Paging[Album]] = {
+    val uri = uri"${SpotifyAPI.API_BASE}/artists/$artistId/albums?limit=$limit&offset=$offset"
+    execute(uri, Method.GET)
+  }
+
+  def getArtistTopTracks(
+      artistId: String,
+      limit: Option[Int] = None,
+      offset: Option[Int] = None): F[Paging[Track]] = {
+    val uri = uri"${SpotifyAPI.API_BASE}/artists/$artistId/top-tracks?limit=$limit&offset=$offset"
+    execute(uri, Method.GET)
   }
 
   def getAllPaging[T](request: Int => F[Paging[T]], pageSize: Int = 50)(
