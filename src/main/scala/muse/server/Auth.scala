@@ -10,7 +10,6 @@ import sttp.client3.SttpBackend
 import zhttp.http.*
 import zhttp.http.Middleware.csrfGenerate
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
-import zio.Console.printLine
 import zio.json.*
 import zio.{Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
 

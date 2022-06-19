@@ -5,8 +5,7 @@ import io.getquill.context.ZioJdbc.*
 import muse.domain.common.EntityType
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.tables.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
-import zio.*
-import zio.Console.printLine
+import zio.{ZLayer, IO, ZIO, ULayer}
 import zio.ZLayer.*
 
 import java.sql.{SQLException, Timestamp, Types}

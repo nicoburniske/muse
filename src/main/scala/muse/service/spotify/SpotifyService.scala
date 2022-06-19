@@ -12,6 +12,8 @@ import sttp.client3.asynchttpclient.zio.SttpClient
 import sttp.model.StatusCode
 import zio.{Schedule, Task, ZIO}
 
+// TODO: Determine if we can use graphql here as middleware with spotify
+// Would make building more modular and most case classes would be generated from schema.
 object SpotifyService {
   val live = for {
     user    <- ZIO.service[UserSession]

@@ -33,6 +33,9 @@ lazy val root = (project in file(".")).settings(
     // Logging.
     "dev.zio"                       %% "zio-logging"                   % "2.0.0-RC10",
     "ch.qos.logback"                 % "logback-classic"               % "1.2.11",
+    // Graphql.
+    "com.github.ghostdogpr"         %% "caliban"                       % "2.0.0-RC2",
+    //    "dev.zio"                       %% "zio-query"                     % "3.0.0-RC3",
     // Test Libraries.
     "dev.zio"                       %% "zio-test"                      % "2.0.0-RC6" % Test
   ),

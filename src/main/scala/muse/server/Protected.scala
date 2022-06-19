@@ -13,7 +13,6 @@ import sttp.client3.SttpBackend
 import zhttp.http.Middleware.csrfValidate
 import zhttp.http.*
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
-import zio.Console.printLine
 import zio.json.*
 import zio.{Cause, IO, Layer, Random, Ref, System, Task, UIO, URIO, ZEnvironment, ZIO, ZIOAppDefault, ZLayer}
 
