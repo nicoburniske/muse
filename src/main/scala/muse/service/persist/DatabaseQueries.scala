@@ -3,7 +3,7 @@ package muse.service.persist
 import io.getquill.*
 import io.getquill.context.ZioJdbc.*
 import muse.domain.common.EntityType
-import muse.domain.create.{CreateComment, CreateReview}
+import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.tables.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
 import zio.*
 import zio.Console.printLine
@@ -30,7 +30,11 @@ trait DatabaseQueries {
   def getReview(reviewId: UUID): IO[SQLException, Option[Review]]
 
   // def updateUser(user: AppUser): IO[SQLException, Unit]
-  // def updateReview(review: NewReview)
+  // TODO: maybe it's worth returning the updated entity?
+  def updateReview(review: UpdateReview): IO[SQLException, Unit]
+  def updateComment(review: UpdateComment): IO[SQLException, Unit]
+
+  // TODO: delete methods.
 }
 
 object DatabaseQueries {
@@ -150,5 +154,23 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
 
   def updateUser(user: AppUser) = run {
     users.filter(_.id == lift(user.id)).updateValue(lift(user))
+  }.provide(layer).unit
+
+  def updateReview(r: UpdateReview) = run {
+    reviews
+      .filter(_.id == lift(r.reviewId))
+      .update(
+        _.reviewName -> lift(r.name),
+        _.isPublic   -> lift(r.isPublic)
+      )
+  }.provide(layer).unit
+
+  def updateComment(c: UpdateComment) = run {
+    comments
+      .filter(_.id == lift(c.commentId))
+      .update(
+        _.comment -> lift(c.comment),
+        _.rating  -> lift(c.rating)
+      )
   }.provide(layer).unit
 }

@@ -1,6 +1,6 @@
 package muse.server
 
-import muse.domain.create.{CreateComment, CreateReview}
+import muse.domain.mutate.{CreateComment, CreateReview}
 import muse.domain.session.{RequestWithSession, UserSession}
 import muse.domain.tables.{Review, ReviewComment}
 import muse.service.persist.DatabaseQueries

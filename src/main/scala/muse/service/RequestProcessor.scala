@@ -1,7 +1,7 @@
 package muse.service
 
 import muse.domain.common.EntityType
-import muse.domain.create.{CreateComment, CreateReview}
+import muse.domain.mutate.{CreateComment, CreateReview}
 import muse.domain.response.{
   DetailedAlbum,
   DetailedArtist,
@@ -149,11 +149,11 @@ object RequestProcessor {
     for {
       response          <- reviewOrError <&> DatabaseQueries.getReviewComments(reviewId)
       (review, comments) = response
-      entity            <- getEntity(session.accessToken, review.entityId, review.entityType)
+      entity            <- getDetailedEntity(session.accessToken, review.entityId, review.entityType)
     } yield ReviewDetailed(review, comments, entity).toJson
   }
 
-  private def getEntity(accessToken: String, entityId: String, entityType: EntityType) =
+  private def getDetailedEntity(accessToken: String, entityId: String, entityType: EntityType) =
     entityType match {
       case EntityType.Album    => SpotifyService.getDetailedAlbum(accessToken, entityId)
       case EntityType.Artist   => SpotifyService.getDetailedArtist(accessToken, entityId)

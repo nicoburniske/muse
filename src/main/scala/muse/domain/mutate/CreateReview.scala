@@ -1,4 +1,4 @@
-package muse.domain.create
+package muse.domain.mutate
 
 import muse.domain.common.EntityType
 import zio.json.*
