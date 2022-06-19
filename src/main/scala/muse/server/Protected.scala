@@ -30,17 +30,17 @@ object Protected {
       .collectZIO[RequestWithSession[UserSession]] {
         case RequestWithSession(session, Method.GET -> !! / USER_PATH / "me")                        =>
           RequestProcessor.getUserInfo(session.accessToken).map(user => Response.text(user.toJson))
-        case RequestWithSession(userSession, Method.POST -> !! / USER_PATH / "logout")               =>
-          // TODO: need to clear cookie in response?
-          UserSessions.deleteUserSession(userSession.sessionCookie).as(Response.ok)
         case RequestWithSession(session, Method.GET -> !! / USER_PATH / "reviews")                   =>
           getUserReviews(session)
+        case RequestWithSession(session, Method.GET -> !! / USER_PATH / "review" / id)               =>
+          RequestProcessor.getDetailedReview(session, id).map(r => Response.text(r))
         case RequestWithSession(session, req @ Method.POST -> !! / USER_PATH / "review")             =>
           createReview(session, req)
         case RequestWithSession(session, req @ Method.POST -> !! / USER_PATH / "review" / "comment") =>
           createComment(session, req)
-        case RequestWithSession(session, Method.GET -> !! / USER_PATH / "review" / id)               =>
-          RequestProcessor.getDetailedReview(session, id).map(r => Response.text(r))
+        case RequestWithSession(userSession, Method.POST -> !! / USER_PATH / "logout")               =>
+          // TODO: need to clear cookie in response?
+          UserSessions.deleteUserSession(userSession.sessionCookie).as(Response.ok)
       }
       .contramapZIO[ProtectedEndpointEnv & AuthEnv, Throwable, (String, Request)] {
         case (cookie, req) => getSession(cookie, req)

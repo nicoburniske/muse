@@ -150,16 +150,8 @@ object RequestProcessor {
       response          <- reviewOrError <&> DatabaseQueries.getReviewComments(reviewId)
       (review, comments) = response
       entity            <- getEntity(session.accessToken, review.entityId, review.entityType)
-    } yield detailedReviewToJson(review, comments, entity)
+    } yield ReviewDetailed(review, comments, entity).toJson
   }
-
-  // TODO: this is trash how can i fix it?
-  def detailedReviewToJson(review: Review, comments: List[ReviewComment], r: ReviewEntity) =
-    r match
-      case d: DetailedAlbum    => ReviewDetailed(review, comments, d).toJsonPretty
-      case d: DetailedTrack    => ReviewDetailed(review, comments, d).toJsonPretty
-      case d: DetailedArtist   => ReviewDetailed(review, comments, d).toJsonPretty
-      case d: DetailedPlaylist => ReviewDetailed(review, comments, d).toJsonPretty
 
   private def getEntity(accessToken: String, entityId: String, entityType: EntityType) =
     entityType match {

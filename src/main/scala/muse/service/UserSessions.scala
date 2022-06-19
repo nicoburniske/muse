@@ -25,7 +25,7 @@ trait UserSessions {
 }
 
 object UserSessions {
-  val live = ZLayer(Ref.make(Map.empty).map(UserSessionsLive.apply(_)))
+  val live = ZLayer(Ref.Synchronized.make(Map.empty).map(UserSessionsLive.apply(_)))
 
   def addUserSession(userId: String, authData: InitialAuthData) =
     ZIO.serviceWithZIO[UserSessions](_.addUserSession(userId, authData))
@@ -42,7 +42,8 @@ object UserSessions {
 }
 
 // TODO: should this ref be synchronized?
-final case class UserSessionsLive(sessionsR: Ref[Map[String, UserSession]]) extends UserSessions {
+final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSession]])
+    extends UserSessions {
 
   // TODO: confirm this works for multiple sessions.
   override final def addUserSession(userId: String, authData: InitialAuthData) = for {

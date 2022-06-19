@@ -14,15 +14,9 @@ import zio.json.*
 sealed trait ReviewEntity
 
 object ReviewEntity {
+  given deriveReviewEntity: JsonEncoder[ReviewEntity] = DeriveJsonEncoder.gen[ReviewEntity]
+
   given encodeAlbumType: JsonEncoder[AlbumType] = JsonEncoder[String].contramap(_.toString.toLowerCase)
-
-  given deriveDetailedAlbum: JsonEncoder[DetailedAlbum] = DeriveJsonEncoder.gen[DetailedAlbum]
-
-  given deriveDetailedArtist: JsonEncoder[DetailedArtist] = DeriveJsonEncoder.gen[DetailedArtist]
-
-  given deriveDetailedPlaylist: JsonEncoder[DetailedPlaylist] = DeriveJsonEncoder.gen[DetailedPlaylist]
-
-  given deriveDetailedTrack: JsonEncoder[DetailedTrack] = DeriveJsonEncoder.gen[DetailedTrack]
 }
 
 // TODO: Find a way to include low-res versions of sub-fields.
