@@ -185,6 +185,19 @@ object TestMain extends ZIOAppDefault {
         entity {  
           ... on Track {
             name
+            album {
+              name
+            }
+          }
+          ... on Playlist {
+            tracks {
+              addedBy {
+                id
+              }
+              track {
+                name
+              }
+            }
           }
         }
        }
@@ -205,7 +218,7 @@ object TestMain extends ZIOAppDefault {
       .flatMap { interpreter =>
         for {
           _   <- ZIO.logInfo("Doing something!")
-          res <- ZIO.fromTry(Try(interpreter.execute(query))).flatMap(identity)
+          res <- interpreter.execute(query)
           _   <- ZIO.logInfo(s"Succeed! ${res.toString}")
         } yield res
       }
@@ -216,6 +229,7 @@ object TestMain extends ZIOAppDefault {
       .catchAll { e => ZIO.logInfo("OH NO AN ERROR") *> ZIO.logError(e.getMessage) }
       .exitCode
       .provideLayer(dbLayer ++ spotifyLayer)
+  //  override def run = getTracks(List("0gdWSthwNMJ4TPVya8b0bh")).run.provideLayer(spotifyLayer)
 }
 
 // Responses
@@ -227,7 +241,7 @@ final case class User(
     id: String,
     //    reviews: Pagination => ZQuery[DatabaseQueries, Nothing, List[Review]]
     reviews: ZQuery[DatabaseQueries, Nothing, List[Review]]
-    // TODO: incorportate all spotify stuff.
+    // TODO: incorporate all spotify stuff.
 )
 
 final case class Review(
@@ -309,9 +323,10 @@ case class Album(
 ) extends ReviewEntity
 
 ////
+// TODO change this to be BatchedDatasource
 case class GetTracks(ids: List[String]) extends Request[Throwable, List[Track]]
 
-def getTracks(albumIds: List[String])                 = ZQuery.fromRequest(GetTracks(albumIds))(TrackDataSource)
+def getTracks(trackIds: List[String])                 = ZQuery.fromRequest(GetTracks(trackIds))(TrackDataSource)
 val TrackDataSource: DataSource[EntityEnv, GetTracks] = DataSource.fromFunctionZIO("TrackDataSource") {
   reqs =>
     ZIO.service[SpotifyAPI[Task]].flatMap { spotify =>
@@ -327,10 +342,10 @@ val TrackDataSource: DataSource[EntityEnv, GetTracks] = DataSource.fromFunctionZ
               t.externalUrls,
               t.href,
               t.id,
-              t.isPlayable.get,
+              t.isPlayable,
               t.name,
-              t.popularity.get,
-              t.previewUrl.get,
+              t.popularity,
+              t.previewUrl,
               t.trackNumber,
               t.isLocal,
               t.uri
@@ -353,10 +368,10 @@ case class Track(
     externalUrls: Map[String, String],
     href: String,
     id: String,
-    isPlayable: Boolean,
+    isPlayable: Option[Boolean],
     name: String,
-    popularity: Int,
-    previewUrl: String,
+    popularity: Option[Int],
+    previewUrl: Option[String],
     trackNumber: Int,
     isLocal: Boolean,
     uri: String
@@ -459,10 +474,10 @@ val PlaylistTrackDataSource: DataSource[EntityEnv, GetPlaylistTracks] =
               t.track.externalUrls,
               t.track.href,
               t.track.id,
-              t.track.isPlayable.get,
+              t.track.isPlayable,
               t.track.name,
-              t.track.popularity.get,
-              t.track.previewUrl.get,
+              t.track.popularity,
+              t.track.previewUrl,
               t.track.trackNumber,
               t.track.isLocal,
               t.track.uri
