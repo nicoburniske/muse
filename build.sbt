@@ -34,12 +34,14 @@ lazy val root = (project in file(".")).settings(
     "dev.zio"                       %% "zio-logging"                   % "2.0.0-RC10",
     "ch.qos.logback"                 % "logback-classic"               % "1.2.11",
     // Graphql.
-    "com.github.ghostdogpr"         %% "caliban"                       % "2.0.0-RC2",
-    //    "dev.zio"                       %% "zio-query"                     % "3.0.0-RC3",
+    "com.github.ghostdogpr"         %% "caliban"                       % "2.0.0-RC2+65-0d8061df-SNAPSHOT",
     // Test Libraries.
     "dev.zio"                       %% "zio-test"                      % "2.0.0-RC6" % Test
   ),
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
+  resolvers ++= Seq(
+    "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
+  ),
   excludeDependencies ++= Seq(
     ExclusionRule("org.scala-lang.modules", "scala-collection-compat_2.13")
   )

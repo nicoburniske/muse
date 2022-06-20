@@ -26,6 +26,7 @@ trait DatabaseQueries {
   // Reviews that the given user has access to.
   def getAllUserReviews(userId: String): IO[SQLException, List[Review]]
   def getReviewComments(reviewId: UUID): IO[SQLException, List[ReviewComment]]
+  def getMultiReviewComments(reviewIds: List[UUID]): IO[SQLException, List[ReviewComment]]
   def getReview(reviewId: UUID): IO[SQLException, Option[Review]]
 
   // def updateUser(user: AppUser): IO[SQLException, Unit]
@@ -58,6 +59,9 @@ object DatabaseQueries {
   def getAllUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseQueries](_.getAllUserReviews(userId))
 
   def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseQueries](_.getReviewComments(reviewId))
+
+  def getAllReviewComments(reviewIds: List[UUID]) =
+    ZIO.serviceWithZIO[DatabaseQueries](_.getMultiReviewComments(reviewIds))
 
   //  def updateUser(user: String) = ZIO.serviceWithZIO[DatabaseQueries](_.updateUser(user))
 }
@@ -122,6 +126,10 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
   def getReviewComments(reviewId: UUID) = run {
     comments.filter(_.reviewId == lift(reviewId))
   }.provide(layer)
+
+  def getMultiReviewComments(reviewIds: List[UUID]) = run {
+    comments.filter(c => liftQuery(reviewIds.toSet).contains(c.reviewId))
+  }.provideLayer(layer)
 
   def createUser(userId: String) = run {
     users.insert(
