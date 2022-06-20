@@ -16,6 +16,13 @@ object ExampleQueries extends ZIOAppDefault {
       _    <- DatabaseQueries.createReview(
                 "tuckingfypo1",
                 CreateReview(
+                  "Adrian's Impeccable taste in music",
+                  true,
+                  EntityType.Playlist,
+                  "2nolvatuHnfTpHhXDOThrm"))
+      _    <- DatabaseQueries.createReview(
+                "tuckingfypo1",
+                CreateReview(
                   "are alden's bumps all that hard?",
                   true,
                   EntityType.Playlist,
@@ -29,6 +36,10 @@ object ExampleQueries extends ZIOAppDefault {
       _    <- DatabaseQueries.createReview(
                 "tuckingfypo1",
                 CreateReview("The next big thing", true, EntityType.Artist, "68YGyJRfQQG9HqiMpgoRiV"))
+      _    <- DatabaseQueries.createReview(
+                "tuckingfypo1",
+                CreateReview("Argentine Rock Icon", true, EntityType.Track, "6XoyfaS2X22S3IwzYJwPzd")
+              )
       user <- DatabaseQueries.getUserReviews("tuckingfypo1")
       _    <- printLine(s"User: $user")
     } yield ()

@@ -32,7 +32,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
   }
 
   def getTrack(id: String, market: Option[String] = None): F[Track] = {
-    val uri = uri"${SpotifyAPI.API_BASE}/tracks?$id?market=$market"
+    val uri = uri"${SpotifyAPI.API_BASE}/tracks/$id?market=$market"
     execute[Track](uri, Method.GET)
   }
 
@@ -142,7 +142,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val withPermissions = addPermissions(base)
     val mappedResponse  = withPermissions.response.mapWithMetadata {
       case (Left(error), metadata) =>
-        Left(SpotifyError.HttpError(error, metadata))
+        Left(SpotifyError.HttpError(error, metadata, uri.toString, uri.params.toString))
       case (Right(response), _)    =>
         response.fromJson[T].left.map(SpotifyError.JsonError(_, response))
     }
