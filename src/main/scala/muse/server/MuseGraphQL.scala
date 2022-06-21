@@ -1,19 +1,18 @@
-package muse.graphql
+package muse.server
 
 import caliban.schema.{GenericSchema, Schema}
+import caliban.wrappers.Wrappers.printErrors
 import caliban.{GraphQL, RootResolver}
 import muse.domain.common.EntityType
+import muse.domain.spotify
 import muse.domain.spotify.AlbumType
 import muse.domain.tables.ReviewComment
 import muse.service.persist.{DatabaseQueries, QuillContext}
 import muse.service.spotify.{SpotifyAPI, SpotifyService}
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
-import zio.Chunk
 import zio.*
 import zio.Console.printLine
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
-import caliban.wrappers.Wrappers.printErrors
-import muse.domain.spotify
 
 import java.sql.SQLException
 import java.time.Instant
@@ -139,7 +138,7 @@ case class Queries(
     user: UserArgs => ZQuery[DatabaseQueries, Nothing, User],
     reviews: ReviewsArgs => ZQuery[DatabaseQueries, Nothing, Option[Review]])
 
-object TestMain extends ZIOAppDefault {
+object ApiGraphQL extends ZIOAppDefault {
   //  given pagSchema: Schema[DatabaseQueries, Pagination]   = Schema.genDebug
   given userSchema: Schema[DatabaseQueries & SpotifyAPI[Task], User] = Schema.gen
 
@@ -218,7 +217,6 @@ object TestMain extends ZIOAppDefault {
       .catchAll { e => ZIO.logInfo("OH NO AN ERROR") *> ZIO.logError(e.getMessage) }
       .exitCode
       .provideLayer(dbLayer ++ spotifyLayer)
-  //  override def run = getTracks(List("0gdWSthwNMJ4TPVya8b0bh")).run.provideLayer(spotifyLayer)
 }
 
 // Responses

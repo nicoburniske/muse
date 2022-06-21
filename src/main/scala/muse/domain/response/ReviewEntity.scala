@@ -14,7 +14,8 @@ import zio.json.*
 sealed trait ReviewEntity
 
 object ReviewEntity {
-  given deriveReviewEntity: JsonEncoder[ReviewEntity] = DeriveJsonEncoder.gen[ReviewEntity]
+  // TODO: getting a compiler error here for some reason?!
+  given deriveReviewEntity: JsonEncoder[ReviewEntity] = ??? // DeriveJsonEncoder.gen[ReviewEntity]
 
   given encodeAlbumType: JsonEncoder[AlbumType] = JsonEncoder[String].contramap(_.toString.toLowerCase)
 }

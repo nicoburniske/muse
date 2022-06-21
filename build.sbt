@@ -35,7 +35,7 @@ lazy val root = (project in file(".")).settings(
     "ch.qos.logback"                 % "logback-classic"               % "1.2.11",
     // Graphql.
     "com.github.ghostdogpr"         %% "caliban"                       % "2.0.0-RC2+65-0d8061df-SNAPSHOT",
-//    "com.github.ghostdogpr"         %% "caliban-zio-http"              % "2.0.0-RC2+65-0d8061df-SNAPSHOT",
+    "com.github.ghostdogpr"         %% "caliban-zio-http"              % "2.0.0-RC2+65-0d8061df-SNAPSHOT",
     // Test Libraries.
     "dev.zio"                       %% "zio-test"                      % "2.0.0-RC6" % Test
   ),
