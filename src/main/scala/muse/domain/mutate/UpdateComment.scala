@@ -8,7 +8,3 @@ final case class UpdateComment(
     comment: Option[String],
     rating: Option[Int]
 )
-
-object UpdateComment {
-  given updateCommentCodec: JsonCodec[UpdateComment] = DeriveJsonCodec.gen[UpdateComment]
-}

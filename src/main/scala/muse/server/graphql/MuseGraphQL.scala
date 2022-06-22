@@ -4,23 +4,13 @@ import caliban.schema.{GenericSchema, Schema}
 import caliban.wrappers.Wrappers.printErrors
 import caliban.{GraphQL, RootResolver}
 import muse.domain.common.EntityType
+import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify
 import muse.domain.spotify.AlbumType
 import muse.domain.tables.ReviewComment
 import muse.server.MuseMiddleware.Auth
-import muse.server.graphql.subgraph.{
-  Album,
-  Artist,
-  Comment,
-  Playlist,
-  Queries,
-  Review,
-  ReviewEntity,
-  Track,
-  User,
-  UserArgs
-}
+import muse.server.graphql.subgraph.{Album, Artist, Comment, Playlist, Review, ReviewEntity, Track, User}
 import muse.service.persist.DatabaseQueries
 import muse.service.spotify.SpotifyService
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
@@ -33,12 +23,8 @@ import java.time.Instant
 import java.util.UUID
 import scala.util.Try
 
-// TODO: consider if ids or something simple should exist outside as field outside of sub-entity.
-
 object MuseGraphQL {
   given userSchema: Schema[DatabaseQueries & SpotifyService, User] = Schema.gen
-
-  given userArgs: Schema[DatabaseQueries, UserArgs] = Schema.gen
 
   given reviewSchema: Schema[DatabaseQueries & SpotifyService, Review] = Schema.gen
 
@@ -54,11 +40,19 @@ object MuseGraphQL {
 
   given trackSchema: Schema[SpotifyService, Track] = Schema.gen
 
-  val resolver = Queries(id => Resolvers.getUser(id.id), id => Resolvers.getReview(id.id))
+  given userArgs: Schema[DatabaseQueries, UserArgs] = Schema.gen
 
+  given createReview: Schema[Auth[UserSession] & DatabaseQueries, CreateReview] = Schema.gen
+
+  given createComment: Schema[Auth[UserSession] & DatabaseQueries, CreateComment] = Schema.gen
+
+  given updateReview: Schema[Auth[UserSession] & DatabaseQueries, UpdateReview] = Schema.gen
+
+  given updateComment: Schema[Auth[UserSession] & DatabaseQueries, UpdateComment] = Schema.gen
+
+  type Env = Auth[UserSession] & DatabaseQueries & SpotifyService
   val api =
-    GraphQL.graphQL[DatabaseQueries & SpotifyService, Queries, Unit, Unit](
-      RootResolver(resolver)) @@ printErrors
+    GraphQL.graphQL[Env, Queries, Mutations, Unit](RootResolver(Queries.live, Mutations.live)) @@ printErrors
 }
 
 // TODO: incorporate pagination.

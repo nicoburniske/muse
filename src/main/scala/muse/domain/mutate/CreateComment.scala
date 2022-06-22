@@ -14,7 +14,3 @@ final case class CreateComment(
     entityType: EntityType,
     entityId: String
 )
-
-object CreateComment {
-  given reviewSummaryCodec: JsonCodec[CreateComment] = DeriveJsonCodec.gen[CreateComment]
-}

@@ -1,8 +1,8 @@
 package muse.server
 
-import muse.domain.session.{RequestWithSession, UserSession}
+import muse.domain.session.UserSession
 import muse.service.UserSessions
-import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive, SpotifyService, SpotifyServiceOld}
+import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive, SpotifyService}
 import muse.service.spotify.SpotifyAuthServiceLive.AuthEnv
 import muse.utils.Utils
 import sttp.client3.SttpBackend
@@ -20,6 +20,12 @@ object MuseMiddleware {
 
     def currentUser: IO[Unauthorized, T]
     def setUser(session: Option[T]): UIO[Unit]
+  }
+
+  object Auth {
+    def currentUser[T: Tag] = ZIO.serviceWithZIO[Auth[T]](_.currentUser)
+
+    def setUser[T: Tag](t: Option[T]) = ZIO.serviceWithZIO[Auth[T]](_.setUser(t))
   }
 
   val HttpLayer: ULayer[Auth[UserSession]] = ZLayer.scoped {
@@ -47,7 +53,7 @@ object MuseMiddleware {
           case Some(cookie) =>
             for {
               session <- getSession(cookie.toString)
-              _       <- ZIO.serviceWithZIO[Auth[UserSession]](_.setUser(Some(session)))
+              _       <- Auth.setUser[UserSession](Some(session))
               spotify <- SpotifyService.live(session.accessToken)
               asLayer  = ZLayer.succeed(spotify)
             } yield app.provideSomeLayer[R, SpotifyService, Throwable](asLayer)

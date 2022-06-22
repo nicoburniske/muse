@@ -16,8 +16,8 @@ import javax.sql.DataSource
 trait DatabaseQueries {
 
   def createUser(userId: String): IO[SQLException, Unit]
-  def createReview(id: String, review: CreateReview): IO[SQLException, Unit]
-  def createReviewComment(id: String, review: CreateComment): IO[SQLException, Unit]
+  def createReview(id: String, review: CreateReview): IO[SQLException, Review]
+  def createReviewComment(id: String, review: CreateComment): IO[SQLException, ReviewComment]
 
   def getUsers: IO[SQLException, List[AppUser]]
   def getUserById(userId: String): IO[SQLException, Option[AppUser]]
@@ -33,7 +33,7 @@ trait DatabaseQueries {
   // def updateUser(user: AppUser): IO[SQLException, Unit]
   // TODO: maybe it's worth returning the updated entity? Incorporate Returning clause on SQL statement.
   def updateReview(review: UpdateReview): IO[SQLException, Unit]
-  def updateComment(review: UpdateComment): IO[SQLException, Unit]
+  def updateComment(comment: UpdateComment): IO[SQLException, Unit]
 
   // TODO: delete methods.
 }
@@ -63,6 +63,12 @@ object DatabaseQueries {
 
   def getAllReviewComments(reviewIds: List[UUID]) =
     ZIO.serviceWithZIO[DatabaseQueries](_.getMultiReviewComments(reviewIds))
+
+  def updateReview(review: UpdateReview) =
+    ZIO.serviceWithZIO[DatabaseQueries](_.updateReview(review))
+
+  def updateComment(comment: UpdateComment) =
+    ZIO.serviceWithZIO[DatabaseQueries](_.updateComment(comment))
 
   //  def updateUser(user: String) = ZIO.serviceWithZIO[DatabaseQueries](_.updateUser(user))
 }
@@ -143,26 +149,30 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
   }.provideLayer(layer).unit
 
   def createReview(userId: String, review: CreateReview) = run {
-    reviews.insert(
-      _.creatorId  -> lift(userId),
-      _.reviewName -> lift(review.name),
-      _.isPublic   -> lift(review.isPublic),
-      _.entityType -> lift(review.entityType),
-      _.entityId   -> lift(review.entityId)
-    )
-  }.provide(layer).unit
+    reviews
+      .insert(
+        _.creatorId  -> lift(userId),
+        _.reviewName -> lift(review.name),
+        _.isPublic   -> lift(review.isPublic),
+        _.entityType -> lift(review.entityType),
+        _.entityId   -> lift(review.entityId)
+      )
+      .returningGenerated(r => r)
+  }.provide(layer)
 
   def createReviewComment(id: String, c: CreateComment) = run {
-    comments.insert(
-      _.reviewId        -> lift(c.reviewID),
-      _.commenter       -> lift(id),
-      _.parentCommentId -> lift(c.parentCommentId),
-      _.comment         -> lift(c.comment),
-      _.rating          -> lift(c.rating),
-      _.entityType      -> lift(c.entityType),
-      _.entityId        -> lift(c.entityId)
-    )
-  }.provide(layer).unit
+    comments
+      .insert(
+        _.reviewId        -> lift(c.reviewID),
+        _.commenter       -> lift(id),
+        _.parentCommentId -> lift(c.parentCommentId),
+        _.comment         -> lift(c.comment),
+        _.rating          -> lift(c.rating),
+        _.entityType      -> lift(c.entityType),
+        _.entityId        -> lift(c.entityId)
+      )
+      .returningGenerated(c => c)
+  }.provide(layer)
 
   def updateUser(user: AppUser) = run {
     users.filter(_.id == lift(user.id)).updateValue(lift(user))

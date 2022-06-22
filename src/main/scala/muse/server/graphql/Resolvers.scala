@@ -104,31 +104,33 @@ object Resolvers {
       reqs.toList match
         case Nil         => ZIO.succeed(CompletedRequestMap.empty)
         case head :: Nil =>
-          SpotifyService
-            .getAlbum(head.id)
-            .fold(
-              e => CompletedRequestMap.empty.insert(head)(Left(e)),
-              a => CompletedRequestMap.empty.insert(head)(Right(Album.fromSpotify(a))))
+          addTimeLog("Retrieved album") {
+            SpotifyService
+              .getAlbum(head.id)
+              .fold(
+                e => CompletedRequestMap.empty.insert(head)(Left(e)),
+                a => CompletedRequestMap.empty.insert(head)(Right(Album.fromSpotify(a))))
+          }
         case _           =>
-          ZIO
-            .foreachPar(reqs.grouped(20).toVector) { reqs =>
-              SpotifyService.getAlbums(reqs.map(_.id)).either.map(reqs -> _)
-            }
-            .map { res =>
-              res.foldLeft(CompletedRequestMap.empty) {
-                case (map: CompletedRequestMap, (reqs, result)) =>
-                  result match
-                    case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
-                    case Right(albums)   =>
-                      val grouped = albums.map(Album.fromSpotify).groupBy(_.id).view.mapValues(_.head)
-                      reqs.foldLeft(map) { (map, req) =>
-                        val result =
-                          grouped.get(req.id).fold(Left(NotFoundError(req.id, EntityType.Album)))(Right(_))
-                        map.insert(req)(result)
-                      }
+          addTimeLog("Retrieved multiple albums")(
+            ZIO
+              .foreachPar(reqs.grouped(20).toVector) { reqs =>
+                SpotifyService.getAlbums(reqs.map(_.id)).either.map(reqs -> _)
               }
-            }
-            .zipLeft(ZIO.logInfo(s"Requested ${reqs.size} tracks in parallel"))
+              .map { res =>
+                res.foldLeft(CompletedRequestMap.empty) {
+                  case (map: CompletedRequestMap, (reqs, result)) =>
+                    result match
+                      case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
+                      case Right(albums)   =>
+                        val grouped = albums.map(Album.fromSpotify).groupBy(_.id).view.mapValues(_.head)
+                        reqs.foldLeft(map) { (map, req) =>
+                          val result =
+                            grouped.get(req.id).fold(Left(NotFoundError(req.id, EntityType.Album)))(Right(_))
+                          map.insert(req)(result)
+                        }
+                }
+              })
     }
 
   case class NotFoundError(entityId: String, entityType: EntityType) extends Throwable
