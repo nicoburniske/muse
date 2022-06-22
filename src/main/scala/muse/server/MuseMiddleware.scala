@@ -36,7 +36,6 @@ object MuseMiddleware {
     }
   }
 
-  // TODO: incorporate user session into env
   def userSessionAuth[R](
       app: Http[R & SpotifyService, Throwable, Request, Response]
   ): Http[R & AuthEnv & Auth[UserSession] & SttpBackend[Task, Any], Throwable, Request, Response] =

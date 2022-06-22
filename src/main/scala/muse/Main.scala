@@ -3,6 +3,7 @@ package muse
 import caliban.*
 import muse.config.{AppConfig, SpotifyConfig}
 import muse.domain.tables.AppUser
+import muse.server.graphql.API
 import zhttp.service.Server
 import zhttp.service.EventLoopGroup
 import zhttp.service.ChannelFactory
@@ -15,7 +16,7 @@ import zio.{Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
 import zio.config.typesafe.TypesafeConfig
 
 import java.io.File
-import muse.server.{ApiGraphQL, Auth, MuseMiddleware, Protected}
+import muse.server.{Auth, MuseMiddleware, Protected}
 import muse.service.UserSessions
 import muse.service.persist.{DatabaseQueries, QuillContext}
 import muse.service.spotify.SpotifyService
@@ -46,8 +47,8 @@ object Main extends ZIOAppDefault {
     }
 
   val server = (for {
-    interpreter <- ApiGraphQL.api.interpreter
-    _           <- ZIO.logInfo(ApiGraphQL.api.render) // TODO: write to file
+    interpreter <- API.api.interpreter
+    _           <- ZIO.logInfo(API.api.render) // TODO: write to file
     _           <- Server
                      .start(
                        8883,
