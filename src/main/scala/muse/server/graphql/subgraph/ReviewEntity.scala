@@ -29,10 +29,9 @@ case class Album(
     label: Option[String],
     name: String,
     popularity: Option[Int],
-    releaseDate: String
-    //    artists: ZQuery[Any, Nothing, List[Artist]]
-    //    tracks: Pagination => ZQuery[Any, Nothing, List[Track]]
-    //    tracks: ZQuery[Any, Nothing, List[Track]]
+    releaseDate: String,
+    artists: ZQuery[SpotifyService, Throwable, List[Artist]],
+    tracks: ZQuery[SpotifyService, Throwable, List[Track]]
 ) extends ReviewEntity
 
 case class Track(

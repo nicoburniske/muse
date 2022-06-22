@@ -3,7 +3,7 @@ package muse
 import caliban.*
 import muse.config.{AppConfig, SpotifyConfig}
 import muse.domain.tables.AppUser
-import muse.server.graphql.API
+import muse.server.graphql.MuseGraphQL
 import zhttp.service.Server
 import zhttp.service.EventLoopGroup
 import zhttp.service.ChannelFactory
@@ -47,8 +47,8 @@ object Main extends ZIOAppDefault {
     }
 
   val server = (for {
-    interpreter <- API.api.interpreter
-    _           <- ZIO.logInfo(API.api.render) // TODO: write to file
+    interpreter <- MuseGraphQL.api.interpreter
+    _           <- ZIO.logInfo(MuseGraphQL.api.render) // TODO: write to file
     _           <- Server
                      .start(
                        8883,

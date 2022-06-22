@@ -35,7 +35,7 @@ import scala.util.Try
 
 // TODO: consider if ids or something simple should exist outside as field outside of sub-entity.
 
-object API {
+object MuseGraphQL {
   given userSchema: Schema[DatabaseQueries & SpotifyService, User] = Schema.gen
 
   given userArgs: Schema[DatabaseQueries, UserArgs] = Schema.gen

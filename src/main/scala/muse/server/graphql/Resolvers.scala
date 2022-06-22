@@ -175,7 +175,7 @@ object Resolvers {
   def spotAlbumToAlbum(a: muse.domain.spotify.Album): Album =
     Album(
       a.albumGroup,
-      a.albumType.toString,
+      a.albumType.toString.dropRight(1),
       a.externalUrls,
       a.genres.getOrElse(Nil),
       a.id,
@@ -183,9 +183,14 @@ object Resolvers {
       a.label,
       a.name,
       a.popularity,
-      a.releaseDate)
+      a.releaseDate,
+      ZQuery.foreachPar(a.artists.map(_.id))(getArtist),
+      getAlbumTracks(a.id)
+    )
 
-  // TODO change this to be BatchedDatasource
+  def getAlbumTracks(albumId: String) =
+    ZQuery.fromZIO(SpotifyService.getAllAlbumTracks(albumId)).map(_.map(spotifyTrackToTrack).toList)
+
   case class NotFoundError(entityId: String, entityType: EntityType) extends Throwable
 
   def spotifyTrackToTrack(t: spotify.Track) = {
@@ -246,8 +251,6 @@ object Resolvers {
             }
             .zipLeft(ZIO.logInfo("Requested tracks in parallel"))
     }
-
-  //
 
   case class GetArtist(id: String) extends Request[Throwable, Artist]
 
