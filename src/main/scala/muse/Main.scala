@@ -4,6 +4,7 @@ import caliban.*
 import muse.config.{AppConfig, SpotifyConfig}
 import muse.domain.session.UserSession
 import muse.domain.tables.AppUser
+import muse.server.MuseMiddleware.Unauthorized
 import muse.server.graphql.MuseGraphQL
 import zhttp.service.Server
 import zhttp.service.EventLoopGroup
@@ -38,15 +39,13 @@ object Main extends ZIOAppDefault {
       allowedOrigins = _ == "localhost",
       allowedMethods = Some(Set(Method.POST, Method.GET, Method.PUT, Method.DELETE)))
 
-  def endpointsGraphQL(
-      interpreter: GraphQLInterpreter[MuseGraphQL.Env, CalibanError]
-  ) =
-    MuseMiddleware.userSessionAuth(Http.collectHttp[Request] {
+  def endpointsGraphQL(interpreter: GraphQLInterpreter[MuseGraphQL.Env, CalibanError]) =
+    MuseMiddleware.UserSessionAuth(Http.collectHttp[Request] {
       case _ -> !! / "api" / "graphql" =>
         ZHttpAdapter.makeHttpService(interpreter)
     })
 
-  val logoutEndpoint = MuseMiddleware.userSessionAuth(Http.collectZIO[Request] {
+  val logoutEndpoint = MuseMiddleware.UserSessionAuth(Http.collectZIO[Request] {
     case Method.POST -> !! / "logout" =>
       for {
         session <- MuseMiddleware.Auth.currentUser[UserSession]
@@ -73,7 +72,7 @@ object Main extends ZIOAppDefault {
       flattenedAppConfigLayer,
       dbLayer,
       UserSessions.live,
-      MuseMiddleware.HttpLayer
+      MuseMiddleware.FiberUserSession
     )
 
   override def run = server
