@@ -27,6 +27,7 @@ trait DatabaseQueries {
   def getAllUserReviews(userId: String): IO[SQLException, List[Review]]
   def getReviewComments(reviewId: UUID): IO[SQLException, List[ReviewComment]]
   def getMultiReviewComments(reviewIds: List[UUID]): IO[SQLException, List[ReviewComment]]
+  def getReviews(reviewIds: List[UUID]): IO[SQLException, List[Review]]
   def getReview(reviewId: UUID): IO[SQLException, Option[Review]]
 
   // def updateUser(user: AppUser): IO[SQLException, Unit]
@@ -129,6 +130,10 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
 
   def getMultiReviewComments(reviewIds: List[UUID]) = run {
     comments.filter(c => liftQuery(reviewIds.toSet).contains(c.reviewId))
+  }.provideLayer(layer)
+
+  def getReviews(reviewIds: List[UUID]) = run {
+    reviews.filter(c => liftQuery(reviewIds.toSet).contains(c.id))
   }.provideLayer(layer)
 
   def createUser(userId: String) = run {

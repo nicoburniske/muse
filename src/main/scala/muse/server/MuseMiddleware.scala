@@ -2,7 +2,7 @@ package muse.server
 
 import muse.domain.session.{RequestWithSession, UserSession}
 import muse.service.UserSessions
-import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive, SpotifyService}
+import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive, SpotifyService, SpotifyServiceOld}
 import muse.service.spotify.SpotifyAuthServiceLive.AuthEnv
 import muse.utils.Utils
 import sttp.client3.SttpBackend
@@ -36,12 +36,13 @@ object MuseMiddleware {
     }
   }
 
+  // TODO: incorporate user session into env
   def userSessionAuth[R](
-      app: Http[R & SpotifyAPI[Task], Throwable, Request, Response]
+      app: Http[R & SpotifyService, Throwable, Request, Response]
   ): Http[R & AuthEnv & Auth[UserSession] & SttpBackend[Task, Any], Throwable, Request, Response] =
     Http
       .fromFunctionZIO[Request] { (request: Request) =>
-        request.cookieValue(COOKIE_KEY) match
+        request.cookieValue(COOKIE_KEY).orElse(request.authorization) match
           case None         =>
             ZIO.logInfo("Missing Cookie Header") *> ZIO.fail(Unauthorized)
           case Some(cookie) =>
@@ -50,7 +51,7 @@ object MuseMiddleware {
               _       <- ZIO.serviceWithZIO[Auth[UserSession]](_.setUser(Some(session)))
               spotify <- SpotifyService.live(session.accessToken)
               asLayer  = ZLayer.succeed(spotify)
-            } yield app.provideSomeLayer[R, SpotifyAPI[Task], Throwable](asLayer)
+            } yield app.provideSomeLayer[R, SpotifyService, Throwable](asLayer)
       }
       .flatten
 

@@ -18,7 +18,7 @@ import java.io.File
 import muse.server.{ApiGraphQL, Auth, MuseMiddleware, Protected}
 import muse.service.UserSessions
 import muse.service.persist.{DatabaseQueries, QuillContext}
-import muse.service.spotify.SpotifyAPI
+import muse.service.spotify.SpotifyService
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 
 object Main extends ZIOAppDefault {
@@ -28,17 +28,16 @@ object Main extends ZIOAppDefault {
     ZLayer.succeed(zlayer.get.spotify) ++ ZLayer.succeed(zlayer.get.sqlConfig)
   }
 
-  val dbLayer    = QuillContext.dataSourceLayer >>> DatabaseQueries.live
-  val zhttpLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
+  val dbLayer       = QuillContext.dataSourceLayer >>> DatabaseQueries.live
+  val zhttpLayer    = EventLoopGroup.auto(8) ++ ChannelFactory.auto
+  val restEndpoints = Auth.endpoints ++ Protected.endpoints
 
   val config: CorsConfig =
     CorsConfig(
       allowedOrigins = _ == "localhost",
-      allowedMethods = Some(Set(Method.GET, Method.PUT, Method.DELETE)))
+      allowedMethods = Some(Set(Method.POST, Method.GET, Method.PUT, Method.DELETE)))
 
-  val restEndpoints = (Auth.endpoints ++ Protected.endpoints) @@ cors(config)
-
-  def endpointsGraphQL(interpreter: GraphQLInterpreter[DatabaseQueries & SpotifyAPI[Task], CalibanError]) =
+  def endpointsGraphQL(interpreter: GraphQLInterpreter[DatabaseQueries & SpotifyService, CalibanError]) =
     Http.collectHttp[Request] {
       case _ -> !! / "api" / "graphql" =>
         MuseMiddleware.userSessionAuth(
@@ -48,10 +47,11 @@ object Main extends ZIOAppDefault {
 
   val server = (for {
     interpreter <- ApiGraphQL.api.interpreter
+    _           <- ZIO.logInfo(ApiGraphQL.api.render) // TODO: write to file
     _           <- Server
                      .start(
                        8883,
-                       Auth.endpoints ++ endpointsGraphQL(interpreter)
+                       (Auth.endpoints ++ endpointsGraphQL(interpreter)) @@ cors(config)
                      )
                      .forever
   } yield ())

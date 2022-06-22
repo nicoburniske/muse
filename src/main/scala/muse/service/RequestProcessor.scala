@@ -15,8 +15,8 @@ import muse.domain.session.UserSession
 import muse.domain.spotify.{Album, Artist, Image, InitialAuthData, Track, User, UserPlaylist}
 import muse.domain.tables.{AppUser, Review, ReviewComment}
 import muse.service.persist.DatabaseQueries
-import muse.service.spotify.SpotifyService.*
-import muse.service.spotify.{SpotifyAPI, SpotifyService}
+import muse.service.spotify.SpotifyServiceOld.*
+import muse.service.spotify.{SpotifyAPI, SpotifyServiceOld}
 import muse.utils.Givens.given
 import sttp.client3.SttpBackend
 import zhttp.http.HttpError
@@ -40,7 +40,7 @@ object RequestProcessor {
    */
   def handleUserLogin(auth: InitialAuthData): ZIO[UserLoginEnv, Throwable, User] =
     for {
-      spotifyService <- SpotifyService.live(auth.accessToken)
+      spotifyService <- SpotifyServiceOld.live(auth.accessToken)
       userInfo       <- spotifyService.getCurrentUserProfile
       res            <- createOrUpdateUser(userInfo.id)
       resText         = if (res) "Created" else "Updated"
@@ -68,12 +68,12 @@ object RequestProcessor {
     }
 
   def getUserInfo(accessToken: String) = for {
-    spotifyService <- SpotifyService.live(accessToken)
+    spotifyService <- SpotifyServiceOld.live(accessToken)
     user           <- spotifyService.getCurrentUserProfile
   } yield user
 
   def validateEntity(accessToken: String, entityId: String, entityType: EntityType) = for {
-    spotifyService <- SpotifyService.live(accessToken)
+    spotifyService <- SpotifyServiceOld.live(accessToken)
     res            <- spotifyService.isValidEntity(entityId, entityType)
   } yield res
 
@@ -107,7 +107,7 @@ object RequestProcessor {
   /**
    * Gets review sumamaries for the given user.
    *
-   * @param userId
+   * @param user
    *   user id
    * @param options
    *   the options for which reviews to retrieve
@@ -155,10 +155,10 @@ object RequestProcessor {
 
   private def getDetailedEntity(accessToken: String, entityId: String, entityType: EntityType) =
     entityType match {
-      case EntityType.Album    => SpotifyService.getDetailedAlbum(accessToken, entityId)
-      case EntityType.Artist   => SpotifyService.getDetailedArtist(accessToken, entityId)
-      case EntityType.Playlist => SpotifyService.getDetailedPlaylist(accessToken, entityId)
-      case EntityType.Track    => SpotifyService.getDetailedTrack(accessToken, entityId)
+      case EntityType.Album    => SpotifyServiceOld.getDetailedAlbum(accessToken, entityId)
+      case EntityType.Artist   => SpotifyServiceOld.getDetailedArtist(accessToken, entityId)
+      case EntityType.Playlist => SpotifyServiceOld.getDetailedPlaylist(accessToken, entityId)
+      case EntityType.Track    => SpotifyServiceOld.getDetailedTrack(accessToken, entityId)
     }
 
   def extractNameAndImages(e: Album | Artist | UserPlaylist | Track) =

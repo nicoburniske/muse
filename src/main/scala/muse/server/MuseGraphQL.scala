@@ -4,11 +4,13 @@ import caliban.schema.{GenericSchema, Schema}
 import caliban.wrappers.Wrappers.printErrors
 import caliban.{GraphQL, RootResolver}
 import muse.domain.common.EntityType
+import muse.domain.session.UserSession
 import muse.domain.spotify
 import muse.domain.spotify.AlbumType
 import muse.domain.tables.ReviewComment
-import muse.service.persist.{DatabaseQueries, QuillContext}
-import muse.service.spotify.{SpotifyAPI, SpotifyService}
+import muse.server.MuseMiddleware.Auth
+import muse.service.persist.DatabaseQueries
+import muse.service.spotify.SpotifyService
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.*
 import zio.Console.printLine
@@ -25,38 +27,40 @@ import scala.util.Try
  * Requests + DataSource
  */
 object Reqs {
+  // TODO create a check for if the given user exists and return an optional accordingly.
   case class GetUser(id: String) extends Request[Nothing, User]
 
-  def getUser(id: String)                                  = ZQuery.fromRequest(GetUser(id))(UserDataSource)
+  def getUser(id: String) = ZQuery.fromRequest(GetUser(id))(UserDataSource)
+
   val UserDataSource: DataSource[DatabaseQueries, GetUser] =
-    DataSource.fromFunction("UserDataSource")(req => User(req.id, getUserReviews(req.id)))
+    DataSource.fromFunction("UserDataSource") { req => User(req.id, getUserReviews(req.id)) }
 
-  // wtf is the error in Request tied to?
-  case class GetUserReviews(userId: String) extends Request[Nothing, List[Review]]
+  // TODO incorporate
+  case class GetUserReviews(userId: String) extends Request[SQLException, List[Review]]
 
-  def getUserReviews(userId: String)                                     = ZQuery.fromRequest(GetUserReviews(userId))(UserReviewsDataSource)
+  def getUserReviews(userId: String) = ZQuery.fromRequest(GetUserReviews(userId))(UserReviewsDataSource)
+
   val UserReviewsDataSource: DataSource[DatabaseQueries, GetUserReviews] =
     DataSource.fromFunctionZIO("UserReviewsDataSource") { req =>
-      DatabaseQueries.getUserReviews(req.userId).map { value =>
-        value.map { tReview =>
-          Review(
-            tReview.id,
-            tReview.createdAt,
-            tReview.creatorId,
-            tReview.reviewName,
-            tReview.isPublic,
-            //            _ => getReviewComments(tReview.id))
-            getReviewComments(tReview.id),
-            tReview.entityId,
-            tReview.entityType,
-            getEntity(tReview.entityId, tReview.entityType)
-          )
-        }
+      for {
+        reviews <- DatabaseQueries.getUserReviews(req.userId)
+      } yield reviews.map { tReview =>
+        Review(
+          tReview.id,
+          tReview.createdAt,
+          tReview.creatorId,
+          tReview.reviewName,
+          tReview.isPublic,
+          //            _ => getReviewComments(tReview.id))
+          getReviewComments(tReview.id),
+          tReview.entityId,
+          tReview.entityType,
+          getEntity(tReview.entityId, tReview.entityType)
+        )
       }
     }
 
-  case class GetReview(reviewId: UUID) extends Request[Nothing, Option[Review]]
-
+  case class GetReview(reviewId: UUID) extends Request[SQLException, Option[Review]]
   def getReview(reviewId: UUID)                                = ZQuery.fromRequest(GetReview(reviewId))(ReviewDataSource)
   val ReviewDataSource: DataSource[DatabaseQueries, GetReview] =
     DataSource.fromFunctionZIO("ReviewDataSource") { g =>
@@ -79,8 +83,9 @@ object Reqs {
 
   case class GetReviewComments(reviewId: UUID) extends Request[Nothing, List[Comment]]
 
-  def getReviewComments(reviewId: UUID)                                 = ZQuery.fromRequest(GetReviewComments(reviewId))(CommentDataSource)
-  // This could be weird on second thought because of permissions.
+  def getReviewComments(reviewId: UUID) = ZQuery.fromRequest(GetReviewComments(reviewId))(CommentDataSource)
+
+  // TODO: incoporate permissions. This could be weird on second thought because of permissions.
   val CommentDataSource: DataSource[DatabaseQueries, GetReviewComments] =
     DataSource.Batched.make("ReviewCommentsDataSource") { (requests: Chunk[GetReviewComments]) =>
       requests.toList match
@@ -135,36 +140,35 @@ object Reqs {
 case class UserArgs(id: String)
 case class ReviewsArgs(id: UUID)
 case class Queries(
-    user: UserArgs => ZQuery[DatabaseQueries, Nothing, User],
-    reviews: ReviewsArgs => ZQuery[DatabaseQueries, Nothing, Option[Review]])
+    user: UserArgs => ZQuery[DatabaseQueries, Throwable, User],
+    reviews: ReviewsArgs => ZQuery[DatabaseQueries, Throwable, Option[Review]])
 
 object ApiGraphQL {
-  given userSchema: Schema[DatabaseQueries & SpotifyAPI[Task], User] = Schema.gen
+  given userSchema: Schema[DatabaseQueries & EntityEnv, User] = Schema.gen
 
   given userArgs: Schema[DatabaseQueries, UserArgs] = Schema.gen
 
-  given reviewSchema: Schema[DatabaseQueries & SpotifyAPI[Task], Review] = Schema.gen
+  given reviewSchema: Schema[DatabaseQueries & EntityEnv, Review] = Schema.gen
 
-  given commentsSchema: Schema[DatabaseQueries & SpotifyAPI[Task], Comment] = Schema.gen
+  given commentsSchema: Schema[DatabaseQueries & EntityEnv, Comment] = Schema.gen
 
-  given entitySchema: Schema[SpotifyAPI[Task], ReviewEntity] = Schema.gen
+  given entitySchema: Schema[EntityEnv, ReviewEntity] = Schema.gen
 
-  given albumSchema: Schema[SpotifyAPI[Task], Album] = Schema.gen
+  given albumSchema: Schema[EntityEnv, Album] = Schema.gen
 
-  given artistSchema: Schema[SpotifyAPI[Task], Artist] = Schema.gen
+  given artistSchema: Schema[EntityEnv, Artist] = Schema.gen
 
-  given playlistSchema: Schema[SpotifyAPI[Task], Playlist] = Schema.gen
+  given playlistSchema: Schema[EntityEnv, Playlist] = Schema.gen
 
-  given trackSchema: Schema[SpotifyAPI[Task], Track] = Schema.gen
+  given trackSchema: Schema[EntityEnv, Track] = Schema.gen
 
   val resolver = Queries(id => Reqs.getUser(id.id), ids => Reqs.getReview(ids.id))
 
   val api =
-    GraphQL.graphQL[DatabaseQueries & SpotifyAPI[Task], Queries, Unit, Unit](
-      RootResolver(resolver)) @@ printErrors
+    GraphQL.graphQL[DatabaseQueries & EntityEnv, Queries, Unit, Unit](RootResolver(resolver)) @@ printErrors
 }
 
-// Responses
+// TODO: incorporate pagination.
 sealed trait Pagination
 
 case object All extends Pagination
@@ -174,7 +178,7 @@ case class Offset(first: Int, from: Int) extends Pagination
 final case class User(
     id: String,
     //    reviews: Pagination => ZQuery[DatabaseQueries, Nothing, List[Review]]
-    reviews: ZQuery[DatabaseQueries, Nothing, List[Review]]
+    reviews: ZQuery[DatabaseQueries, Throwable, List[Review]]
     // TODO: incorporate all spotify stuff.
 )
 
@@ -185,10 +189,10 @@ final case class Review(
     reviewName: String,
     isPublic: Boolean,
     //    comments: Pagination => ZQuery[DatabaseQueries, Nothing, List[Comment]]
-    comments: ZQuery[DatabaseQueries, Nothing, List[Comment]],
+    comments: ZQuery[DatabaseQueries, Throwable, List[Comment]],
     entityId: String,
     entityType: EntityType,
-    entity: ZQuery[SpotifyAPI[Task], Throwable, ReviewEntity]
+    entity: ZQuery[EntityEnv, Throwable, ReviewEntity]
 )
 
 final case class Comment(
@@ -199,7 +203,7 @@ final case class Comment(
     // If none, then it is root comment.
     parentCommentId: Option[Int],
     commenterId: String,
-    commenter: ZQuery[DatabaseQueries, Nothing, User],
+    commenter: ZQuery[DatabaseQueries, Throwable, User],
     comment: Option[String],
     rating: Option[Int],
     entityId: String,
@@ -209,22 +213,46 @@ final case class Comment(
 
 def getEntity(entityId: String, entityType: EntityType): ZQuery[EntityEnv, Throwable, ReviewEntity] =
   entityType match
-    case EntityType.Album    => getAlbums(List(entityId)).map(_.head)
-    case EntityType.Artist   => getArtists(List(entityId)).map(_.head)
+    case EntityType.Album    => getAlbum(entityId)
+    case EntityType.Artist   => getArtist(entityId)
     case EntityType.Playlist => getPlaylist(entityId)
     case EntityType.Track    => getTrack(entityId)
 
-type EntityEnv = SpotifyAPI[Task]
+type EntityEnv = SpotifyService
 
-case class GetAlbums(ids: List[String]) extends Request[Throwable, List[Album]]
+case class GetAlbum(id: String) extends Request[Throwable, Album]
 
-def getAlbums(albumIds: List[String])                     = ZQuery.fromRequest(GetAlbums(albumIds))(AlbumDataSource)
-val AlbumDataSource: DataSource[EntityEnv, GetAlbums]     = DataSource.fromFunctionZIO("AlbumDataSource") {
-  reqs =>
-    ZIO.service[SpotifyAPI[Task]].flatMap { spotify =>
-      spotify.getAlbums(reqs.ids).map { albums => albums.map(spotAlbumToAlbum).toList }
-    }
-}
+def getAlbum(albumId: String)                             = ZQuery.fromRequest(GetAlbum(albumId))(AlbumDataSource)
+val AlbumDataSource: DataSource[EntityEnv, GetAlbum]      =
+  DataSource.Batched.make("AlbumDataSource") { (reqs: Chunk[GetAlbum]) =>
+    reqs.toList match
+      case Nil         => ZIO.succeed(CompletedRequestMap.empty)
+      case head :: Nil =>
+        SpotifyService
+          .getAlbum(head.id)
+          .fold(
+            e => CompletedRequestMap.empty.insert(head)(Left(e)),
+            a => CompletedRequestMap.empty.insert(head)(Right(spotAlbumToAlbum(a))))
+      case _           =>
+        ZIO
+          .foreachPar(reqs.grouped(20).toVector) { reqs =>
+            SpotifyService.getAlbums(reqs.map(_.id)).either.map(reqs -> _)
+          }
+          .map { res =>
+            res.foldLeft(CompletedRequestMap.empty) {
+              case (map: CompletedRequestMap, (reqs, result)) =>
+                result match
+                  case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
+                  case Right(tracks)   =>
+                    val grouped = tracks.map(spotAlbumToAlbum).groupBy(_.id).view.mapValues(_.head)
+                    reqs.foldLeft(map) { (map, req) =>
+                      val result: Either[NotFoundError, Album] =
+                        grouped.get(req.id).fold(Left(NotFoundError(req.id, EntityType.Album)))(Right(_))
+                      map.insert(req)(result)
+                    }
+            }
+          }
+  }
 def spotAlbumToAlbum(a: muse.domain.spotify.Album): Album =
   Album(
     a.albumGroup,
@@ -259,11 +287,10 @@ case class Album(
 ////
 // TODO change this to be BatchedDatasource
 case class NotFoundError(entityId: String, entityType: EntityType) extends Throwable
-
 def spotifyTrackToTrack(t: spotify.Track) = {
   Track(
-    getAlbums(List(t.album.get.id)).map(_.head),
-    getArtists(t.artists.map(_.id)),
+    getAlbum(t.album.get.id),
+    ZQuery.foreachPar(t.artists.map(_.id))(getArtist),
     t.discNumber,
     t.durationMs,
     t.explicit,
@@ -285,42 +312,37 @@ case class GetTrack(id: String) extends Request[Throwable, Track]
 def getTrack(trackId: String)                        = ZQuery.fromRequest(GetTrack(trackId))(TrackDataSource)
 val TrackDataSource: DataSource[EntityEnv, GetTrack] =
   DataSource.Batched.make("TrackDataSource") { reqChunks =>
-    ZIO.service[SpotifyAPI[Task]].flatMap { spotify =>
-      reqChunks.toList match
-        case Nil         => ZIO.succeed(CompletedRequestMap.empty)
-        case head :: Nil =>
-          spotify
-            .getTrack(head.id)
-            .either
-            .map {
-              case Left(e)  =>
-                CompletedRequestMap.empty.insert(head)(Left(e))
-              case Right(t) =>
-                CompletedRequestMap.empty.insert(head)(Right(spotifyTrackToTrack(t)))
+    reqChunks.toList match
+      case Nil         => ZIO.succeed(CompletedRequestMap.empty)
+      case head :: Nil =>
+        SpotifyService
+          .getTrack(head.id)
+          .fold(
+            e => CompletedRequestMap.empty.insert(head)(Left(e)),
+            t => CompletedRequestMap.empty.insert(head)(Right(spotifyTrackToTrack(t)))
+          )
+          .zipLeft(ZIO.logInfo(s"Requested single track ${head.id}"))
+      case reqs        =>
+        // TODO: make constants for max batch size.
+        ZIO
+          .foreachPar(reqs.grouped(50).toVector) { reqs =>
+            SpotifyService.getTracks(reqs.map(_.id)).either.map(reqs -> _)
+          }
+          .map { res =>
+            res.foldLeft(CompletedRequestMap.empty) {
+              case (map: CompletedRequestMap, (reqs, result)) =>
+                result match
+                  case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
+                  case Right(tracks)   =>
+                    val grouped = tracks.map(spotifyTrackToTrack).groupBy(_.id).view.mapValues(_.head)
+                    reqs.foldLeft(map) { (map, req) =>
+                      val result: Either[NotFoundError, Track] =
+                        grouped.get(req.id).fold(Left(NotFoundError(req.id, EntityType.Track)))(Right(_))
+                      map.insert(req)(result)
+                    }
             }
-            .zipLeft(ZIO.logInfo(s"Requested single track ${head.id}"))
-        case reqs        =>
-          // TODO: make constants for max batch size.
-          ZIO
-            .foreachPar(reqs.grouped(50).toVector) { reqs =>
-              spotify.getTracks(reqs.map(_.id)).either.map(reqs -> _)
-            }
-            .map { res =>
-              res.foldLeft(CompletedRequestMap.empty) {
-                case (map: CompletedRequestMap, (reqs, result)) =>
-                  result match
-                    case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
-                    case Right(tracks)   =>
-                      val grouped = tracks.map(spotifyTrackToTrack).groupBy(_.id).view.mapValues(_.head)
-                      reqs.foldLeft(map) { (map, req) =>
-                        val result: Either[NotFoundError, Track] =
-                          grouped.get(req.id).fold(Left(NotFoundError(req.id, EntityType.Track)))(Right(_))
-                        map.insert(req)(result)
-                      }
-              }
-            }
-            .zipLeft(ZIO.logInfo("Requested tracks in parallel"))
-    }
+          }
+          .zipLeft(ZIO.logInfo("Requested tracks in parallel"))
   }
 
 case class Track(
@@ -343,28 +365,65 @@ case class Track(
 ) extends ReviewEntity
 //
 
-case class GetArtists(ids: List[String]) extends Request[Throwable, List[Artist]]
+case class GetArtist(id: String) extends Request[Throwable, Artist]
 
-def getArtists(artistIds: List[String])                 = ZQuery.fromRequest(GetArtists(artistIds))(ArtistDataSource)
-val ArtistDataSource: DataSource[EntityEnv, GetArtists] = DataSource.fromFunctionZIO("ArtistDataSource") {
-  reqs =>
-    ZIO.service[SpotifyAPI[Task]].flatMap { spotify =>
-      spotify.getArtists(reqs.ids).map {
-        _.map { a =>
-          Artist(
-            a.externalUrls,
-            a.followers.get.total,
-            a.genres.getOrElse(Nil),
-            a.href,
-            a.id,
-            a.images.fold(Nil)(_.map(_.url)),
-            a.name,
-            a.popularity.get
-          )
-        }.toList
-      }
-    }
+def getArtist(artistId: String)                        = ZQuery.fromRequest(GetArtist(artistId))(ArtistDataSource)
+val ArtistDataSource: DataSource[EntityEnv, GetArtist] = DataSource.Batched.make("ArtistDataSource") { reqs =>
+  reqs.toList match
+    case Nil         => ZIO.succeed(CompletedRequestMap.empty)
+    case head :: Nil =>
+      SpotifyService
+        .getArtist(head.id)
+        .fold(
+          e => CompletedRequestMap.empty.insert(head)(Left(e)),
+          a => CompletedRequestMap.empty.insert(head)(Right(spotArtistToArtist(a))))
+    case _           =>
+      ZIO
+        .foreachPar(reqs.grouped(20).toVector) { reqs =>
+          SpotifyService.getArtists(reqs.map(_.id)).either.map(reqs -> _)
+        }
+        .map { res =>
+          res.foldLeft(CompletedRequestMap.empty) {
+            case (map: CompletedRequestMap, (reqs, result)) =>
+              result match
+                case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
+                case Right(tracks)   =>
+                  val grouped = tracks.map(spotArtistToArtist).groupBy(_.id).view.mapValues(_.head)
+                  reqs.foldLeft(map) { (map, req) =>
+                    val result: Either[NotFoundError, Artist] =
+                      grouped.get(req.id).fold(Left(NotFoundError(req.id, EntityType.Artist)))(Right(_))
+                    map.insert(req)(result)
+                  }
+          }
+        }
 }
+
+def spotArtistToArtist(a: spotify.Artist) = {
+  Artist(
+    a.externalUrls,
+    a.followers.get.total,
+    a.genres.getOrElse(Nil),
+    a.href,
+    a.id,
+    a.images.fold(Nil)(_.map(_.url)),
+    a.name,
+    a.popularity.get,
+    getArtistAlbums(a.id),
+    getArtistTopTracks(a.id)
+  )
+}
+
+// TODO: maybe think of grouping requests by artist? Are we guaranteed to not have duplicates?
+case class GetArtistAlbums(artistId: String) extends Request[Throwable, List[Album]]
+
+def getArtistAlbums(artistId: String) =
+  ZQuery.fromZIO(SpotifyService.getAllArtistAlbums(artistId)).map(_.map(spotAlbumToAlbum).toList)
+
+// TODO: incorporate region/country.
+case class GetArtistTopTracks(artistId: String) extends Request[Throwable, List[Track]]
+
+def getArtistTopTracks(artistId: String) =
+  ZQuery.fromZIO(SpotifyService.getArtistTopTracks(artistId)).map(_.map(spotifyTrackToTrack).toList)
 
 case class Artist(
     externalUrls: Map[String, String],
@@ -374,9 +433,10 @@ case class Artist(
     id: String,
     images: List[String],
     name: String,
-    popularity: Int
-    //    albums: Pagination => ZQuery[Any, Nothing, List[Album]],
-    //    topTracks: Pagination => ZQuery[Any, Nothing, List[Track]]
+    popularity: Int,
+    // TODO: pagination.
+    albums: ZQuery[EntityEnv, Throwable, List[Album]],
+    topTracks: ZQuery[EntityEnv, Throwable, List[Track]]
 ) extends ReviewEntity
 
 // TODO: link back to user?
@@ -395,61 +455,55 @@ case class Playlist(
 ) extends ReviewEntity
 
 case class GetPlaylist(id: String) extends Request[Throwable, Playlist]
-
 def getPlaylist(playlistId: String)                        = ZQuery.fromRequest(GetPlaylist(playlistId))(PlaylistDataSource)
 val PlaylistDataSource: DataSource[EntityEnv, GetPlaylist] =
-  DataSource.fromFunctionZIO("PlaylistDataSource") { reqs =>
-    ZIO.service[SpotifyAPI[Task]].flatMap { spotify =>
-      spotify.getPlaylist(reqs.id).map { p =>
-        Playlist(
-          p.collaborative,
-          p.description,
-          p.externalUrls,
-          p.id,
-          p.images.map(_.url),
-          p.name,
-          SpotifyUser(p.owner.id, p.owner.href, p.owner.uri, p.owner.externalUrls),
-          p.primaryColor,
-          p.public,
-          getPlaylistTracks(p.id)
-        )
-      }
+  DataSource.fromFunctionZIO("PlaylistDataSource") { req =>
+    SpotifyService.getPlaylist(req.id).map { p =>
+      Playlist(
+        p.collaborative,
+        p.description,
+        p.externalUrls,
+        p.id,
+        p.images.map(_.url),
+        p.name,
+        SpotifyUser(p.owner.id, p.owner.href, p.owner.uri, p.owner.externalUrls),
+        p.primaryColor,
+        p.public,
+        getPlaylistTracks(p.id)
+      )
     }
   }
 
-//
 case class GetPlaylistTracks(playlistId: String) extends Request[Throwable, List[PlaylistTrack]]
 def getPlaylistTracks(playlistId: String)                             =
   ZQuery.fromRequest(GetPlaylistTracks(playlistId))(PlaylistTrackDataSource)
 val PlaylistTrackDataSource: DataSource[EntityEnv, GetPlaylistTracks] =
   DataSource.fromFunctionZIO("PlaylistTrackDataSource") { reqs =>
-    ZIO.service[SpotifyAPI[Task]].flatMap { spotify =>
-      spotify.getAllPlaylistTracks(reqs.playlistId).map {
-        _.map { t =>
-          PlaylistTrack(
-            t.addedAt,
-            SpotifyUser(t.addedBy.id, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls),
-            t.isLocal,
-            Track(
-              getAlbums(List(t.track.album.get.id)).map(_.head),
-              getArtists(t.track.artists.map(_.id)),
-              t.track.discNumber,
-              t.track.durationMs,
-              t.track.explicit,
-              t.track.externalUrls,
-              t.track.href,
-              t.track.id,
-              t.track.isPlayable,
-              t.track.name,
-              t.track.popularity,
-              t.track.previewUrl,
-              t.track.trackNumber,
-              t.track.isLocal,
-              t.track.uri
-            )
+    SpotifyService.getAllPlaylistTracks(reqs.playlistId).map {
+      _.map { t =>
+        PlaylistTrack(
+          t.addedAt,
+          SpotifyUser(t.addedBy.id, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls),
+          t.isLocal,
+          Track(
+            getAlbum(t.track.album.get.id),
+            ZQuery.foreachPar(t.track.artists.map(_.id))(getArtist),
+            t.track.discNumber,
+            t.track.durationMs,
+            t.track.explicit,
+            t.track.externalUrls,
+            t.track.href,
+            t.track.id,
+            t.track.isPlayable,
+            t.track.name,
+            t.track.popularity,
+            t.track.previewUrl,
+            t.track.trackNumber,
+            t.track.isLocal,
+            t.track.uri
           )
-        }.toList
-      }
+        )
+      }.toList
     }
   }
 

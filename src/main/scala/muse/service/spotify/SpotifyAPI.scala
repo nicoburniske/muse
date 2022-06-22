@@ -16,6 +16,11 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     execute(uri, Method.GET)
   }
 
+  def getUserProfile(userId: String): F[User] = {
+    val uri = uri"${SpotifyAPI.API_BASE}/users/$userId"
+    execute(uri, Method.GET)
+  }
+
   def isValidEntity(entityId: String, entityType: EntityType): F[Boolean] =
     entityType match
       case EntityType.Album    => getAlbum(entityId).isSuccess
@@ -104,7 +109,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     getAllPaging(request, MAX_PER_REQUEST)
   }
 
-  def getArtistAlbums(
+  def getSomeArtistAlbums(
       artistId: String,
       limit: Option[Int] = None,
       offset: Option[Int] = None): F[Paging[Album]] = {
@@ -112,14 +117,16 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     execute(uri, Method.GET)
   }
 
+  def getAllArtistAlbums(artistId: String): F[Vector[Album]] = {
+    val MAX_PER_REQUEST = 50
+    val request         = (offset: Int) => getSomeArtistAlbums(artistId, Some(MAX_PER_REQUEST), Some(offset))
+    getAllPaging(request, MAX_PER_REQUEST)
+  }
+
   // TODO: this endpoint is not documented properly by spotify. Country is a required parameter.
-  def getArtistTopTracks(
-      artistId: String,
-      country: String = "US",
-      limit: Option[Int] = None,
-      offset: Option[Int] = None): F[Vector[Track]] = {
+  def getArtistTopTracks(artistId: String, country: String = "US"): F[Vector[Track]] = {
     val uri =
-      uri"${SpotifyAPI.API_BASE}/artists/$artistId/top-tracks?country=$country&limit=$limit&offset=$offset"
+      uri"${SpotifyAPI.API_BASE}/artists/$artistId/top-tracks?country=$country"
     execute[MultiTrack](uri, Method.GET).map(_.tracks)
   }
 
