@@ -31,7 +31,7 @@ trait DatabaseQueries {
   def getReview(reviewId: UUID): IO[SQLException, Option[Review]]
 
   // def updateUser(user: AppUser): IO[SQLException, Unit]
-  // TODO: maybe it's worth returning the updated entity?
+  // TODO: maybe it's worth returning the updated entity? Incorporate Returning clause on SQL statement.
   def updateReview(review: UpdateReview): IO[SQLException, Unit]
   def updateComment(review: UpdateComment): IO[SQLException, Unit]
 

@@ -2,7 +2,9 @@ package muse
 
 import caliban.*
 import muse.config.{AppConfig, SpotifyConfig}
+import muse.domain.session.UserSession
 import muse.domain.tables.AppUser
+import muse.server.MuseMiddleware.Auth
 import muse.server.graphql.MuseGraphQL
 import zhttp.service.Server
 import zhttp.service.EventLoopGroup
@@ -38,13 +40,23 @@ object Main extends ZIOAppDefault {
       allowedOrigins = _ == "localhost",
       allowedMethods = Some(Set(Method.POST, Method.GET, Method.PUT, Method.DELETE)))
 
-  def endpointsGraphQL(interpreter: GraphQLInterpreter[DatabaseQueries & SpotifyService, CalibanError]) =
-    Http.collectHttp[Request] {
+  def endpointsGraphQL(
+      interpreter: GraphQLInterpreter[DatabaseQueries & SpotifyService, CalibanError]
+  ) =
+    MuseMiddleware.userSessionAuth(Http.collectHttp[Request] {
       case _ -> !! / "api" / "graphql" =>
-        MuseMiddleware.userSessionAuth(
-          ZHttpAdapter.makeHttpService(interpreter)
-        )
-    }
+        ZHttpAdapter.makeHttpService(interpreter)
+    })
+
+  val logoutEndpoint = MuseMiddleware.userSessionAuth(Http.collectZIO[Request] {
+    case Method.POST -> !! / "logout" =>
+      for {
+        session <- ZIO.serviceWithZIO[Auth[UserSession]](_.currentUser)
+        _       <- UserSessions.deleteUserSession(session.sessionCookie)
+        _       <- ZIO.logInfo(
+                     s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
+      } yield Response.ok
+  })
 
   val server = (for {
     interpreter <- MuseGraphQL.api.interpreter
@@ -52,7 +64,7 @@ object Main extends ZIOAppDefault {
     _           <- Server
                      .start(
                        8883,
-                       (Auth.endpoints ++ endpointsGraphQL(interpreter)) @@ cors(config)
+                       (Auth.endpoints ++ endpointsGraphQL(interpreter) ++ logoutEndpoint) @@ cors(config)
                      )
                      .forever
   } yield ())

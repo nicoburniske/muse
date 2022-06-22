@@ -151,6 +151,7 @@ object Resolvers {
             .fold(
               e => CompletedRequestMap.empty.insert(head)(Left(e)),
               a => CompletedRequestMap.empty.insert(head)(Right(spotAlbumToAlbum(a))))
+            .zipLeft(ZIO.logInfo(s"Requested single album ${head.id}"))
         case _           =>
           ZIO
             .foreachPar(reqs.grouped(20).toVector) { reqs =>
@@ -170,6 +171,7 @@ object Resolvers {
                       }
               }
             }
+            .zipLeft(ZIO.logInfo(s"Requested ${reqs.size} tracks in parallel"))
     }
 
   def spotAlbumToAlbum(a: muse.domain.spotify.Album): Album =
@@ -249,7 +251,7 @@ object Resolvers {
                       }
               }
             }
-            .zipLeft(ZIO.logInfo("Requested tracks in parallel"))
+            .zipLeft(ZIO.logInfo(s"Requested ${reqChunks.size} tracks in parallel"))
     }
 
   case class GetArtist(id: String) extends Request[Throwable, Artist]
@@ -266,6 +268,7 @@ object Resolvers {
             .fold(
               e => CompletedRequestMap.empty.insert(head)(Left(e)),
               a => CompletedRequestMap.empty.insert(head)(Right(spotArtistToArtist(a))))
+            .zipLeft(ZIO.logInfo(s"Requested single artist ${head.id}"))
         case _           =>
           ZIO
             .foreachPar(reqs.grouped(20).toVector) { reqs =>
@@ -285,6 +288,7 @@ object Resolvers {
                       }
               }
             }
+            .zipLeft(ZIO.logInfo(s"Requested ${reqs.size} Artists in parallel"))
     }
 
   def spotArtistToArtist(a: spotify.Artist) = {
