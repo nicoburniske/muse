@@ -37,20 +37,20 @@ object MuseMiddleware {
   }
 
   def userSessionAuth[R](
-      app: Http[R, Throwable, Request, Response]
+      app: Http[R & SpotifyAPI[Task], Throwable, Request, Response]
   ): Http[R & AuthEnv & Auth[UserSession] & SttpBackend[Task, Any], Throwable, Request, Response] =
     Http
       .fromFunctionZIO[Request] { (request: Request) =>
         request.cookieValue(COOKIE_KEY) match
-          case None         => ZIO.fail(Unauthorized)
+          case None         =>
+            ZIO.logInfo("Missing Cookie Header") *> ZIO.fail(Unauthorized)
           case Some(cookie) =>
             for {
               session <- getSession(cookie.toString)
               _       <- ZIO.serviceWithZIO[Auth[UserSession]](_.setUser(Some(session)))
               spotify <- SpotifyService.live(session.accessToken)
-              // How do I give spotify to the http app?
               asLayer  = ZLayer.succeed(spotify)
-            } yield app.provideLayer(asLayer)
+            } yield app.provideSomeLayer[R, SpotifyAPI[Task], Throwable](asLayer)
       }
       .flatten
 

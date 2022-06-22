@@ -138,8 +138,7 @@ case class Queries(
     user: UserArgs => ZQuery[DatabaseQueries, Nothing, User],
     reviews: ReviewsArgs => ZQuery[DatabaseQueries, Nothing, Option[Review]])
 
-object ApiGraphQL extends ZIOAppDefault {
-  //  given pagSchema: Schema[DatabaseQueries, Pagination]   = Schema.genDebug
+object ApiGraphQL {
   given userSchema: Schema[DatabaseQueries & SpotifyAPI[Task], User] = Schema.gen
 
   given userArgs: Schema[DatabaseQueries, UserArgs] = Schema.gen
@@ -159,64 +158,10 @@ object ApiGraphQL extends ZIOAppDefault {
   given trackSchema: Schema[SpotifyAPI[Task], Track] = Schema.gen
 
   val resolver = Queries(id => Reqs.getUser(id.id), ids => Reqs.getReview(ids.id))
-  val api      =
+
+  val api =
     GraphQL.graphQL[DatabaseQueries & SpotifyAPI[Task], Queries, Unit, Unit](
       RootResolver(resolver)) @@ printErrors
-
-  //  println(api.render)
-
-  val query =
-    """
-    query {user(id: "tuckingfypo1") {
-      reviews {
-        id
-        reviewName
-        isPublic
-        entityId
-        entityType
-        entity {  
-          ... on Track {
-            name
-            album {
-              name
-            }
-          }
-          ... on Playlist {
-            tracks {
-              addedBy {
-                id
-              }
-              track {
-                name
-              }
-            }
-          }
-        }
-       }
-    }
-    }""".stripMargin
-
-  val dbLayer     = QuillContext.dataSourceLayer >>> DatabaseQueries.live
-  val accessToken =
-    "BQC_rHDEK3Jc8JtSUu-uz4TtmzhMLl74WAX0T6u0RumNBNPVSSN-UIGR14Ao7MTtyOPlTgwqNwRcPB7xSnwIFPkDTOtA1P2Y-h5grBgBsnt42-4HsmcTWfJ8Cx2pMSLrzzoICX78GD-0f7w6vxjkhhGOSNU4NtIvT6bsoIpzlrwc5qHS2uX5D937NI2lHyFMmdA"
-
-  import muse.utils.Givens.given
-
-  val spotifyLayer = AsyncHttpClientZioBackend.layer() >>> ZLayer.fromZIO(SpotifyService.live(accessToken))
-
-  override def run =
-    api
-      .interpreter
-      .flatMap {
-        _.execute(query)
-      }
-      .flatMap { r =>
-        // comments
-        ZIO.logInfo("Success") *> ZIO.logInfo(r.toString)
-      }
-      .catchAll { e => ZIO.logInfo("OH NO AN ERROR") *> ZIO.logError(e.getMessage) }
-      .exitCode
-      .provideLayer(dbLayer ++ spotifyLayer)
 }
 
 // Responses
