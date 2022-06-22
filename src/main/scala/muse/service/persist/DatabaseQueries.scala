@@ -31,7 +31,6 @@ trait DatabaseQueries {
   def getReview(reviewId: UUID): IO[SQLException, Option[Review]]
 
   // def updateUser(user: AppUser): IO[SQLException, Unit]
-  // TODO: maybe it's worth returning the updated entity? Incorporate Returning clause on SQL statement.
   def updateReview(review: UpdateReview): IO[SQLException, Unit]
   def updateComment(comment: UpdateComment): IO[SQLException, Unit]
 
@@ -157,22 +156,38 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
         _.entityType -> lift(review.entityType),
         _.entityId   -> lift(review.entityId)
       )
-      .returningGenerated(r => r)
-  }.provide(layer)
+      .returningGenerated(r => r.id -> r.createdAt)
+  }.provide(layer).map {
+    case (uuid, instant) =>
+      Review(uuid, instant, userId, review.name, review.isPublic, review.entityType, review.entityId)
+  }
 
-  def createReviewComment(id: String, c: CreateComment) = run {
+  def createReviewComment(userId: String, c: CreateComment) = run {
     comments
       .insert(
-        _.reviewId        -> lift(c.reviewID),
-        _.commenter       -> lift(id),
+        _.reviewId        -> lift(c.reviewId),
+        _.commenter       -> lift(userId),
         _.parentCommentId -> lift(c.parentCommentId),
         _.comment         -> lift(c.comment),
         _.rating          -> lift(c.rating),
         _.entityType      -> lift(c.entityType),
         _.entityId        -> lift(c.entityId)
       )
-      .returningGenerated(c => c)
-  }.provide(layer)
+      .returningGenerated(c => (c.id, c.createdAt, c.updatedAt))
+  }.provide(layer).map {
+    case (id, created, updated) =>
+      ReviewComment(
+        id,
+        c.reviewId,
+        created,
+        updated,
+        c.parentCommentId,
+        userId,
+        c.comment,
+        c.rating,
+        c.entityType,
+        c.entityId)
+  }
 
   def updateUser(user: AppUser) = run {
     users.filter(_.id == lift(user.id)).updateValue(lift(user))

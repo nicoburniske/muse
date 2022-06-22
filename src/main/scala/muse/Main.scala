@@ -55,15 +55,20 @@ object Main extends ZIOAppDefault {
       } yield Response.ok
   })
 
+  def catchUnauthorized[R](http: Http[R, Throwable, Request, Response]) = http.catchSome {
+    case u: Unauthorized => u.http
+  }
+
   val server = (for {
-    interpreter <- MuseGraphQL.api.interpreter
-    _           <- ZIO.logInfo(MuseGraphQL.api.render) // TODO: write to file
-    _           <- Server
-                     .start(
-                       8883,
-                       (Auth.endpoints ++ endpointsGraphQL(interpreter) ++ logoutEndpoint) @@ cors(config)
-                     )
-                     .forever
+    interpreter       <- MuseGraphQL.api.interpreter
+    _                 <- ZIO.logInfo(MuseGraphQL.api.render) // TODO: write to file
+    protectedEndpoints = catchUnauthorized(endpointsGraphQL(interpreter) ++ logoutEndpoint)
+    _                 <- Server
+                           .start(
+                             8883,
+                             (Auth.endpoints ++ protectedEndpoints) @@ cors(config)
+                           )
+                           .forever
   } yield ())
     .exitCode
     .provide(

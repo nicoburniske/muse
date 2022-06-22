@@ -6,7 +6,7 @@ import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive, SpotifyService}
 import muse.service.spotify.SpotifyAuthServiceLive.AuthEnv
 import muse.utils.Utils
 import sttp.client3.SttpBackend
-import zhttp.http.{Http, HttpApp, HttpError, Request, Response}
+import zhttp.http.{Http, HttpApp, HttpData, HttpError, Request, Response, Status}
 import zio.{IO, UIO, ULayer, ZIO}
 import zio.*
 
@@ -14,7 +14,9 @@ import java.time.Instant
 
 object MuseMiddleware {
   case class Unauthorized(msg: Option[String])
-      extends Exception(msg.map(m => s"Unauthorized: $m").getOrElse("Unauthorized"))
+      extends Exception(msg.map(m => s"Unauthorized: $m").getOrElse("Unauthorized")) {
+    val http = Http.response(Response(Status.Unauthorized, data = HttpData.fromString(this.getMessage)))
+  }
 
   trait Auth[T] {
     def currentUser: IO[Unauthorized, T]

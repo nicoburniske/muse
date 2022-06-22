@@ -6,7 +6,7 @@ import zio.json.*
 import java.util.UUID
 
 final case class CreateComment(
-    reviewID: UUID,
+    reviewId: UUID,
     // If none, then it is root comment.
     parentCommentId: Option[Int],
     comment: Option[String],
