@@ -5,7 +5,6 @@ import muse.domain.session.UserSession
 import muse.domain.spotify.InitialAuthData
 import muse.domain.tables.AppUser
 import muse.server.MuseMiddleware.Auth
-import muse.service.RequestProcessor.UserLoginEnv
 import muse.service.spotify.SpotifyAuthServiceLive
 import muse.service.{RequestProcessor, UserSessions}
 import sttp.client3.SttpBackend

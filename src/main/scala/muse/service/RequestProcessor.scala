@@ -17,7 +17,7 @@ import java.util.UUID
 import javax.sql.DataSource
 
 object RequestProcessor {
-  type UserLoginEnv = SpotifyService & DatabaseQueries
+  type UserLoginEnv = DatabaseQueries & SttpBackend[Task, Any]
 
   /**
    * Handles a user login.
@@ -29,7 +29,8 @@ object RequestProcessor {
    */
   def handleUserLogin(auth: InitialAuthData): ZIO[UserLoginEnv, Throwable, User] =
     for {
-      userInfo <- SpotifyService.getCurrentUserProfile
+      spotify  <- SpotifyService.live(auth.accessToken)
+      userInfo <- spotify.getCurrentUserProfile
       res      <- createOrUpdateUser(userInfo.id)
       resText   = if (res) "Created" else "Updated"
       _        <-
