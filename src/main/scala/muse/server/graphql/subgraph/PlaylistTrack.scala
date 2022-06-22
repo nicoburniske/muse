@@ -1,5 +1,6 @@
 package muse.server.graphql.subgraph
 
+import muse.domain.spotify
 import java.time.Instant
 
 final case class PlaylistTrack(
@@ -8,3 +9,13 @@ final case class PlaylistTrack(
     isLocal: Boolean,
     track: Track
 )
+
+object PlaylistTrack {
+  def fromSpotify(t: spotify.PlaylistTrack) =
+    PlaylistTrack(
+      t.addedAt,
+      SpotifyUser(t.addedBy.id, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls),
+      t.isLocal,
+      Track.fromSpotify(t.track)
+    )
+}

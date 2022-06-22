@@ -1,6 +1,8 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
+import muse.domain.tables.ReviewComment
+import muse.server.graphql.Resolvers.{getEntity, getUser}
 import muse.service.persist.DatabaseQueries
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
@@ -23,3 +25,20 @@ final case class Comment(
     entityType: EntityType,
     entity: ZQuery[SpotifyService, Throwable, ReviewEntity]
 )
+
+object Comment {
+  def fromTable(r: ReviewComment) = Comment(
+    r.id,
+    r.reviewId,
+    r.createdAt,
+    r.updatedAt,
+    r.parentCommentId,
+    r.commenter,
+    getUser(r.commenter),
+    r.comment,
+    r.rating,
+    r.entityId,
+    r.entityType,
+    getEntity(r.entityId, r.entityType)
+  )
+}

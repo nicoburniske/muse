@@ -1,5 +1,15 @@
 package muse.server.graphql.subgraph
 
+import muse.domain.spotify
+import muse.server.graphql.Resolvers.{
+  getAlbum,
+  getAlbumTracks,
+  getArtist,
+  getArtistAlbums,
+  getArtistTopTracks,
+  getPlaylistTracks
+}
+import muse.server.graphql.subgraph
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
@@ -19,6 +29,23 @@ case class Artist(
     topTracks: ZQuery[SpotifyService, Throwable, List[Track]]
 ) extends ReviewEntity
 
+object Artist {
+  def fromSpotify(a: spotify.Artist) = {
+    Artist(
+      a.externalUrls,
+      a.followers.get.total,
+      a.genres.getOrElse(Nil),
+      a.href,
+      a.id,
+      a.images.fold(Nil)(_.map(_.url)),
+      a.name,
+      a.popularity.get,
+      getArtistAlbums(a.id),
+      getArtistTopTracks(a.id)
+    )
+  }
+}
+
 case class Album(
     albumGroup: Option[String],
     albumType: String,
@@ -33,6 +60,25 @@ case class Album(
     artists: ZQuery[SpotifyService, Throwable, List[Artist]],
     tracks: ZQuery[SpotifyService, Throwable, List[Track]]
 ) extends ReviewEntity
+
+object Album {
+  def fromSpotify(a: spotify.Album) =
+    val album = Album(
+      a.albumGroup,
+      a.albumType.toString.dropRight(1),
+      a.externalUrls,
+      a.genres.getOrElse(Nil),
+      a.id,
+      a.images.map(_.url),
+      a.label,
+      a.name,
+      a.popularity,
+      a.releaseDate,
+      ZQuery.foreachPar(a.artists.map(_.id))(getArtist),
+      getAlbumTracks(a.id, a.tracks.map(_.total))
+    )
+    album
+}
 
 case class Track(
     album: ZQuery[SpotifyService, Throwable, Album],
@@ -53,6 +99,28 @@ case class Track(
     uri: String
 ) extends ReviewEntity
 
+object Track {
+  def fromSpotify(t: spotify.Track, albumId: Option[String] = None) = {
+    Track(
+      getAlbum(t.album.map(_.id).orElse(albumId).get),
+      ZQuery.foreachPar(t.artists.map(_.id))(getArtist),
+      t.discNumber,
+      t.durationMs,
+      t.explicit,
+      t.externalUrls,
+      t.href,
+      t.id,
+      t.isPlayable,
+      t.name,
+      t.popularity,
+      t.previewUrl,
+      t.trackNumber,
+      t.isLocal,
+      t.uri
+    )
+  }
+}
+
 case class Playlist(
     collaborative: Boolean,
     description: String,
@@ -66,3 +134,19 @@ case class Playlist(
     tracks: ZQuery[SpotifyService, Throwable, List[PlaylistTrack]]
     // tracks: Pagination => ZQuery[SpotifyService, Throwable, List[PlaylistTrack]]
 ) extends ReviewEntity
+
+object Playlist {
+  def fromSpotify(p: spotify.UserPlaylist) =
+    Playlist(
+      p.collaborative,
+      p.description,
+      p.externalUrls,
+      p.id,
+      p.images.map(_.url),
+      p.name,
+      SpotifyUser(p.owner.id, p.owner.href, p.owner.uri, p.owner.externalUrls),
+      p.primaryColor,
+      p.public,
+      getPlaylistTracks(p.id, p.tracks.total)
+    )
+}
