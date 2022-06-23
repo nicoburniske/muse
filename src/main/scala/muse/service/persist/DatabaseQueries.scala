@@ -4,7 +4,7 @@ import io.getquill.*
 import io.getquill.context.ZioJdbc.*
 import muse.domain.common.EntityType
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
-import muse.domain.tables.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
+import muse.domain.table.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
 import zio.{ZLayer, IO, ZIO, ULayer}
 import zio.ZLayer.*
 

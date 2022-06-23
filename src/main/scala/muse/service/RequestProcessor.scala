@@ -3,7 +3,7 @@ package muse.service
 import muse.domain.common.EntityType
 import muse.domain.session.UserSession
 import muse.domain.spotify.{Album, Artist, Image, InitialAuthData, Track, User, UserPlaylist}
-import muse.domain.tables.{AppUser, Review, ReviewComment}
+import muse.domain.table.{AppUser, Review, ReviewComment}
 import muse.service.persist.DatabaseQueries
 import muse.service.spotify.SpotifyService
 import muse.utils.Givens.given

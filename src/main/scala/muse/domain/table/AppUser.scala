@@ -1,4 +1,4 @@
-package muse.domain.tables
+package muse.domain.table
 
 import java.time.Instant
 

@@ -4,7 +4,7 @@ import muse.domain.common.EntityType
 import muse.domain.error.NotFoundError
 import muse.domain.spotify
 import muse.domain.spotify.Paging
-import muse.domain.tables.ReviewComment
+import muse.domain.table.ReviewComment
 import muse.server.graphql.subgraph.{
   Album,
   Artist,

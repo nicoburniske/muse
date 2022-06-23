@@ -1,7 +1,7 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
-import muse.domain.tables
+import muse.domain.table
 import muse.server.graphql.Resolvers.{getEntity, getReviewComments}
 import muse.service.persist.DatabaseQueries
 import muse.service.spotify.SpotifyService
@@ -24,7 +24,7 @@ final case class Review(
 )
 
 object Review {
-  def fromTable(r: tables.Review) =
+  def fromTable(r: table.Review) =
     Review(
       r.id,
       r.createdAt,

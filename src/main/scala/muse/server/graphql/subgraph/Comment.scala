@@ -1,7 +1,7 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
-import muse.domain.tables.ReviewComment
+import muse.domain.table.ReviewComment
 import muse.server.graphql.Resolvers.{getEntity, getUser}
 import muse.service.persist.DatabaseQueries
 import muse.service.spotify.SpotifyService

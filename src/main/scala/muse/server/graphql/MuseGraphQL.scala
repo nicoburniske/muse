@@ -1,15 +1,19 @@
 package muse.server.graphql
 
+import caliban.CalibanError.{ExecutionError, ParsingError, ValidationError}
+import caliban.ResponseValue.ObjectValue
+import caliban.Value.StringValue
 import caliban.schema.{GenericSchema, Schema}
 import caliban.wrappers.Wrappers.printErrors
 import caliban.wrappers.ApolloTracing.apolloTracing
-import caliban.{GraphQL, RootResolver}
+import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
+import muse.domain.error.{NotFoundError, Unauthorized}
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify
 import muse.domain.spotify.AlbumType
-import muse.domain.tables.ReviewComment
+import muse.domain.table.ReviewComment
 import muse.server.MuseMiddleware.Auth
 import muse.server.graphql.subgraph.{
   Album,
@@ -64,9 +68,46 @@ object MuseGraphQL {
   given searchSchema: Schema[SpotifyService, SearchResult] = Schema.gen
 
   type Env = Auth[UserSession] & DatabaseQueries & SpotifyService
+
   val api =
     GraphQL.graphQL[Env, Queries, Mutations, Unit](
       RootResolver(Queries.live, Mutations.live)) @@ printErrors @@ apolloTracing
+
+  val interpreter = api.interpreter.map(errorHandler(_))
+
+  private def errorHandler[R](
+      interpreter: GraphQLInterpreter[R, CalibanError]
+  ): GraphQLInterpreter[R, CalibanError] = interpreter.mapError {
+    case err @ ExecutionError(_, _, _, Some(u: Unauthorized), _) =>
+      err.copy(extensions = Some(
+        ObjectValue(
+          List(
+            "errorCode" -> StringValue("UNAUTHORIZED"),
+            "message"   -> StringValue(u.getMessage)
+          ))))
+
+    case err @ ExecutionError(_, _, _, Some(n: NotFoundError), _) =>
+      err.copy(extensions = Some(
+        ObjectValue(
+          List(
+            "errorCode" -> StringValue("NOT_FOUND_ERROR"),
+            "message"   -> StringValue(n.getMessage)
+          ))))
+    case err @ ExecutionError(_, _, _, Some(e: Throwable), _)     =>
+      err.copy(extensions = Some(
+        ObjectValue(
+          List(
+            "errorCode" -> StringValue("SERVER_ERROR"),
+            "errorType" -> StringValue(e.getClass.toString),
+            "message"   -> StringValue(e.getMessage)
+          ))))
+    case err: ExecutionError                                      =>
+      err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("EXECUTION_ERROR")))))
+    case err: ValidationError                                     =>
+      err.copy(extensions = Some(ObjectValue(List(("errorCode", StringValue("VALIDATION_ERROR"))))))
+    case err: ParsingError                                        =>
+      err.copy(extensions = Some(ObjectValue(List(("errorCode", StringValue("PARSING_ERROR"))))))
+  }
 }
 
 // TODO: incorporate pagination.
