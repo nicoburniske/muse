@@ -34,8 +34,12 @@ object Mutations {
 
   def createComment(create: CreateComment) =
     for {
-      _    <- ensureValidEntity(create.entityId, create.entityType)
       user <- Auth.currentUser[UserSession]
+      _    <- ensureValidEntity(create.entityId, create.entityType)
+      _    <- DatabaseQueries.canMakeComment(user.id, create.reviewId).flatMap {
+                case true  => ZIO.succeed(())
+                case false => ZIO.fail(Forbidden(s"User ${user.id} cannot modify review ${create.reviewId}"))
+              }
       c    <- DatabaseQueries.createReviewComment(user.id, create)
     } yield Comment.fromTable(c)
 

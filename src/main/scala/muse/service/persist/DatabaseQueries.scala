@@ -15,10 +15,16 @@ import javax.sql.DataSource
 
 trait DatabaseQueries {
 
+  /**
+   * Create!
+   */
   def createUser(userId: String): IO[SQLException, Unit]
   def createReview(id: String, review: CreateReview): IO[SQLException, Review]
   def createReviewComment(id: String, review: CreateComment): IO[SQLException, ReviewComment]
 
+  /**
+   * Read!
+   */
   def getUsers: IO[SQLException, List[AppUser]]
   def getUserById(userId: String): IO[SQLException, Option[AppUser]]
   // Reviews that the given user created.
@@ -30,7 +36,9 @@ trait DatabaseQueries {
   def getReviews(reviewIds: List[UUID]): IO[SQLException, List[Review]]
   def getReview(reviewId: UUID): IO[SQLException, Option[Review]]
 
-  // def updateUser(user: AppUser): IO[SQLException, Unit]
+  /**
+   * Update!
+   */
   def updateReview(review: UpdateReview): IO[SQLException, Unit]
   def updateComment(comment: UpdateComment): IO[SQLException, Unit]
 
@@ -85,7 +93,8 @@ object DatabaseQueries {
   def canModifyComment(userId: String, commentId: Int) =
     ZIO.serviceWithZIO[DatabaseQueries](_.canModifyComment(userId, commentId))
 
-  //  def updateUser(user: String) = ZIO.serviceWithZIO[DatabaseQueries](_.updateUser(user))
+  def canMakeComment(userId: String, reviewId: UUID) =
+    ZIO.serviceWithZIO[DatabaseQueries](_.canMakeComment(userId, reviewId))
 }
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
@@ -119,17 +128,17 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
   inline def reviews      = query[Review]
   inline def comments     = query[ReviewComment]
 
-  inline def getUserReviewsQuery(userId: String) = reviews.filter(_.creatorId == lift(userId))
+  inline def getUserReviewsQuery(inline userId: String) = reviews.filter(_.creatorId == lift(userId))
 
-  inline def getUserSharedReviewsQuery(userId: String) =
+  inline def getUserSharedReviewsQuery(inline userId: String) =
     reviewAccess
-      .filter(_.userId == lift(userId))
+      .filter(_.userId == userId)
       .rightJoin(reviews)
       .on((access, review) => review.id == access.reviewId)
       .map(_._2)
 
   def getAllUserReviews(userId: String) = run {
-    getUserReviewsQuery(userId).union(getUserSharedReviewsQuery(userId))
+    getUserReviewsQuery(lift(userId)).union(getUserSharedReviewsQuery(lift(userId)))
   }.provide(layer)
 
   def getUsers = run(users).provide(layer)
@@ -143,7 +152,7 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
   }.map(_.headOption).provide(layer)
 
   def getUserReviews(userId: String) =
-    run(getUserReviewsQuery(userId)).provide(layer)
+    run(getUserReviewsQuery(lift(userId))).provide(layer)
 
   def getReviewComments(reviewId: UUID) = run {
     comments.filter(_.reviewId == lift(reviewId))
@@ -227,28 +236,42 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
       )
   }.provide(layer).unit
 
-  inline def getReviewCreator(reviewId: UUID) =
-    reviews.filter(_.id == lift(reviewId)).map(_.creatorId)
+  /**
+   * Permissions logic.
+   */
 
-  inline def usersWithAccess(reviewId: UUID): EntityQuery[String] =
-    reviewAccess.filter(_.reviewId == lift(reviewId)).map(_.userId)
+  inline def reviewCreator(inline reviewId: UUID): EntityQuery[String] =
+    reviews.filter(_.id == reviewId).map(_.creatorId)
 
-  // TODO: fix this it's trash.
-  override def canViewReview(userId: String, reviewId: UUID): IO[SQLException, Boolean] =
-    canModifyReview(userId, reviewId).flatMap {
-      case true  => ZIO.succeed(true)
-      case false =>
-        run(usersWithAccess(reviewId).contains(lift(userId))).provide(layer)
-    }
+  inline def usersWithAccess(inline reviewId: UUID): EntityQuery[String] =
+    reviewAccess.filter(_.reviewId == reviewId).map(_.userId)
+
+  inline def allReviewUsersWithViewAccess(inline reviewId: UUID): Query[String] =
+    reviewCreator(reviewId) union usersWithAccess(reviewId)
+
+  inline def usersWithWriteAccess(inline reviewId: UUID): EntityQuery[String] =
+    reviewAccess
+      .filter(_.reviewId == reviewId)
+      .filter(_.accessLevel == lift(AccessLevel.Collaborator))
+      .map(_.userId)
+
+  inline def allUsersWithWriteAccess(inline reviewId: UUID): Query[String] =
+    reviewCreator(reviewId) union usersWithWriteAccess(reviewId)
+
+  override def canViewReview(userId: String, reviewId: UUID): IO[SQLException, Boolean] = run {
+    allReviewUsersWithViewAccess(lift(reviewId)).filter(_ == lift(userId))
+  }.map(_.nonEmpty).provide(layer)
 
   override def canModifyReview(userId: String, reviewId: UUID) = run {
-    getReviewCreator(reviewId).contains(lift(userId))
+    reviewCreator(lift(reviewId)).contains(lift(userId))
   }.provide(layer)
 
   override def canModifyComment(userId: String, commentId: Int) = run {
     comments.filter(_.id == lift(commentId)).map(_.commenter).contains(lift(userId))
   }.provide(layer)
 
-  def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean] = ???
+  override def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean] = run {
+    allUsersWithWriteAccess(lift(reviewId)).filter(_ == lift(userId))
+  }.map(_.nonEmpty).provide(layer)
 
 }
