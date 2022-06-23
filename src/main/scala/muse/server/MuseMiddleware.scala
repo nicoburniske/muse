@@ -47,7 +47,7 @@ object MuseMiddleware {
       .fromFunctionZIO[Request] { (request: Request) =>
         request.cookieValue(COOKIE_KEY).orElse(request.authorization) match
           case None         =>
-            ZIO.logInfo("Missing Cookie Header") *> ZIO.fail(Unauthorized("Missing Auth"))
+            ZIO.logInfo("Missing Auth") *> ZIO.fail(Unauthorized("Missing Auth"))
           case Some(cookie) =>
             for {
               session <- getSession(cookie.toString)

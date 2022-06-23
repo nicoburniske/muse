@@ -1,6 +1,7 @@
 package muse.server.graphql
 
 import muse.domain.common.EntityType
+import muse.domain.error.InvalidEntity
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.server.MuseMiddleware.Auth
@@ -23,42 +24,39 @@ case class Mutations(
 
 object Mutations {
   val live = Mutations(createReview, createComment, updateReview, updateComment)
+
+  def createReview(create: CreateReview) =
+    for {
+      _    <- ensureValidEntity(create.entityId, create.entityType)
+      user <- Auth.currentUser[UserSession]
+      r    <- DatabaseQueries.createReview(user.id, create)
+    } yield Review.fromTable(r)
+
+  def createComment(create: CreateComment) =
+    for {
+      _    <- ensureValidEntity(create.entityId, create.entityType)
+      user <- Auth.currentUser[UserSession]
+      c    <- DatabaseQueries.createReviewComment(user.id, create)
+    } yield Comment.fromTable(c)
+
+  // TODO: check if permissions are valid.
+  def updateReview(update: UpdateReview) = for {
+    user <- Auth.currentUser[UserSession]
+    _    <- DatabaseQueries.updateReview(update)
+  } yield true
+
+  def updateComment(update: UpdateComment) = for {
+    user <- Auth.currentUser[UserSession]
+    _    <- DatabaseQueries.updateComment(update)
+  } yield true
+
+  private def ensureValidEntity(
+      entityId: String,
+      entityType: EntityType): ZIO[SpotifyService, Throwable, Unit] =
+    SpotifyService.isValidEntity(entityId, entityType).flatMap { isValid =>
+      if (isValid)
+        ZIO.succeed(())
+      else
+        ZIO.fail(InvalidEntity(entityId, entityType))
+    }
 }
-
-case class InvalidEntity(entityId: String, entityType: EntityType)
-    extends Exception(s"Invalid $entityType: $entityId")
-
-def createReview(create: CreateReview) =
-  for {
-    _    <- ensureValidEntity(create.entityId, create.entityType)
-    user <- Auth.currentUser[UserSession]
-    r    <- DatabaseQueries.createReview(user.id, create)
-  } yield Review.fromTable(r)
-
-def createComment(create: CreateComment) =
-  for {
-    _    <- ensureValidEntity(create.entityId, create.entityType)
-    user <- Auth.currentUser[UserSession]
-    c    <- DatabaseQueries.createReviewComment(user.id, create)
-  } yield Comment.fromTable(c)
-
-// TODO: check if permissions are valid.
-def updateReview(update: UpdateReview) = for {
-  user <- Auth.currentUser[UserSession]
-  _    <- DatabaseQueries.updateReview(update)
-} yield true
-
-def updateComment(update: UpdateComment) = for {
-  user <- Auth.currentUser[UserSession]
-  _    <- DatabaseQueries.updateComment(update)
-} yield true
-
-private def ensureValidEntity(
-    entityId: String,
-    entityType: EntityType): ZIO[SpotifyService, Throwable, Unit] =
-  SpotifyService.isValidEntity(entityId, entityType).flatMap { isValid =>
-    if (isValid)
-      ZIO.succeed(())
-    else
-      ZIO.fail(InvalidEntity(entityId, entityType))
-  }

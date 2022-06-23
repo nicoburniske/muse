@@ -1,7 +1,7 @@
 package muse.server.graphql
 
 import muse.domain.common.EntityType
-import muse.domain.error.NotFoundError
+import muse.domain.error.InvalidEntity
 import muse.domain.spotify
 import muse.domain.spotify.Paging
 import muse.domain.table.ReviewComment
@@ -129,7 +129,7 @@ object Resolvers {
                         val grouped = albums.map(Album.fromSpotify).groupBy(_.id).view.mapValues(_.head)
                         reqs.foldLeft(map) { (map, req) =>
                           val result =
-                            grouped.get(req.id).fold(Left(NotFoundError(req.id, EntityType.Album)))(Right(_))
+                            grouped.get(req.id).fold(Left(InvalidEntity(req.id, EntityType.Album)))(Right(_))
                           map.insert(req)(result)
                         }
                 }
@@ -188,8 +188,8 @@ object Resolvers {
                         val grouped =
                           tracks.map(t => Track.fromSpotify(t)).groupBy(_.id).view.mapValues(_.head)
                         reqs.foldLeft(map) { (map, req) =>
-                          val result: Either[NotFoundError, Track] =
-                            grouped.get(req.id).fold(Left(NotFoundError(req.id, EntityType.Track)))(Right(_))
+                          val result =
+                            grouped.get(req.id).fold(Left(InvalidEntity(req.id, EntityType.Track)))(Right(_))
                           map.insert(req)(result)
                         }
                 }
@@ -228,7 +228,7 @@ object Resolvers {
                         val grouped = tracks.map(Artist.fromSpotify).groupBy(_.id).view.mapValues(_.head)
                         reqs.foldLeft(map) { (map, req) =>
                           val result =
-                            grouped.get(req.id).fold(Left(NotFoundError(req.id, EntityType.Artist)))(Right(_))
+                            grouped.get(req.id).fold(Left(InvalidEntity(req.id, EntityType.Artist)))(Right(_))
                           map.insert(req)(result)
                         }
                 }

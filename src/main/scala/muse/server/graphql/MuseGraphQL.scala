@@ -8,7 +8,7 @@ import caliban.wrappers.Wrappers.printErrors
 import caliban.wrappers.ApolloTracing.apolloTracing
 import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
-import muse.domain.error.{NotFoundError, Unauthorized}
+import muse.domain.error.{InvalidEntity, Unauthorized}
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify
@@ -78,19 +78,18 @@ object MuseGraphQL {
   private def errorHandler[R](
       interpreter: GraphQLInterpreter[R, CalibanError]
   ): GraphQLInterpreter[R, CalibanError] = interpreter.mapError {
-    case err @ ExecutionError(_, _, _, Some(u: Unauthorized), _) =>
+    case err @ ExecutionError(_, _, _, Some(u: Unauthorized), _)  =>
       err.copy(extensions = Some(
         ObjectValue(
           List(
             "errorCode" -> StringValue("UNAUTHORIZED"),
             "message"   -> StringValue(u.getMessage)
           ))))
-
-    case err @ ExecutionError(_, _, _, Some(n: NotFoundError), _) =>
+    case err @ ExecutionError(_, _, _, Some(n: InvalidEntity), _) =>
       err.copy(extensions = Some(
         ObjectValue(
           List(
-            "errorCode" -> StringValue("NOT_FOUND_ERROR"),
+            "errorCode" -> StringValue("INVALID_ENTITY_ERROR"),
             "message"   -> StringValue(n.getMessage)
           ))))
     case err @ ExecutionError(_, _, _, Some(e: Throwable), _)     =>
