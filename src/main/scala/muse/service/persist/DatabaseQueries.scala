@@ -34,6 +34,13 @@ trait DatabaseQueries {
   def updateReview(review: UpdateReview): IO[SQLException, Unit]
   def updateComment(comment: UpdateComment): IO[SQLException, Unit]
 
+  /**
+   * Permissions!
+   */
+  def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean]
+  def canViewReview(userId: String, reviewId: UUID): IO[SQLException, Boolean]
+  def canModifyReview(userId: String, reviewId: UUID): IO[SQLException, Boolean]
+  def canModifyComment(userId: String, commentId: Int): IO[SQLException, Boolean]
   // TODO: delete methods.
 }
 
@@ -68,6 +75,15 @@ object DatabaseQueries {
 
   def updateComment(comment: UpdateComment) =
     ZIO.serviceWithZIO[DatabaseQueries](_.updateComment(comment))
+
+  def canViewReview(userId: String, reviewId: UUID) =
+    ZIO.serviceWithZIO[DatabaseQueries](_.canViewReview(userId, reviewId))
+
+  def canModifyReview(userId: String, reviewId: UUID) =
+    ZIO.serviceWithZIO[DatabaseQueries](_.canModifyReview(userId, reviewId))
+
+  def canModifyComment(userId: String, commentId: Int) =
+    ZIO.serviceWithZIO[DatabaseQueries](_.canModifyComment(userId, commentId))
 
   //  def updateUser(user: String) = ZIO.serviceWithZIO[DatabaseQueries](_.updateUser(user))
 }
@@ -210,4 +226,29 @@ final case class DataServiceLive(d: DataSource) extends DatabaseQueries {
         _.rating  -> lift(c.rating)
       )
   }.provide(layer).unit
+
+  inline def getReviewCreator(reviewId: UUID) =
+    reviews.filter(_.id == lift(reviewId)).map(_.creatorId)
+
+  inline def usersWithAccess(reviewId: UUID): EntityQuery[String] =
+    reviewAccess.filter(_.reviewId == lift(reviewId)).map(_.userId)
+
+  // TODO: fix this it's trash.
+  override def canViewReview(userId: String, reviewId: UUID): IO[SQLException, Boolean] =
+    canModifyReview(userId, reviewId).flatMap {
+      case true  => ZIO.succeed(true)
+      case false =>
+        run(usersWithAccess(reviewId).contains(lift(userId))).provide(layer)
+    }
+
+  override def canModifyReview(userId: String, reviewId: UUID) = run {
+    getReviewCreator(reviewId).contains(lift(userId))
+  }.provide(layer)
+
+  override def canModifyComment(userId: String, commentId: Int) = run {
+    comments.filter(_.id == lift(commentId)).map(_.commenter).contains(lift(userId))
+  }.provide(layer)
+
+  def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean] = ???
+
 }

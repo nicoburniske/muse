@@ -60,7 +60,7 @@ object Resolvers {
 
   def getReviewComments(reviewId: UUID) = ZQuery.fromRequest(GetReviewComments(reviewId))(CommentDataSource)
 
-  // TODO: incoporate permissions. This could be weird on second thought because of permissions.
+  // TODO: incoporate permissions
   val CommentDataSource: DataSource[DatabaseQueries, GetReviewComments] =
     DataSource.Batched.make("ReviewCommentsDataSource") { (requests: Chunk[GetReviewComments]) =>
       requests.toList match
@@ -84,8 +84,7 @@ object Resolvers {
               case Right(allComments) =>
                 val grouped = allComments.groupBy(_.reviewId)
                 reqs.foldLeft(CompletedRequestMap.empty) { (map, r) =>
-                  val asComments: List[Comment] =
-                    grouped.getOrElse(r.reviewId, Nil).map(Comment.fromTable)
+                  val asComments = grouped.getOrElse(r.reviewId, Nil).map(Comment.fromTable)
                   map.insert(r)(Right(asComments))
                 }
           }
@@ -136,6 +135,16 @@ object Resolvers {
               })
     }
 
+  /**
+   * Retrieves tracks for the given album.
+   *
+   * @param albumId
+   *   the album's id
+   * @param numTracks
+   *   if known, pagination can occur in parallel
+   * @return
+   *   the tracks from the album
+   */
   def getAlbumTracks(
       albumId: String,
       numTracks: Option[Int]): ZQuery[SpotifyService, Throwable, List[Track]] = ZQuery.fromZIO(
@@ -144,10 +153,12 @@ object Resolvers {
         case Some(total) =>
           ZIO
             .foreachPar((0 until total).grouped(50).map(_.start).toList) { r =>
-              SpotifyService.getSomeAlbumTracks(albumId, Some(50), Some(r))
+              SpotifyService
+                .getSomeAlbumTracks(albumId, Some(50), Some(r))
+                .map(_.items)
+                .map(_.map(t => Track.fromSpotify(t, Some(albumId))))
             }
-            .map(_.flatMap(_.items).toList)
-            .map(_.map(t => Track.fromSpotify(t, Some(albumId))))
+            .map(_.flatten.toList)
         case None        =>
           SpotifyService
             .getAllAlbumTracks(albumId)
@@ -177,7 +188,11 @@ object Resolvers {
           addTimeLog("Retrieved Multiple Tracks")(
             ZIO
               .foreachPar(reqs.grouped(50).toVector) { reqs =>
-                SpotifyService.getTracks(reqs.map(_.id)).either.map(reqs -> _)
+                SpotifyService
+                  .getTracks(reqs.map(_.id))
+                  .map(_.map(Track.fromSpotify(_)))
+                  .either
+                  .map(reqs -> _)
               }
               .map { res =>
                 res.foldLeft(CompletedRequestMap.empty) {
@@ -186,7 +201,7 @@ object Resolvers {
                       case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
                       case Right(tracks)   =>
                         val grouped =
-                          tracks.map(t => Track.fromSpotify(t)).groupBy(_.id).view.mapValues(_.head)
+                          tracks.groupBy(_.id).view.mapValues(_.head)
                         reqs.foldLeft(map) { (map, req) =>
                           val result =
                             grouped.get(req.id).fold(Left(InvalidEntity(req.id, EntityType.Track)))(Right(_))
@@ -214,10 +229,10 @@ object Resolvers {
                 a => CompletedRequestMap.empty.insert(head)(Right(Artist.fromSpotify(a))))
           )
         case _           =>
-          addTimeLog("Retrieved mulitple Artists")(
+          addTimeLog("Retrieved multiple Artists")(
             ZIO
               .foreachPar(reqs.grouped(20).toVector) { reqs =>
-                SpotifyService.getArtists(reqs.map(_.id)).either.map(reqs -> _)
+                SpotifyService.getArtists(reqs.map(_.id)).map(_.map(Artist.fromSpotify)).either.map(reqs -> _)
               }
               .map { res =>
                 res.foldLeft(CompletedRequestMap.empty) {
@@ -225,7 +240,7 @@ object Resolvers {
                     result match
                       case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
                       case Right(tracks)   =>
-                        val grouped = tracks.map(Artist.fromSpotify).groupBy(_.id).view.mapValues(_.head)
+                        val grouped = tracks.groupBy(_.id).view.mapValues(_.head)
                         reqs.foldLeft(map) { (map, req) =>
                           val result =
                             grouped.get(req.id).fold(Left(InvalidEntity(req.id, EntityType.Artist)))(Right(_))
@@ -269,10 +284,12 @@ object Resolvers {
       addTimeLog("Retrieved all playlist tracks") {
         ZIO
           .foreachPar((0 until req.numTracks).grouped(100).map(_.start).toList) { r =>
-            SpotifyService.getSomePlaylistTracks(req.playlistId, 100, Some(r))
+            SpotifyService
+              .getSomePlaylistTracks(req.playlistId, 100, Some(r))
+              .map(_.items)
+              .map(_.map(PlaylistTrack.fromSpotify))
           }
-          .map(_.flatMap(_.items).toList)
-          .map(_.map(PlaylistTrack.fromSpotify))
+          .map(_.flatten.toList)
       }
     }
 

@@ -5,7 +5,7 @@ import caliban.CalibanError.{ExecutionError, ParsingError, ValidationError}
 import caliban.ResponseValue.ObjectValue
 import caliban.Value.StringValue
 import muse.config.{AppConfig, SpotifyConfig}
-import muse.domain.error.{NotFoundError, Unauthorized}
+import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.table.AppUser
 import muse.server.graphql.MuseGraphQL

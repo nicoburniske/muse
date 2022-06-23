@@ -14,6 +14,9 @@ object ExampleQueries extends ZIOAppDefault {
       user <- DatabaseQueries.getUserReviews("tuckingfypo1")
       _    <- printLine(s"User: $user")
       _    <- DatabaseQueries.createReview(
+                "notarealuser",
+                CreateReview("I'm not real", true, EntityType.Artist, "3FjdJbt6Myq32uv7P4owM1"))
+      _    <- DatabaseQueries.createReview(
                 "tuckingfypo1",
                 CreateReview(
                   "Adrian's Impeccable taste in music",

@@ -1,7 +1,7 @@
 package muse.server.graphql
 
 import muse.domain.common.EntityType
-import muse.domain.error.InvalidEntity
+import muse.domain.error.{Forbidden, InvalidEntity}
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.server.MuseMiddleware.Auth
@@ -42,21 +42,27 @@ object Mutations {
   // TODO: check if permissions are valid.
   def updateReview(update: UpdateReview) = for {
     user <- Auth.currentUser[UserSession]
+    _    <- DatabaseQueries.canModifyReview(user.id, update.reviewId).flatMap {
+              case true  => ZIO.succeed(())
+              case false => ZIO.fail(Forbidden(s"User ${user.id} cannot modify review ${update.reviewId}"))
+            }
     _    <- DatabaseQueries.updateReview(update)
   } yield true
 
   def updateComment(update: UpdateComment) = for {
     user <- Auth.currentUser[UserSession]
+    _    <- DatabaseQueries.canModifyComment(user.id, update.commentId).flatMap {
+              case true  => ZIO.succeed(())
+              case false => ZIO.fail(Forbidden(s"User ${user.id} cannot modify comment ${update.commentId}"))
+            }
     _    <- DatabaseQueries.updateComment(update)
   } yield true
 
   private def ensureValidEntity(
       entityId: String,
       entityType: EntityType): ZIO[SpotifyService, Throwable, Unit] =
-    SpotifyService.isValidEntity(entityId, entityType).flatMap { isValid =>
-      if (isValid)
-        ZIO.succeed(())
-      else
-        ZIO.fail(InvalidEntity(entityId, entityType))
+    SpotifyService.isValidEntity(entityId, entityType).flatMap {
+      case true  => ZIO.succeed(())
+      case false => ZIO.fail(InvalidEntity(entityId, entityType))
     }
 }

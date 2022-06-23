@@ -8,7 +8,7 @@ import caliban.wrappers.Wrappers.printErrors
 import caliban.wrappers.ApolloTracing.apolloTracing
 import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
-import muse.domain.error.{InvalidEntity, Unauthorized}
+import muse.domain.error.{Forbidden, InvalidEntity, Unauthorized}
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify
@@ -85,11 +85,18 @@ object MuseGraphQL {
             "errorCode" -> StringValue("UNAUTHORIZED"),
             "message"   -> StringValue(u.getMessage)
           ))))
+    case err @ ExecutionError(_, _, _, Some(n: Forbidden), _)     =>
+      err.copy(extensions = Some(
+        ObjectValue(
+          List(
+            "errorCode" -> StringValue("FORBIDDEN"),
+            "message"   -> StringValue(n.getMessage)
+          ))))
     case err @ ExecutionError(_, _, _, Some(n: InvalidEntity), _) =>
       err.copy(extensions = Some(
         ObjectValue(
           List(
-            "errorCode" -> StringValue("INVALID_ENTITY_ERROR"),
+            "errorCode" -> StringValue("INVALID_ENTITY"),
             "message"   -> StringValue(n.getMessage)
           ))))
     case err @ ExecutionError(_, _, _, Some(e: Throwable), _)     =>
@@ -103,9 +110,9 @@ object MuseGraphQL {
     case err: ExecutionError                                      =>
       err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("EXECUTION_ERROR")))))
     case err: ValidationError                                     =>
-      err.copy(extensions = Some(ObjectValue(List(("errorCode", StringValue("VALIDATION_ERROR"))))))
+      err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("VALIDATION_ERROR")))))
     case err: ParsingError                                        =>
-      err.copy(extensions = Some(ObjectValue(List(("errorCode", StringValue("PARSING_ERROR"))))))
+      err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("PARSING_ERROR")))))
   }
 }
 

@@ -9,6 +9,7 @@ import java.sql.SQLException
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
+// TODO: make generic?
 trait UserSessions {
   def addUserSession(userId: String, authData: InitialAuthData): UIO[String]
   def getUserSession(sessionId: String): UIO[Option[UserSession]]
