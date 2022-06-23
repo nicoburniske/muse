@@ -1,6 +1,7 @@
 package muse.server.graphql
 
 import muse.domain.common.EntityType
+import muse.domain.error.NotFoundError
 import muse.domain.spotify
 import muse.domain.spotify.Paging
 import muse.domain.tables.ReviewComment
@@ -134,8 +135,6 @@ object Resolvers {
                 }
               })
     }
-
-  case class NotFoundError(entityId: String, entityType: EntityType) extends Throwable
 
   def getAlbumTracks(
       albumId: String,

@@ -1,10 +1,13 @@
 package muse
 
 import caliban.*
+import caliban.CalibanError.{ExecutionError, ParsingError, ValidationError}
+import caliban.ResponseValue.ObjectValue
+import caliban.Value.StringValue
 import muse.config.{AppConfig, SpotifyConfig}
+import muse.domain.error.{NotFoundError, Unauthorized}
 import muse.domain.session.UserSession
 import muse.domain.tables.AppUser
-import muse.server.MuseMiddleware.Unauthorized
 import muse.server.graphql.MuseGraphQL
 import zhttp.service.Server
 import zhttp.service.EventLoopGroup
@@ -42,8 +45,43 @@ object Main extends ZIOAppDefault {
   def endpointsGraphQL(interpreter: GraphQLInterpreter[MuseGraphQL.Env, CalibanError]) =
     MuseMiddleware.UserSessionAuth(Http.collectHttp[Request] {
       case _ -> !! / "api" / "graphql" =>
-        ZHttpAdapter.makeHttpService(interpreter)
+        val withErrorHandler = errorHandler(interpreter)
+        ZHttpAdapter.makeHttpService(withErrorHandler)
     })
+
+  def errorHandler[R](
+      interpreter: GraphQLInterpreter[R, CalibanError]
+  ): GraphQLInterpreter[R, CalibanError] = interpreter.mapError {
+    case err @ ExecutionError(_, _, _, Some(u: Unauthorized), _) =>
+      err.copy(extensions = Some(
+        ObjectValue(
+          List(
+            "errorCode" -> StringValue("UNAUTHORIZED"),
+            "message"   -> StringValue(u.getMessage)
+          ))))
+
+    case err @ ExecutionError(_, _, _, Some(n: NotFoundError), _) =>
+      err.copy(extensions = Some(
+        ObjectValue(
+          List(
+            "errorCode" -> StringValue("NOT_FOUND_ERROR"),
+            "message"   -> StringValue(n.getMessage)
+          ))))
+    case err @ ExecutionError(_, _, _, Some(e: Throwable), _)     =>
+      err.copy(extensions = Some(
+        ObjectValue(
+          List(
+            "errorCode" -> StringValue("SERVER_ERROR"),
+            "errorType" -> StringValue(e.getClass.toString),
+            "message"   -> StringValue(e.getMessage)
+          ))))
+    case err: ExecutionError                                      =>
+      err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("EXECUTION_ERROR")))))
+    case err: ValidationError                                     =>
+      err.copy(extensions = Some(ObjectValue(List(("errorCode", StringValue("VALIDATION_ERROR"))))))
+    case err: ParsingError                                        =>
+      err.copy(extensions = Some(ObjectValue(List(("errorCode", StringValue("PARSING_ERROR"))))))
+  }
 
   val logoutEndpoint = MuseMiddleware.UserSessionAuth(Http.collectZIO[Request] {
     case Method.POST -> !! / "logout" =>

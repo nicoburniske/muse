@@ -1,5 +1,6 @@
 package muse.server
 
+import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.service.UserSessions
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive, SpotifyService}
@@ -13,10 +14,6 @@ import zio.*
 import java.time.Instant
 
 object MuseMiddleware {
-  case class Unauthorized(msg: Option[String])
-      extends Exception(msg.map(m => s"Unauthorized: $m").getOrElse("Unauthorized")) {
-    val http = Http.response(Response(Status.Unauthorized, data = HttpData.fromString(this.getMessage)))
-  }
 
   trait Auth[T] {
     def currentUser: IO[Unauthorized, T]
@@ -50,12 +47,11 @@ object MuseMiddleware {
       .fromFunctionZIO[Request] { (request: Request) =>
         request.cookieValue(COOKIE_KEY).orElse(request.authorization) match
           case None         =>
-            ZIO.logInfo("Missing Cookie Header") *> ZIO.fail(Unauthorized(Some("Missing Auth")))
+            ZIO.logInfo("Missing Cookie Header") *> ZIO.fail(Unauthorized("Missing Auth"))
           case Some(cookie) =>
             for {
               session <- getSession(cookie.toString)
               _       <- Auth.setUser[UserSession](Some(session))
-              _       <- ZIO.serviceWithZIO[Auth[UserSession]](_.setUser(Some(session)))
               spotify <- SpotifyService.live(session.accessToken)
               asLayer  = ZLayer.succeed(spotify)
             } yield app.provideSomeLayer[R, SpotifyService, Throwable](asLayer)
@@ -65,7 +61,7 @@ object MuseMiddleware {
   def getSession(cookie: String): ZIO[AuthEnv, Throwable, UserSession] =
     for {
       maybeUser <- UserSessions.getUserSession(cookie)
-      session   <- ZIO.fromOption(maybeUser).orElseFail(Unauthorized(Some("Invalid Auth")))
+      session   <- ZIO.fromOption(maybeUser).orElseFail(Unauthorized("Invalid Auth"))
       session   <-
         if (session.expiration.isAfter(Instant.now()))
           ZIO.logInfo(s"Session Retrieved: ${session.conciseString}").as(session)
