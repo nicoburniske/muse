@@ -13,6 +13,11 @@ import zio.{Schedule, Task, ZIO, ZLayer}
 
 trait SpotifyService {
   def getCurrentUserProfile: Task[User]
+  def search(
+      query: String,
+      entityTypes: Set[EntityType],
+      limit: Int = 50,
+      offset: Option[Int] = None): Task[SearchResult]
   def getUserProfile(userId: String): Task[User]
   def isValidEntity(entityId: String, entityType: EntityType): Task[Boolean]
   def getPlaylist(
@@ -55,6 +60,9 @@ object SpotifyService {
   val layer = ZLayer.fromZIO(live)
 
   def getCurrentUserProfile = ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserProfile)
+
+  def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None) =
+    ZIO.serviceWithZIO[SpotifyService](_.search(query, entityTypes, limit, offset))
 
   def getUserProfile(userId: String) =
     ZIO.serviceWithZIO[SpotifyService](_.getUserProfile(userId))
@@ -110,9 +118,12 @@ object SpotifyService {
 }
 
 case class SpotifyServiceImpl(s: SpotifyAPI[Task]) extends SpotifyService {
-  def getCurrentUserProfile: Task[User] = s.getCurrentUserProfile
+  def getCurrentUserProfile = s.getCurrentUserProfile
 
-  def getUserProfile(userId: String): Task[User] =
+  def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None) =
+    s.search(query, entityTypes, limit, offset)
+
+  def getUserProfile(userId: String) =
     s.getUserProfile(userId)
 
   def isValidEntity(entityId: String, entityType: EntityType): Task[Boolean] =

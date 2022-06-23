@@ -2,6 +2,7 @@ package muse.server.graphql
 
 import muse.domain.common.EntityType
 import muse.domain.spotify
+import muse.domain.spotify.Paging
 import muse.domain.tables.ReviewComment
 import muse.server.graphql.subgraph.{
   Album,
@@ -11,6 +12,7 @@ import muse.server.graphql.subgraph.{
   PlaylistTrack,
   Review,
   ReviewEntity,
+  SearchResult,
   SpotifyUser,
   Track,
   User
@@ -274,6 +276,18 @@ object Resolvers {
           .map(_.map(PlaylistTrack.fromSpotify))
       }
     }
+
+  def search(query: String, entityTypes: Set[EntityType]) = ZQuery.fromZIO(
+    SpotifyService.search(query, entityTypes).map {
+      case spotify.SearchResult(albums, artists, playlists, tracks) =>
+        SearchResult(
+          albums.fold(Nil)(_.items.toList).map(Album.fromSpotify),
+          artists.fold(Nil)(_.items.toList).map(Artist.fromSpotify),
+          playlists.fold(Nil)(_.items.toList).map(Playlist.fromSpotify),
+          tracks.fold(Nil)(_.items.toList).map(Track.fromSpotify(_))
+        )
+    }
+  )
 
   def addTimeLog[R, E, A](message: String)(z: ZIO[R, E, A]): ZIO[R, E, A] =
     z.timed.flatMap { case (d, r) => ZIO.logInfo(s"$message in ${d.toMillis}ms").as(r) }

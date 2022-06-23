@@ -130,7 +130,7 @@ case class Playlist(
     name: String,
     owner: SpotifyUser,
     primaryColor: Option[String],
-    public: Boolean,
+    public: Option[Boolean],
     tracks: ZQuery[SpotifyService, Throwable, List[PlaylistTrack]]
     // tracks: Pagination => ZQuery[SpotifyService, Throwable, List[PlaylistTrack]]
 ) extends ReviewEntity

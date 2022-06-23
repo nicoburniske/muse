@@ -15,7 +15,7 @@ final case class UserPlaylist(
     owner: User,
     @jsonField("primary_color")
     primaryColor: Option[String],
-    public: Boolean,
+    public: Option[Boolean],
     @jsonField("snapshot_id")
     snapshotID: String,
     tracks: PlaylistTracks,

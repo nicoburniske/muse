@@ -11,6 +11,16 @@ import zio.json.*
 final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: String)(
     using m: MonadError[F, Throwable]) {
 
+  def search(
+      query: String,
+      entityTypes: Set[EntityType],
+      limit: Int = 50,
+      offset: Option[Int] = None): F[SearchResult] = {
+    val encodedTypes = entityTypes.map(_.toString.toLowerCase).mkString(",")
+    val uri          = uri"${SpotifyAPI.API_BASE}/search?q=$query&type=$encodedTypes&limit=$limit&offset=$offset"
+    execute(uri, Method.GET)
+  }
+
   def getCurrentUserProfile: F[User] = {
     val uri = uri"${SpotifyAPI.API_BASE}/me"
     execute(uri, Method.GET)
