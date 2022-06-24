@@ -5,7 +5,7 @@ import java.time.Instant
 
 final case class PlaylistTrack(
     addedAt: Instant,
-    addedBy: SpotifyProfile,
+    addedBy: User,
     isLocal: Boolean,
     track: Track
 )
@@ -14,7 +14,7 @@ object PlaylistTrack {
   def fromSpotify(t: spotify.PlaylistTrack) =
     PlaylistTrack(
       t.addedAt,
-      SpotifyProfile.missingSome(
+      User.missingSome(
         t.addedBy.id,
         t.addedBy.displayName,
         t.addedBy.href,

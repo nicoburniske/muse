@@ -20,6 +20,7 @@ import muse.server.graphql.subgraph.{
   Artist,
   Comment,
   Playlist,
+  PlaylistTrack,
   Review,
   ReviewEntity,
   SearchResult,
@@ -39,23 +40,23 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  given userSchema: Schema[DatabaseOps & SpotifyService, User] = Schema.gen
+  lazy given userSchema: Schema[DatabaseOps & SpotifyService, User] = Schema.gen
 
   given reviewSchema: Schema[DatabaseOps & SpotifyService, Review] = Schema.gen
 
   given commentsSchema: Schema[DatabaseOps & SpotifyService, Comment] = Schema.gen
 
-  given entitySchema: Schema[SpotifyService, ReviewEntity] = Schema.gen
+  given entitySchema: Schema[DatabaseOps & SpotifyService, ReviewEntity] = Schema.gen
+
+  given playlistSchema: Schema[DatabaseOps & SpotifyService, Playlist] = Schema.gen
+
+  given playlistTrackSchema: Schema[DatabaseOps & SpotifyService, PlaylistTrack] = Schema.gen
 
   given albumSchema: Schema[SpotifyService, Album] = Schema.gen
 
   given artistSchema: Schema[SpotifyService, Artist] = Schema.gen
 
-  given playlistSchema: Schema[SpotifyService, Playlist] = Schema.gen
-
   given trackSchema: Schema[SpotifyService, Track] = Schema.gen
-
-  given userArgs: Schema[DatabaseOps, UserArgs] = Schema.gen
 
   given createReview: Schema[Auth[UserSession] & DatabaseOps, CreateReview] = Schema.gen
 
@@ -65,7 +66,9 @@ object MuseGraphQL {
 
   given updateComment: Schema[Auth[UserSession] & DatabaseOps, UpdateComment] = Schema.gen
 
-  given searchSchema: Schema[SpotifyService, SearchResult] = Schema.gen
+  given searchSchema: Schema[DatabaseOps & SpotifyService, SearchResult] = Schema.gen
+
+  given userArgs: Schema[Nothing, UserArgs] = Schema.gen
 
   type Env = Auth[UserSession] & DatabaseOps & SpotifyService
 
@@ -76,7 +79,7 @@ object MuseGraphQL {
   val interpreter = api.interpreter.map(errorHandler(_))
 
   private def errorHandler[R](
-      interpreter: GraphQLInterpreter[R, CalibanError]
+                               interpreter: GraphQLInterpreter[R, CalibanError]
   ): GraphQLInterpreter[R, CalibanError] = interpreter.mapError {
     case err @ ExecutionError(_, _, _, Some(u: Unauthorized), _)  =>
       err.copy(extensions = Some(

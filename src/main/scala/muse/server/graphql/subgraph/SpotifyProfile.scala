@@ -16,6 +16,7 @@ final case class SpotifyProfile(
 
 object SpotifyProfile {
   def fromSpotify(u: spotify.User): SpotifyProfile = {
+    // Followers and images are not included by spotify api when looking into playlist metadata.
     val images    = u.images.fold(spotifyProfile(u.id).flatMap(_.images))(i => ZQuery.succeed(i.map(_.url)))
     val followers =
       u.followers.fold(spotifyProfile(u.id).flatMap(_.numFollowers))(f => ZQuery.succeed(f.total))

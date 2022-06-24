@@ -40,7 +40,7 @@ lazy val root = (project in file(".")).settings(
     "dev.zio"                       %% "zio-test"                      % "2.0.0-RC6" % Test
   ),
   scalacOptions ++= Seq(
-    "-Xmax-inlines:40"
+    "-Xmax-inlines:45"
   ),
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
   resolvers ++= Seq(
