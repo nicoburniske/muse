@@ -1,11 +1,11 @@
 package muse.server.graphql.subgraph
 
-import muse.service.persist.DatabaseQueries
+import muse.service.persist.DatabaseOps
+import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
 final case class User(
     id: String,
-    //    reviews: Pagination => ZQuery[DatabaseQueries, Nothing, List[Review]]
-    reviews: ZQuery[DatabaseQueries, Throwable, List[Review]]
-    // TODO: incorporate all spotify stuff.
+    reviews: ZQuery[DatabaseOps, Throwable, List[Review]],
+    spotifyUser: ZQuery[SpotifyService, Throwable, SpotifyUser]
 )

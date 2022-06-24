@@ -26,7 +26,7 @@ import muse.server.graphql.subgraph.{
   Track,
   User
 }
-import muse.service.persist.DatabaseQueries
+import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.*
@@ -39,11 +39,11 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  given userSchema: Schema[DatabaseQueries & SpotifyService, User] = Schema.gen
+  given userSchema: Schema[DatabaseOps & SpotifyService, User] = Schema.gen
 
-  given reviewSchema: Schema[DatabaseQueries & SpotifyService, Review] = Schema.gen
+  given reviewSchema: Schema[DatabaseOps & SpotifyService, Review] = Schema.gen
 
-  given commentsSchema: Schema[DatabaseQueries & SpotifyService, Comment] = Schema.gen
+  given commentsSchema: Schema[DatabaseOps & SpotifyService, Comment] = Schema.gen
 
   given entitySchema: Schema[SpotifyService, ReviewEntity] = Schema.gen
 
@@ -55,19 +55,19 @@ object MuseGraphQL {
 
   given trackSchema: Schema[SpotifyService, Track] = Schema.gen
 
-  given userArgs: Schema[DatabaseQueries, UserArgs] = Schema.gen
+  given userArgs: Schema[DatabaseOps, UserArgs] = Schema.gen
 
-  given createReview: Schema[Auth[UserSession] & DatabaseQueries, CreateReview] = Schema.gen
+  given createReview: Schema[Auth[UserSession] & DatabaseOps, CreateReview] = Schema.gen
 
-  given createComment: Schema[Auth[UserSession] & DatabaseQueries, CreateComment] = Schema.gen
+  given createComment: Schema[Auth[UserSession] & DatabaseOps, CreateComment] = Schema.gen
 
-  given updateReview: Schema[Auth[UserSession] & DatabaseQueries, UpdateReview] = Schema.gen
+  given updateReview: Schema[Auth[UserSession] & DatabaseOps, UpdateReview] = Schema.gen
 
-  given updateComment: Schema[Auth[UserSession] & DatabaseQueries, UpdateComment] = Schema.gen
+  given updateComment: Schema[Auth[UserSession] & DatabaseOps, UpdateComment] = Schema.gen
 
   given searchSchema: Schema[SpotifyService, SearchResult] = Schema.gen
 
-  type Env = Auth[UserSession] & DatabaseQueries & SpotifyService
+  type Env = Auth[UserSession] & DatabaseOps & SpotifyService
 
   val api =
     GraphQL.graphQL[Env, Queries, Mutations, Unit](

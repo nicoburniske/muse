@@ -3,7 +3,7 @@ package muse.server.graphql.subgraph
 import muse.domain.common.EntityType
 import muse.domain.table
 import muse.server.graphql.Resolvers.{getEntity, getReviewComments}
-import muse.service.persist.DatabaseQueries
+import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
@@ -17,7 +17,7 @@ final case class Review(
     reviewName: String,
     isPublic: Boolean,
     //    comments: Pagination => ZQuery[DatabaseQueries, Nothing, List[Comment]]
-    comments: ZQuery[DatabaseQueries, Throwable, List[Comment]],
+    comments: ZQuery[DatabaseOps, Throwable, List[Comment]],
     entityId: String,
     entityType: EntityType,
     entity: ZQuery[SpotifyService, Throwable, ReviewEntity]

@@ -47,7 +47,7 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
     extends UserSessions {
 
   // TODO: confirm this works for multiple sessions.
-  override final def addUserSession(userId: String, authData: InitialAuthData) = for {
+  override def addUserSession(userId: String, authData: InitialAuthData) = for {
     expiration <- Utils.getExpirationInstant(authData.expiresIn)
     guid       <- Random.nextUUID
     newSession  = guid.toString
@@ -55,14 +55,14 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
     _          <- sessionsR.update(_ + (newSession -> session))
   } yield newSession
 
-  override final def getUserSession(sessionId: String) = sessionsR.get.map(_.get(sessionId))
+  override def getUserSession(sessionId: String) = sessionsR.get.map(_.get(sessionId))
 
-  override final def deleteUserSession(sessionId: String) = sessionsR.update(_.removed(sessionId))
+  override def deleteUserSession(sessionId: String) = sessionsR.update(_.removed(sessionId))
 
-  override final def deleteUserSessionByUserId(userId: String) =
+  override def deleteUserSessionByUserId(userId: String) =
     sessionsR.update(_.filterNot(_._2.id == userId))
 
-  override final def updateUserSession(sessionId: String)(f: UserSession => UserSession) = sessionsR
+  override def updateUserSession(sessionId: String)(f: UserSession => UserSession) = sessionsR
     .updateAndGet { sessions =>
       sessions.get(sessionId).fold(sessions) { current => sessions.updated(sessionId, f(current)) }
     }

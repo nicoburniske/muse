@@ -18,7 +18,7 @@ import muse.server.graphql.subgraph.{
   Track,
   User
 }
-import muse.service.persist.DatabaseQueries
+import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
 import zio.{Chunk, ZIO}
 import zio.Duration.*
@@ -33,25 +33,27 @@ object Resolvers {
 
   def getUser(id: String) = ZQuery.fromRequest(GetUser(id))(UserDataSource)
 
-  val UserDataSource: DataSource[DatabaseQueries, GetUser] =
-    DataSource.fromFunction("UserDataSource") { req => subgraph.User(req.id, getUserReviews(req.id)) }
+  val UserDataSource: DataSource[DatabaseOps, GetUser] =
+    DataSource.fromFunction("UserDataSource") { req =>
+      subgraph.User(req.id, getUserReviews(req.id), spotifyProfile(req.id))
+    }
 
   case class GetUserReviews(userId: String) extends Request[SQLException, List[Review]]
 
   def getUserReviews(userId: String) = ZQuery.fromRequest(GetUserReviews(userId))(UserReviewsDataSource)
 
-  val UserReviewsDataSource: DataSource[DatabaseQueries, GetUserReviews] =
+  val UserReviewsDataSource: DataSource[DatabaseOps, GetUserReviews] =
     DataSource.fromFunctionZIO("UserReviewsDataSource") { req =>
-      DatabaseQueries.getUserReviews(req.userId).map(_.map(Review.fromTable))
+      DatabaseOps.getUserReviews(req.userId).map(_.map(Review.fromTable))
     }
 
   case class GetReview(reviewId: UUID) extends Request[SQLException, Option[Review]]
 
   def getReview(reviewId: UUID) = ZQuery.fromRequest(GetReview(reviewId))(ReviewDataSource)
 
-  val ReviewDataSource: DataSource[DatabaseQueries, GetReview] =
+  val ReviewDataSource: DataSource[DatabaseOps, GetReview] =
     DataSource.fromFunctionZIO("ReviewDataSource") { g =>
-      DatabaseQueries.getReview(g.reviewId).map {
+      DatabaseOps.getReview(g.reviewId).map {
         _.map(Review.fromTable)
       }
     }
@@ -61,11 +63,11 @@ object Resolvers {
   def getReviewComments(reviewId: UUID) = ZQuery.fromRequest(GetReviewComments(reviewId))(CommentDataSource)
 
   // TODO: incoporate permissions
-  val CommentDataSource: DataSource[DatabaseQueries, GetReviewComments] =
+  val CommentDataSource: DataSource[DatabaseOps, GetReviewComments] =
     DataSource.Batched.make("ReviewCommentsDataSource") { (requests: Chunk[GetReviewComments]) =>
       requests.toList match
         case req :: Nil =>
-          DatabaseQueries
+          DatabaseOps
             .getReviewComments(req.reviewId)
             .fold(
               e => CompletedRequestMap.empty.insert(req)(Left(e)),
@@ -74,7 +76,7 @@ object Resolvers {
         case reqs       =>
           val ids = reqs.map(_.reviewId)
           for {
-            maybeComments <- DatabaseQueries.getAllReviewComments(ids).either
+            maybeComments <- DatabaseOps.getAllReviewComments(ids).either
             _             <- if (maybeComments.isRight) ZIO.logInfo(s"Retrieved reviews: ${ids.mkString(", ")}")
                              else ZIO.logInfo(s"Failed to retrieve reviews: ${ids.mkString(",")}")
           } yield {
@@ -303,6 +305,10 @@ object Resolvers {
           tracks.fold(Nil)(_.items.toList).map(Track.fromSpotify(_))
         )
     }
+  )
+
+  def spotifyProfile(userId: String): ZQuery[SpotifyService, Throwable, SpotifyUser] = ZQuery.fromZIO(
+    SpotifyService.getUserProfile(userId).map(SpotifyUser.fromSpotify)
   )
 
   def addTimeLog[R, E, A](message: String)(z: ZIO[R, E, A]): ZIO[R, E, A] =

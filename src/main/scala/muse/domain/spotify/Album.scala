@@ -37,9 +37,7 @@ object Album {
   given decodeAlbumType: JsonDecoder[AlbumType] =
     JsonDecoder[String].map(AlbumType.fromString)
 
-  given encodeAlbumType: JsonEncoder[AlbumType] = JsonEncoder[String].contramap(_.toString.dropRight(1))
-
-  given decodeAlbum: JsonCodec[Album] = DeriveJsonCodec.gen[Album]
+  given decodeAlbum: JsonDecoder[Album] = DeriveJsonDecoder.gen[Album]
 }
 
 object AlbumType {

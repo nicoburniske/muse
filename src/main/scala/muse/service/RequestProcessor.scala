@@ -4,7 +4,7 @@ import muse.domain.common.EntityType
 import muse.domain.session.UserSession
 import muse.domain.spotify.{Album, Artist, Image, InitialAuthData, Track, User, UserPlaylist}
 import muse.domain.table.{AppUser, Review, ReviewComment}
-import muse.service.persist.DatabaseQueries
+import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
 import muse.utils.Givens.given
 import sttp.client3.SttpBackend
@@ -17,7 +17,7 @@ import java.util.UUID
 import javax.sql.DataSource
 
 object RequestProcessor {
-  type UserLoginEnv = DatabaseQueries & SttpBackend[Task, Any]
+  type UserLoginEnv = DatabaseOps & SttpBackend[Task, Any]
 
   /**
    * Handles a user login.
@@ -46,9 +46,9 @@ object RequestProcessor {
    * @return
    *   true if new User was created, false if current user was updated.
    */
-  def createOrUpdateUser(appUser: String): ZIO[DatabaseQueries, SQLException, Boolean] = for {
-    userRes <- DatabaseQueries.getUserById(appUser)
-    func     = if (userRes.nonEmpty) (u: String) => ZIO.succeed(u) else DatabaseQueries.createUser
+  def createOrUpdateUser(appUser: String): ZIO[DatabaseOps, SQLException, Boolean] = for {
+    userRes <- DatabaseOps.getUserById(appUser)
+    func     = if (userRes.nonEmpty) (u: String) => ZIO.succeed(u) else DatabaseOps.createUser
     _       <- func(appUser)
   } yield userRes.isEmpty
 
@@ -57,12 +57,12 @@ object RequestProcessor {
 
   def userReviewsOptions(userId: String, options: ReviewOptions) = options match
     case ReviewOptions.UserOwnedReviewsPublic  =>
-      DatabaseQueries.getUserReviews(userId).map(_.filter(_.isPublic))
+      DatabaseOps.getUserReviews(userId).map(_.filter(_.isPublic))
     case ReviewOptions.UserOwnedReviewsPrivate =>
-      DatabaseQueries.getUserReviews(userId).map(_.filterNot(_.isPublic))
+      DatabaseOps.getUserReviews(userId).map(_.filterNot(_.isPublic))
     case ReviewOptions.UserOwnedReviewsAll     =>
-      DatabaseQueries.getUserReviews(userId)
+      DatabaseOps.getUserReviews(userId)
     case ReviewOptions.UserAccessReviews       =>
-      DatabaseQueries.getAllUserReviews(userId)
+      DatabaseOps.getAllUserReviews(userId)
 
 }

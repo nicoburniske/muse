@@ -14,7 +14,7 @@ object PlaylistTrack {
   def fromSpotify(t: spotify.PlaylistTrack) =
     PlaylistTrack(
       t.addedAt,
-      SpotifyUser(t.addedBy.id, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls),
+      SpotifyUser.missingSome(t.addedBy.id, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls),
       t.isLocal,
       Track.fromSpotify(t.track)
     )

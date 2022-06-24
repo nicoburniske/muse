@@ -7,7 +7,8 @@ import muse.server.graphql.Resolvers.{
   getArtist,
   getArtistAlbums,
   getArtistTopTracks,
-  getPlaylistTracks
+  getPlaylistTracks,
+  spotifyProfile
 }
 import muse.server.graphql.subgraph
 import muse.service.spotify.SpotifyService
@@ -144,7 +145,7 @@ object Playlist {
       p.id,
       p.images.map(_.url),
       p.name,
-      SpotifyUser(p.owner.id, p.owner.href, p.owner.uri, p.owner.externalUrls),
+      SpotifyUser.missingSome(p.owner.id, p.owner.href, p.owner.uri, p.owner.externalUrls),
       p.primaryColor,
       p.public,
       getPlaylistTracks(p.id, p.tracks.total)

@@ -1,9 +1,9 @@
 package muse.domain.spotify
 
-import zio.json.{DeriveJsonCodec, *}
+import zio.json.{DeriveJsonDecoder, *}
 
 final case class MultiAlbum(albums: Vector[Album])
 
 object MultiAlbum {
-  given decoder: JsonCodec[MultiAlbum] = DeriveJsonCodec.gen[MultiAlbum]
+  given decoder: JsonDecoder[MultiAlbum] = DeriveJsonDecoder.gen[MultiAlbum]
 }

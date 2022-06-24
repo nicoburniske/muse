@@ -9,23 +9,20 @@ import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.table.AppUser
 import muse.server.graphql.MuseGraphQL
-import zhttp.service.Server
-import zhttp.service.EventLoopGroup
-import zhttp.service.ChannelFactory
-import zhttp.http.{Http, Method, Request}
-import zhttp.http.*
-import zhttp.http.Middleware.cors
-import zhttp.http.middleware.Cors.CorsConfig
-import zhttp.*
-import zio.{Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
-import zio.config.typesafe.TypesafeConfig
-
-import java.io.File
 import muse.server.{Auth, MuseMiddleware}
 import muse.service.UserSessions
-import muse.service.persist.{DatabaseQueries, QuillContext}
+import muse.service.persist.{DatabaseOps, QuillContext}
 import muse.service.spotify.SpotifyService
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
+import zhttp.*
+import zhttp.http.Middleware.cors
+import zhttp.http.middleware.Cors.CorsConfig
+import zhttp.http.*
+import zhttp.service.{ChannelFactory, EventLoopGroup, Server}
+import zio.config.typesafe.TypesafeConfig
+import zio.{Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
+
+import java.io.File
 
 object Main extends ZIOAppDefault {
   val appConfigLayer          =
@@ -34,7 +31,7 @@ object Main extends ZIOAppDefault {
     ZLayer.succeed(zlayer.get.spotify) ++ ZLayer.succeed(zlayer.get.sqlConfig)
   }
 
-  val dbLayer    = QuillContext.dataSourceLayer >>> DatabaseQueries.live
+  val dbLayer    = QuillContext.dataSourceLayer >>> DatabaseOps.live
   val zhttpLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
 
   val config: CorsConfig =

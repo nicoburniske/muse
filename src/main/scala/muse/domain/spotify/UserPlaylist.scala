@@ -21,9 +21,10 @@ final case class UserPlaylist(
     tracks: PlaylistTracks,
     @jsonField("type")
     entityType: String,
-    uri: String
+    uri: String,
+    followers: Followers
 ) extends Entity(id, EntityType.Playlist)
 
 object UserPlaylist {
-  given decodeUserPlaylist: JsonCodec[UserPlaylist] = DeriveJsonCodec.gen[UserPlaylist]
+  given decodeUserPlaylist: JsonDecoder[UserPlaylist] = DeriveJsonDecoder.gen[UserPlaylist]
 }

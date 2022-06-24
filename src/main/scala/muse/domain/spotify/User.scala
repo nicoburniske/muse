@@ -11,9 +11,11 @@ final case class User(
     id: String,
     @jsonField("type")
     `type`: String,
-    uri: String
+    uri: String,
+    images: List[String],
+    followers: Followers
 )
 
 object User {
-  given userEncoder: JsonCodec[User] = DeriveJsonCodec.gen[User]
+  given userDecoder: JsonDecoder[User] = DeriveJsonDecoder.gen[User]
 }

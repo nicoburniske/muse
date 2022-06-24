@@ -11,5 +11,5 @@ final case class Paging[T](
     total: Int)
 
 object Paging {
-  given decodePaging[T](using d: JsonCodec[T]): JsonCodec[Paging[T]] = DeriveJsonCodec.gen[Paging[T]]
+  given decodePaging[T](using d: JsonDecoder[T]): JsonDecoder[Paging[T]] = DeriveJsonDecoder.gen[Paging[T]]
 }

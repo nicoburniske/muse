@@ -39,6 +39,9 @@ lazy val root = (project in file(".")).settings(
     // Test Libraries.
     "dev.zio"                       %% "zio-test"                      % "2.0.0-RC6" % Test
   ),
+  scalacOptions ++= Seq(
+    "-Xmax-inlines:40"
+  ),
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
   resolvers ++= Seq(
     "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"

@@ -9,5 +9,5 @@ final case class InitialAuthData(
     @jsonField("expires_in") expiresIn: Int)
 
 object InitialAuthData {
-  given decoder: JsonCodec[InitialAuthData] = DeriveJsonCodec.gen[InitialAuthData]
+  given decoder: JsonDecoder[InitialAuthData] = DeriveJsonDecoder.gen[InitialAuthData]
 }
