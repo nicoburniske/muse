@@ -15,7 +15,7 @@ import java.sql.SQLException
 type MutationEnv = Auth[UserSession] & DatabaseOps & SpotifyService
 
 // TODO: add sharing.
-case class Mutations(
+final case class Mutations(
     createReview: CreateReview => ZIO[MutationEnv, Throwable, Review],
     createComment: CreateComment => ZIO[MutationEnv, Throwable, Comment],
     updateReview: UpdateReview => ZIO[MutationEnv, Throwable, Boolean],
@@ -27,7 +27,7 @@ object Mutations {
 
   def createReview(create: CreateReview) =
     for {
-      _    <- ensureValidEntity(create.entityId, create.entityType)
+      _    <- validateEntity(create.entityId, create.entityType)
       user <- Auth.currentUser[UserSession]
       r    <- DatabaseOps.createReview(user.id, create)
     } yield Review.fromTable(r)
@@ -35,10 +35,10 @@ object Mutations {
   def createComment(create: CreateComment) =
     for {
       user <- Auth.currentUser[UserSession]
-      _    <- ensureValidEntity(create.entityId, create.entityType)
+      _    <- validateEntity(create.entityId, create.entityType)
       _    <- DatabaseOps.canMakeComment(user.id, create.reviewId).flatMap {
                 case true  => ZIO.succeed(())
-                case false => ZIO.fail(Forbidden(s"User ${user.id} cannot modify review ${create.reviewId}"))
+                case false => ZIO.fail(Forbidden(s"User ${user.id} cannot comment on review ${create.reviewId}"))
               }
       c    <- DatabaseOps.createReviewComment(user.id, create)
     } yield Comment.fromTable(c)
@@ -46,10 +46,7 @@ object Mutations {
   // TODO: check if permissions are valid.
   def updateReview(update: UpdateReview) = for {
     user <- Auth.currentUser[UserSession]
-    _    <- DatabaseOps.canModifyReview(user.id, update.reviewId).flatMap {
-              case true  => ZIO.succeed(())
-              case false => ZIO.fail(Forbidden(s"User ${user.id} cannot modify review ${update.reviewId}"))
-            }
+    _    <- validatePermissions(update, user)
     _    <- DatabaseOps.updateReview(update)
   } yield true
 
@@ -62,11 +59,16 @@ object Mutations {
     _    <- DatabaseOps.updateComment(update)
   } yield true
 
-  private def ensureValidEntity(
-      entityId: String,
-      entityType: EntityType): ZIO[SpotifyService, Throwable, Unit] =
+  private def validateEntity(entityId: String, entityType: EntityType): ZIO[SpotifyService, Throwable, Unit] =
     SpotifyService.isValidEntity(entityId, entityType).flatMap {
       case true  => ZIO.succeed(())
       case false => ZIO.fail(InvalidEntity(entityId, entityType))
     }
+
+  private def validatePermissions(update: UpdateReview, user: UserSession) = {
+    DatabaseOps.canModifyReview(user.id, update.reviewId).flatMap {
+      case true  => ZIO.succeed(())
+      case false => ZIO.fail(Forbidden(s"User ${user.id} cannot modify review ${update.reviewId}"))
+    }
+  }
 }

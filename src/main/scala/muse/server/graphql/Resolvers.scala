@@ -14,7 +14,7 @@ import muse.server.graphql.subgraph.{
   Review,
   ReviewEntity,
   SearchResult,
-  SpotifyUser,
+  SpotifyProfile,
   Track,
   User
 }
@@ -44,7 +44,8 @@ object Resolvers {
 
   val UserReviewsDataSource: DataSource[DatabaseOps, GetUserReviews] =
     DataSource.fromFunctionZIO("UserReviewsDataSource") { req =>
-      DatabaseOps.getUserReviews(req.userId).map(_.map(Review.fromTable))
+      val reviews = DatabaseOps.getUserReviews(req.userId)
+      reviews.map(_.map(Review.fromTable))
     }
 
   case class GetReview(reviewId: UUID) extends Request[SQLException, Option[Review]]
@@ -307,8 +308,8 @@ object Resolvers {
     }
   )
 
-  def spotifyProfile(userId: String): ZQuery[SpotifyService, Throwable, SpotifyUser] = ZQuery.fromZIO(
-    SpotifyService.getUserProfile(userId).map(SpotifyUser.fromSpotify)
+  def spotifyProfile(userId: String): ZQuery[SpotifyService, Throwable, SpotifyProfile] = ZQuery.fromZIO(
+    SpotifyService.getUserProfile(userId).map(SpotifyProfile.fromSpotify)
   )
 
   def addTimeLog[R, E, A](message: String)(z: ZIO[R, E, A]): ZIO[R, E, A] =

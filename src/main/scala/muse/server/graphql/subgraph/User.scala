@@ -7,5 +7,5 @@ import zio.query.ZQuery
 final case class User(
     id: String,
     reviews: ZQuery[DatabaseOps, Throwable, List[Review]],
-    spotifyUser: ZQuery[SpotifyService, Throwable, SpotifyUser]
+    spotifyProfile: ZQuery[SpotifyService, Throwable, SpotifyProfile]
 )

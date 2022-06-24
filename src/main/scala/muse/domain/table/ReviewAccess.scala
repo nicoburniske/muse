@@ -10,5 +10,4 @@ final case class ReviewAccess(
 
 enum AccessLevel:
   case Collaborator
-  case Suggester
   case Viewer

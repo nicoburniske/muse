@@ -12,8 +12,8 @@ final case class User(
     @jsonField("type")
     `type`: String,
     uri: String,
-    images: List[String],
-    followers: Followers
+    images: Option[List[Image]],
+    followers: Option[Followers]
 )
 
 object User {

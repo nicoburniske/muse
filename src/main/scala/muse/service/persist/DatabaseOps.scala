@@ -139,7 +139,7 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
    * Read!
    */
 
-  inline def userReviews(inline userId: String) = reviews.filter(_.creatorId == lift(userId))
+  inline def userReviews(inline userId: String) = reviews.filter(_.creatorId == userId)
 
   inline def userSharedReviews(inline userId: String) =
     reviewAccess

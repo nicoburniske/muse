@@ -129,7 +129,7 @@ case class Playlist(
     id: String,
     images: List[String],
     name: String,
-    owner: SpotifyUser,
+    owner: SpotifyProfile,
     primaryColor: Option[String],
     public: Option[Boolean],
     tracks: ZQuery[SpotifyService, Throwable, List[PlaylistTrack]]
@@ -145,7 +145,8 @@ object Playlist {
       p.id,
       p.images.map(_.url),
       p.name,
-      SpotifyUser.missingSome(p.owner.id, p.owner.href, p.owner.uri, p.owner.externalUrls),
+      SpotifyProfile
+        .missingSome(p.owner.id, p.owner.displayName, p.owner.href, p.owner.uri, p.owner.externalUrls),
       p.primaryColor,
       p.public,
       getPlaylistTracks(p.id, p.tracks.total)

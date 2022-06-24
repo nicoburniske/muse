@@ -2,7 +2,7 @@ package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
 import muse.domain.table
-import muse.server.graphql.Resolvers.{getEntity, getReviewComments}
+import muse.server.graphql.Resolvers.{getEntity, getReviewComments, getUser}
 import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
@@ -10,10 +10,11 @@ import zio.query.ZQuery
 import java.time.Instant
 import java.util.UUID
 
+// TODO: Add list of collaborators
 final case class Review(
     id: UUID,
     createdAt: Instant,
-    creatorId: String,
+    creator: ZQuery[DatabaseOps, Nothing, User],
     reviewName: String,
     isPublic: Boolean,
     //    comments: Pagination => ZQuery[DatabaseQueries, Nothing, List[Comment]]
@@ -28,7 +29,7 @@ object Review {
     Review(
       r.id,
       r.createdAt,
-      r.creatorId,
+      getUser(r.creatorId),
       r.reviewName,
       r.isPublic,
       getReviewComments(r.id),

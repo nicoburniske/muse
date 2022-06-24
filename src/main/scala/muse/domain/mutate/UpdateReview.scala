@@ -4,4 +4,4 @@ import zio.json.*
 
 import java.util.UUID
 
-case class UpdateReview(reviewId: UUID, name: String, isPublic: Boolean)
+final case class UpdateReview(reviewId: UUID, name: String, isPublic: Boolean)
