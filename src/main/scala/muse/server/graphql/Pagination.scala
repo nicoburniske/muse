@@ -1,5 +1,15 @@
 package muse.server.graphql
 
-enum Pagination:
-  case All
-  case Offset(first: Int, from: Int)
+import caliban.schema.Annotations.GQLDefault
+
+final case class Pagination(first: Int, @GQLDefault("0") from: Int) {
+  def annotation = s"{first: $first, from: $from}"
+}
+
+object Pagination {
+  def unapply(p: Pagination): (Int, Int) = p.first -> p.from
+
+  object Default {
+    val Search = Pagination(10, 0)
+  }
+}

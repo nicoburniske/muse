@@ -70,6 +70,7 @@ object Main extends ZIOAppDefault {
                            )
                            .forever
   } yield ())
+    .tapError(e => ZIO.logError(s"Failed to start server: + ${e.toString}"))
     .exitCode
     .provide(
       AsyncHttpClientZioBackend.layer(),
