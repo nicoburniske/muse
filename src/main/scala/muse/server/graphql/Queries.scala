@@ -1,6 +1,7 @@
 package muse.server.graphql
 
 import muse.domain.common.EntityType
+import muse.server.graphql.resolver.{GetReview, GetSearch, GetUser}
 import muse.server.graphql.subgraph.{Review, SearchResult, User}
 import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
@@ -12,7 +13,7 @@ final case class UserArgs(id: String)
 
 final case class ReviewsArgs(id: UUID)
 
-final case class SearchArgs(query: String, entityTypes: Set[EntityType])
+final case class SearchArgs(query: String, entityTypes: Set[EntityType], pagination: Pagination)
 
 final case class Queries(
     user: UserArgs => ZQuery[DatabaseOps, Throwable, User],
@@ -21,7 +22,7 @@ final case class Queries(
 
 object Queries {
   val live = Queries(
-    args => Resolvers.getUser(args.id),
-    args => Resolvers.getReview(args.id),
-    args => Resolvers.search(args.query, args.entityTypes))
+    args => GetUser.query(args.id),
+    args => GetReview.query(args.id),
+    args => GetSearch.query(args.query, args.entityTypes, args.pagination))
 }

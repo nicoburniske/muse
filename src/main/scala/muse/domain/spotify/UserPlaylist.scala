@@ -22,7 +22,8 @@ final case class UserPlaylist(
     @jsonField("type")
     entityType: String,
     uri: String,
-    followers: Followers
+    // Followers is null from search api.
+    followers: Option[Followers]
 ) extends Entity(id, EntityType.Playlist)
 
 object UserPlaylist {

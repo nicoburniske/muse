@@ -19,4 +19,7 @@ object Utils {
    */
   def getExpirationInstant(expiresIn: Int, padding: Int = DEFAULT_EXPIRATION_PADDING) =
     ZIO.succeed(Instant.now().plus(expiresIn - padding, ChronoUnit.SECONDS))
+
+  def addTimeLog[R, E, A](message: String)(z: ZIO[R, E, A]): ZIO[R, E, A] =
+    z.timed.flatMap { case (d, r) => ZIO.logInfo(s"$message in ${d.toMillis}ms").as(r) }
 }

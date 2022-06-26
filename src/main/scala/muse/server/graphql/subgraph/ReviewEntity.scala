@@ -1,20 +1,22 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.spotify
-import muse.server.graphql.Resolvers.{
-  getAlbum,
-  getAlbumTracks,
-  getArtist,
-  getArtistAlbums,
-  getArtistTopTracks,
-  getPlaylistTracks,
-  spotifyProfile
+import muse.server.graphql.resolver.{
+  GetAlbum,
+  GetAlbumTracks,
+  GetArtist,
+  GetArtistAlbums,
+  GetArtistTopTracks,
+  GetPlaylistTracks
 }
 import muse.server.graphql.subgraph
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
-sealed trait ReviewEntity
+sealed trait ReviewEntity {
+  // TODO: incorporate id into each type.
+  //  def id: String
+}
 
 case class Artist(
     externalUrls: Map[String, String],
@@ -41,8 +43,8 @@ object Artist {
       a.images.fold(Nil)(_.map(_.url)),
       a.name,
       a.popularity.get,
-      getArtistAlbums(a.id),
-      getArtistTopTracks(a.id)
+      GetArtistAlbums.query(a.id),
+      GetArtistTopTracks.query(a.id)
     )
   }
 }
@@ -75,8 +77,8 @@ object Album {
       a.name,
       a.popularity,
       a.releaseDate,
-      ZQuery.foreachPar(a.artists.map(_.id))(getArtist),
-      getAlbumTracks(a.id, a.tracks.map(_.total))
+      ZQuery.foreachPar(a.artists.map(_.id))(GetArtist.query),
+      GetAlbumTracks.query(a.id, a.tracks.map(_.total))
     )
     album
 }
@@ -103,8 +105,8 @@ case class Track(
 object Track {
   def fromSpotify(t: spotify.Track, albumId: Option[String] = None) = {
     Track(
-      getAlbum(t.album.map(_.id).orElse(albumId).get),
-      ZQuery.foreachPar(t.artists.map(_.id))(getArtist),
+      GetAlbum.query(t.album.map(_.id).orElse(albumId).get),
+      ZQuery.foreachPar(t.artists.map(_.id))(GetArtist.query),
       t.discNumber,
       t.durationMs,
       t.explicit,
@@ -122,6 +124,7 @@ object Track {
   }
 }
 
+// TODO: include followers?
 case class Playlist(
     collaborative: Boolean,
     description: String,
@@ -148,6 +151,6 @@ object Playlist {
       User.missingSome(p.owner.id, p.owner.displayName, p.owner.href, p.owner.uri, p.owner.externalUrls),
       p.primaryColor,
       p.public,
-      getPlaylistTracks(p.id, p.tracks.total)
+      GetPlaylistTracks.query(p.id, p.tracks.total)
     )
 }

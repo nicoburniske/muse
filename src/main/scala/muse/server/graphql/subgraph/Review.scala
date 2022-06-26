@@ -2,11 +2,12 @@ package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
 import muse.domain.table
-import muse.server.graphql.Resolvers.{getEntity, getReviewComments, getUser}
+import muse.server.graphql.resolver.{GetEntity, GetUser, GetReviewComments}
 import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
+import caliban.relay._
 import java.time.Instant
 import java.util.UUID
 
@@ -18,6 +19,7 @@ final case class Review(
     reviewName: String,
     isPublic: Boolean,
     //    comments: Pagination => ZQuery[DatabaseQueries, Nothing, List[Comment]]
+    //    comments: PageArgs => ZQuery[DatabaseOps, Throwable, List[Comment]],
     comments: ZQuery[DatabaseOps, Throwable, List[Comment]],
     entityId: String,
     entityType: EntityType,
@@ -29,12 +31,12 @@ object Review {
     Review(
       r.id,
       r.createdAt,
-      getUser(r.creatorId),
+      GetUser.query(r.creatorId),
       r.reviewName,
       r.isPublic,
-      getReviewComments(r.id),
+      GetReviewComments.query(r.id),
       r.entityId,
       r.entityType,
-      getEntity(r.entityId, r.entityType)
+      GetEntity.query(r.entityId, r.entityType)
     )
 }

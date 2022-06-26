@@ -1,7 +1,7 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.spotify
-import muse.server.graphql.Resolvers.spotifyProfile
+import muse.server.graphql.resolver.GetSpotifyProfile
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
@@ -17,9 +17,10 @@ final case class SpotifyProfile(
 object SpotifyProfile {
   def fromSpotify(u: spotify.User): SpotifyProfile = {
     // Followers and images are not included by spotify api when looking into playlist metadata.
-    val images    = u.images.fold(spotifyProfile(u.id).flatMap(_.images))(i => ZQuery.succeed(i.map(_.url)))
+    val images    =
+      u.images.fold(GetSpotifyProfile.query(u.id).flatMap(_.images))(i => ZQuery.succeed(i.map(_.url)))
     val followers =
-      u.followers.fold(spotifyProfile(u.id).flatMap(_.numFollowers))(f => ZQuery.succeed(f.total))
+      u.followers.fold(GetSpotifyProfile.query(u.id).flatMap(_.numFollowers))(f => ZQuery.succeed(f.total))
     SpotifyProfile(
       u.id,
       u.displayName,
@@ -37,7 +38,7 @@ object SpotifyProfile {
       href: String,
       uri: String,
       externalUrls: Map[String, String]): SpotifyProfile =
-    val profile = spotifyProfile(id)
+    val profile = GetSpotifyProfile.query(id)
     SpotifyProfile.apply(
       id,
       displayName,

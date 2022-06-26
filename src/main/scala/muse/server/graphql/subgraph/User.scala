@@ -1,6 +1,7 @@
 package muse.server.graphql.subgraph
 
-import muse.server.graphql.Resolvers.getUserReviews
+import muse.server.graphql.resolver.GetUserReviews
+
 import muse.server.graphql.subgraph
 import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
@@ -21,6 +22,6 @@ object User {
       externalUrls: Map[String, String]) =
     User(
       userId,
-      getUserReviews(userId),
+      GetUserReviews.query(userId),
       ZQuery.succeed(SpotifyProfile.missingSome(userId, displayName, href, uri, externalUrls)))
 }

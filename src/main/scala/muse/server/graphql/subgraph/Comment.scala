@@ -2,7 +2,7 @@ package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
 import muse.domain.table.ReviewComment
-import muse.server.graphql.Resolvers.{getEntity, getUser}
+import muse.server.graphql.resolver.{GetEntity, GetUser}
 import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
@@ -34,11 +34,11 @@ object Comment {
     r.updatedAt,
     r.parentCommentId,
     r.commenter,
-    getUser(r.commenter),
+    GetUser.query(r.commenter),
     r.comment,
     r.rating,
     r.entityId,
     r.entityType,
-    getEntity(r.entityId, r.entityType)
+    GetEntity.query(r.entityId, r.entityType)
   )
 }

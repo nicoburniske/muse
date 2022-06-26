@@ -120,8 +120,4 @@ object MuseGraphQL {
 }
 
 // TODO: incorporate pagination.
-sealed trait Pagination
 
-case object All extends Pagination
-
-case class Offset(first: Int, from: Int) extends Pagination
