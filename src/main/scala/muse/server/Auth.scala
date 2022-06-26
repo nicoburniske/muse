@@ -12,7 +12,7 @@ import zhttp.http.*
 import zhttp.http.Middleware.csrfGenerate
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.json.*
-import zio.{Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
 
 object Auth {
   val scopes = List("user-read-recently-played", "user-follow-read", "ugc-image-upload").mkString(" ")
@@ -48,6 +48,7 @@ object Auth {
             }
           }
     }
+    .tapErrorZIO { case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
     .catchAll(error => Http.error(HttpError.InternalServerError(cause = Some(error))))
   // @@ csrfGenerate() // TODO: get this working?
 

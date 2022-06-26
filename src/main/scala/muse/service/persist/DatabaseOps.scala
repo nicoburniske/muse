@@ -127,13 +127,13 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
 
   val layer = ZLayer.fromFunction(() => d)
 
-  inline def users = query[AppUser]
+  inline def users = querySchema[AppUser]("muse.app_user")
 
-  inline def reviewAccess = query[ReviewAccess]
+  inline def reviewAccess = querySchema[ReviewAccess]("muse.review_access")
 
-  inline def reviews = query[Review]
+  inline def reviews = querySchema[Review]("muse.review")
 
-  inline def comments = query[ReviewComment]
+  inline def comments = querySchema[ReviewComment]("muse.review_comment")
 
   /**
    * Read!

@@ -20,7 +20,7 @@ import zhttp.http.middleware.Cors.CorsConfig
 import zhttp.http.*
 import zhttp.service.{ChannelFactory, EventLoopGroup, Server}
 import zio.config.typesafe.TypesafeConfig
-import zio.{Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
 
 import java.io.File
 
@@ -55,9 +55,10 @@ object Main extends ZIOAppDefault {
       } yield Response.ok
   })
 
-  def catchUnauthorized[R](http: Http[R, Throwable, Request, Response]) = http.catchSome {
-    case u: Unauthorized => u.http
-  }
+  def catchUnauthorized[R](http: Http[R, Throwable, Request, Response]) =
+    http.catchSome { case u: Unauthorized => u.http }.tapErrorZIO {
+      case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e))
+    }
 
   val server = (for {
     interpreter       <- MuseGraphQL.interpreter
@@ -70,7 +71,7 @@ object Main extends ZIOAppDefault {
                            )
                            .forever
   } yield ())
-    .tapError(e => ZIO.logError(s"Failed to start server: + ${e.toString}"))
+    .tapError(e => ZIO.logErrorCause("Failed to start server", Cause.fail(e)))
     .exitCode
     .provide(
       AsyncHttpClientZioBackend.layer(),

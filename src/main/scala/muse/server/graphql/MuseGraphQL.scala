@@ -118,6 +118,3 @@ object MuseGraphQL {
       err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("PARSING_ERROR")))))
   }
 }
-
-// TODO: incorporate pagination.
-
