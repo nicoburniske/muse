@@ -31,7 +31,6 @@ import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.*
-import zio.Console.printLine
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 
 import java.sql.SQLException

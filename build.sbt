@@ -12,9 +12,23 @@ val postgresql = "42.3.4"
 
 lazy val mainMethod = "muse.Main"
 
+inThisBuild(
+  List(
+    developers    := List(
+      Developer(
+        "nicoburniske",
+        "Nico Burniske",
+        "nicoburniske@gmail.com",
+        url("https://github.com/nicoburniske")
+      )),
+    onLoadMessage := ConsoleHelper.welcomeMessage
+  )
+)
+
 lazy val root = (project in file(".")).settings(
-  name                := "muse",
-  reStart / mainClass := Some(mainMethod),
+  name                      := "muse",
+  Compile / run / mainClass := Some(mainMethod),
+  reStart / mainClass       := Some(mainMethod),
   libraryDependencies ++= Seq(
     "dev.zio"                       %% "zio"                           % zio,
     "dev.zio"                       %% "zio-json"                      % zioJson,

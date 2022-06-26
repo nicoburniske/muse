@@ -20,7 +20,8 @@ import zhttp.http.middleware.Cors.CorsConfig
 import zhttp.http.*
 import zhttp.service.{ChannelFactory, EventLoopGroup, Server}
 import zio.config.typesafe.TypesafeConfig
-import zio.{Cause, Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, LogLevel, Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
+import zio.logging._
 
 import java.io.File
 
@@ -30,6 +31,10 @@ object Main extends ZIOAppDefault {
   val flattenedAppConfigLayer = appConfigLayer.flatMap { zlayer =>
     ZLayer.succeed(zlayer.get.spotify) ++ ZLayer.succeed(zlayer.get.sqlConfig)
   }
+  val logger                  = console(
+    logLevel = LogLevel.Info,
+    format = LogFormat.colored
+  ) ++ removeDefaultLoggers
 
   val dbLayer    = QuillContext.dataSourceLayer >>> DatabaseOps.live
   val zhttpLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
@@ -78,6 +83,7 @@ object Main extends ZIOAppDefault {
       zhttpLayer,
       flattenedAppConfigLayer,
       dbLayer,
+      logger,
       UserSessions.live,
       MuseMiddleware.FiberUserSession
     )
