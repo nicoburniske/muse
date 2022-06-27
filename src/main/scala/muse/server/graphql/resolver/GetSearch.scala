@@ -2,8 +2,8 @@ package muse.server.graphql.resolver
 
 import muse.domain.common.EntityType
 import muse.domain.spotify
-import muse.server.graphql.subgraph.{Album, Artist, Playlist, SearchResult, Track}
 import muse.server.graphql.Pagination
+import muse.server.graphql.subgraph.{Album, Artist, Playlist, SearchResult, Track}
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 

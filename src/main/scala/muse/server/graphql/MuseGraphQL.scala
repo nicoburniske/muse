@@ -4,8 +4,8 @@ import caliban.CalibanError.{ExecutionError, ParsingError, ValidationError}
 import caliban.ResponseValue.ObjectValue
 import caliban.Value.StringValue
 import caliban.schema.{GenericSchema, Schema}
-import caliban.wrappers.Wrappers.printErrors
 import caliban.wrappers.ApolloTracing.apolloTracing
+import caliban.wrappers.Wrappers.printErrors
 import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
 import muse.domain.error.{Forbidden, InvalidEntity, Unauthorized}

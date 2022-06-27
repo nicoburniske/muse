@@ -3,12 +3,11 @@ package muse.server
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.service.UserSessions
-import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive, SpotifyService}
 import muse.service.spotify.SpotifyAuthServiceLive.AuthEnv
+import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive, SpotifyService}
 import muse.utils.Utils
 import sttp.client3.SttpBackend
 import zhttp.http.{Http, HttpApp, HttpData, HttpError, Request, Response, Status}
-import zio.{IO, UIO, ULayer, ZIO}
 import zio.*
 
 import java.time.Instant

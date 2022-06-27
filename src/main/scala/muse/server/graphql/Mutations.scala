@@ -43,7 +43,6 @@ object Mutations {
       c    <- DatabaseOps.createReviewComment(user.id, create)
     } yield Comment.fromTable(c)
 
-  // TODO: check if permissions are valid.
   def updateReview(update: UpdateReview) = for {
     user <- Auth.currentUser[UserSession]
     _    <- validatePermissions(update, user)

@@ -15,13 +15,13 @@ import muse.service.persist.{DatabaseOps, QuillContext}
 import muse.service.spotify.SpotifyService
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zhttp.*
+import zhttp.http.*
 import zhttp.http.Middleware.cors
 import zhttp.http.middleware.Cors.CorsConfig
-import zhttp.http.*
 import zhttp.service.{ChannelFactory, EventLoopGroup, Server}
 import zio.config.typesafe.TypesafeConfig
+import zio.logging.*
 import zio.{Cause, LogLevel, Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
-import zio.logging._
 
 import java.io.File
 

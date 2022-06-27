@@ -2,9 +2,9 @@ package muse.server.graphql
 
 import caliban.schema.Annotations.GQLDefault
 import muse.domain.common.EntityType
+import muse.server.graphql.Pagination.Default
 import muse.server.graphql.resolver.{GetReview, GetSearch, GetUser}
 import muse.server.graphql.subgraph.{Review, SearchResult, User}
-import muse.server.graphql.Pagination.Default
 import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery

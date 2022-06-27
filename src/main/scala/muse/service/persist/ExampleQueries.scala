@@ -4,8 +4,8 @@ import io.getquill.*
 import muse.domain.common.EntityType
 import muse.domain.mutate.CreateReview
 import muse.utils.Parallel
-import zio.Console.*
 import zio.*
+import zio.Console.*
 
 object ExampleQueries extends ZIOAppDefault {
   override def run = {

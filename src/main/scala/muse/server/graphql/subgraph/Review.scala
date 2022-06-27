@@ -2,12 +2,11 @@ package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
 import muse.domain.table
-import muse.server.graphql.resolver.{GetEntity, GetUser, GetReviewComments}
+import muse.server.graphql.resolver.{GetEntity, GetReviewComments, GetUser}
 import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
-import caliban.relay._
 import java.time.Instant
 import java.util.UUID
 

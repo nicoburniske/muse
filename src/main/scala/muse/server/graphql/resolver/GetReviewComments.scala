@@ -2,8 +2,8 @@ package muse.server.graphql.resolver
 
 import muse.server.graphql.subgraph.Comment
 import muse.service.persist.DatabaseOps
-import zio.{Chunk, ZIO}
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
+import zio.{Chunk, ZIO}
 
 import java.util.UUID
 

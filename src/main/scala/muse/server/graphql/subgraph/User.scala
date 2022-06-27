@@ -1,7 +1,6 @@
 package muse.server.graphql.subgraph
 
 import muse.server.graphql.resolver.GetUserReviews
-
 import muse.server.graphql.subgraph
 import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService

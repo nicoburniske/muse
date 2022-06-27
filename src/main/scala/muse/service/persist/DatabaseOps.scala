@@ -5,8 +5,8 @@ import io.getquill.context.ZioJdbc.*
 import muse.domain.common.EntityType
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.table.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
-import zio.{ZLayer, IO, ZIO, ULayer}
 import zio.ZLayer.*
+import zio.{IO, ULayer, ZIO, ZLayer}
 
 import java.sql.{SQLException, Timestamp, Types}
 import java.time.Instant
@@ -49,7 +49,7 @@ trait DatabaseOps {
   def canViewReview(userId: String, reviewId: UUID): IO[SQLException, Boolean]
   def canModifyReview(userId: String, reviewId: UUID): IO[SQLException, Boolean]
   def canModifyComment(userId: String, commentId: Int): IO[SQLException, Boolean]
-  // TODO: delete methods.
+  // TODO: delete and sharing methods.
 }
 
 object DatabaseOps {

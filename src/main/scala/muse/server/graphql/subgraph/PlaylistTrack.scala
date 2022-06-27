@@ -1,6 +1,7 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.spotify
+
 import java.time.Instant
 
 final case class PlaylistTrack(

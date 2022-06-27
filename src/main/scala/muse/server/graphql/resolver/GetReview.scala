@@ -8,6 +8,7 @@ import java.sql.SQLException
 import java.util.UUID
 
 // TODO: create batch data source for review by id.
+// TODO: Incorporate permissions
 case class GetReview(reviewId: UUID) extends Request[SQLException, Option[Review]]
 
 object GetReview {

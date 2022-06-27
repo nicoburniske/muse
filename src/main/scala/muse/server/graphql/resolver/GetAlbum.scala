@@ -5,8 +5,8 @@ import muse.domain.error.InvalidEntity
 import muse.server.graphql.subgraph.Album
 import muse.service.spotify.SpotifyService
 import muse.utils.Utils.addTimeLog
-import zio.{Chunk, ZIO}
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
+import zio.{Chunk, ZIO}
 
 case class GetAlbum(id: String) extends Request[Throwable, Album]
 

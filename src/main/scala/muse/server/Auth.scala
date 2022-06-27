@@ -15,7 +15,7 @@ import zio.json.*
 import zio.{Cause, Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
 
 object Auth {
-  val scopes = List("user-read-recently-played", "user-follow-read", "ugc-image-upload").mkString(" ")
+  val scopes = List().mkString(" ")
 
   type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory & UserSessions
 
