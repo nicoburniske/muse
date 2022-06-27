@@ -22,6 +22,9 @@ metals.mv.db
 metals.lock.db
 metals.sbt
 
+# PSQL Data
+postgres-data
+
 # mac
 .DS_Store
 
