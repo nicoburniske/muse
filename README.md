@@ -1,4 +1,4 @@
-# Muse: Spotify Social Platform
+# Muse: A Social Platform for Spotify
 
 ## Introduction
 
@@ -22,13 +22,15 @@
            into [application.conf](https://github.com/nicoburniske/muse/tree/master/src/main/resources/application.conf)
         2. Option 2: Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` as System/Environment variables
 5. Run `sbt run`
-    1. Http server will start running at `localhost:8883`
+   2. Http server will start running at `localhost:8883`
+   3. TODO: run in docker container
 
 ## Functionality
 - Purely Functional with [ZIO 2.0](https://github.com/zio/zio)
 - Compile Time Postgres SQL Query Generation with [Quill](https://github.com/zio/zio-quill)
 - GraphQL Server with [Caliban](https://github.com/ghostdogpr/caliban) 
   - Compile time GraphQL Schema Generation
+  - See [Muse Schema](https://github.com/nicoburniske/muse/tree/master/src/main/resources/schema.graphql)
 - GraphQL Query Optimization with [ZIO Query](https://github.com/zio/zio-query)
 - [Spotify API](https://developer.spotify.com/documentation/web-api/) Client written in Tagless Final
     - Using [sttp client](https://github.com/softwaremill/sttp)
