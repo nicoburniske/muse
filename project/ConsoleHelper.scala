@@ -5,13 +5,11 @@ object ConsoleHelper {
 
   def welcomeMessage =
     """
-      |
       |    __  ___              
       |   /  |/  /_  __________ 
       |  / /|_/ / / / / ___/ _ \
       | / /  / / /_/ (__  )  __/
       |/_/  /_/\__,_/____/\___/ 
-      |                         
       |
       |""".stripMargin.split("\n").map(header).mkString("\n")
 }

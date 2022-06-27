@@ -39,7 +39,7 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  lazy given userSchema: Schema[DatabaseOps & SpotifyService, User] = Schema.gen
+  given userSchema: Schema[DatabaseOps & SpotifyService, User] = Schema.gen
 
   given reviewSchema: Schema[DatabaseOps & SpotifyService, Review] = Schema.gen
 
@@ -78,7 +78,7 @@ object MuseGraphQL {
   val interpreter = api.interpreter.map(errorHandler(_))
 
   private def errorHandler[R](
-                               interpreter: GraphQLInterpreter[R, CalibanError]
+      interpreter: GraphQLInterpreter[R, CalibanError]
   ): GraphQLInterpreter[R, CalibanError] = interpreter.mapError {
     case err @ ExecutionError(_, _, _, Some(u: Unauthorized), _)  =>
       err.copy(extensions = Some(
