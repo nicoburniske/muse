@@ -1,0 +1,158 @@
+schema {
+  query: Queries
+  mutation: Mutations
+}
+
+"An instantaneous point on the time-line represented by a standard date time string"
+scalar Instant
+
+union ReviewEntity = Album | Artist | Playlist | Track
+
+enum EntityType {
+  Album
+  Artist
+  Playlist
+  Track
+}
+
+input PaginationInput {
+  first: Int!
+  from: Int! = 0
+}
+
+type Album {
+  albumGroup: String
+  albumType: String!
+  externalUrls: [KVStringString!]!
+  genres: [String!]!
+  id: String!
+  images: [String!]!
+  label: String
+  name: String!
+  popularity: Int
+  releaseDate: String!
+  artists: [Artist!]
+  tracks: [Track!]
+}
+
+type Artist {
+  externalUrls: [KVStringString!]!
+  numFollowers: Int!
+  genres: [String!]!
+  href: String!
+  id: String!
+  images: [String!]!
+  name: String!
+  popularity: Int!
+  albums: [Album!]
+  topTracks: [Track!]
+}
+
+type Comment {
+  id: Int!
+  reviewId: ID!
+  createdAt: Instant!
+  updatedAt: Instant!
+  parentCommentId: Int
+  commenterId: String!
+  commenter: User
+  comment: String
+  rating: Int
+  entityId: String!
+  entityType: EntityType!
+  entity: ReviewEntity
+}
+
+"A key-value pair of String and String"
+type KVStringString {
+  "Key"
+  key: String!
+  "Value"
+  value: String!
+}
+
+type Mutations {
+  createReview(name: String!, isPublic: Boolean!, entityType: EntityType!, entityId: String!): Review
+  createComment(reviewId: ID!, parentCommentId: Int, comment: String, rating: Int, entityType: EntityType!, entityId: String!): Comment
+  updateReview(reviewId: ID!, name: String!, isPublic: Boolean!): Boolean
+  updateComment(commentId: Int!, comment: String, rating: Int): Boolean
+}
+
+type Playlist {
+  collaborative: Boolean!
+  description: String!
+  externalUrls: [KVStringString!]!
+  id: String!
+  images: [String!]!
+  name: String!
+  owner: User!
+  primaryColor: String
+  public: Boolean
+  tracks: [PlaylistTrack!]
+}
+
+type PlaylistTrack {
+  addedAt: Instant!
+  addedBy: User!
+  isLocal: Boolean!
+  track: Track!
+}
+
+type Queries {
+  user(id: String!): User
+  reviews(id: ID!): Review
+  search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, from: 0}): SearchResult
+}
+
+type Review {
+  id: ID!
+  createdAt: Instant!
+  creator: User!
+  reviewName: String!
+  isPublic: Boolean!
+  comments: [Comment!]
+  entityId: String!
+  entityType: EntityType!
+  entity: ReviewEntity
+}
+
+type SearchResult {
+  albums: [Album!]!
+  artists: [Artist!]!
+  playlists: [Playlist!]!
+  tracks: [Track!]!
+}
+
+type SpotifyProfile {
+  id: String!
+  displayName: String
+  href: String!
+  uri: String!
+  externalUrls: [KVStringString!]!
+  images: [String!]
+  numFollowers: Int
+}
+
+type Track {
+  album: Album
+  artists: [Artist!]
+  discNumber: Int!
+  durationMs: Int!
+  explicit: Boolean!
+  externalUrls: [KVStringString!]!
+  href: String!
+  id: String!
+  isPlayable: Boolean
+  name: String!
+  popularity: Int
+  previewUrl: String
+  trackNumber: Int!
+  isLocal: Boolean!
+  uri: String!
+}
+
+type User {
+  id: String!
+  reviews: [Review!]
+  spotifyProfile: SpotifyProfile
+}"

@@ -1,4 +1,4 @@
-package muse.domain.tables
+package muse.domain.table
 
 import muse.domain.common.EntityType
 import zio.json.{DeriveJsonCodec, JsonCodec}

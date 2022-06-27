@@ -15,15 +15,17 @@ final case class UserPlaylist(
     owner: User,
     @jsonField("primary_color")
     primaryColor: Option[String],
-    public: Boolean,
+    public: Option[Boolean],
     @jsonField("snapshot_id")
     snapshotID: String,
     tracks: PlaylistTracks,
     @jsonField("type")
     entityType: String,
-    uri: String
+    uri: String,
+    // Followers is null from search api.
+    followers: Option[Followers]
 ) extends Entity(id, EntityType.Playlist)
 
 object UserPlaylist {
-  given decodeUserPlaylist: JsonCodec[UserPlaylist] = DeriveJsonCodec.gen[UserPlaylist]
+  given decodeUserPlaylist: JsonDecoder[UserPlaylist] = DeriveJsonDecoder.gen[UserPlaylist]
 }

@@ -14,5 +14,5 @@ final case class LinkedTrack(
     uri: String)
 
 object LinkedTrack {
-  given linkedTrackDecoder: JsonCodec[LinkedTrack] = DeriveJsonCodec.gen[LinkedTrack]
+  given linkedTrackDecoder: JsonDecoder[LinkedTrack] = DeriveJsonDecoder.gen[LinkedTrack]
 }

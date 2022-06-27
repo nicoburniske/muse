@@ -1,4 +1,4 @@
-package muse.domain.tables
+package muse.domain.table
 
 import java.util.UUID
 
@@ -10,5 +10,4 @@ final case class ReviewAccess(
 
 enum AccessLevel:
   case Collaborator
-  case Suggester
   case Viewer

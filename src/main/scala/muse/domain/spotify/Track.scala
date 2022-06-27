@@ -38,5 +38,5 @@ final case class Track(
 ) extends Entity(id, EntityType.Track)
 
 object Track {
-  given decodeTrack: JsonCodec[Track] = DeriveJsonCodec.gen[Track]
+  given decodeTrack: JsonDecoder[Track] = DeriveJsonDecoder.gen[Track]
 }

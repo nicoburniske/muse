@@ -1,21 +1,21 @@
 package muse.server
 
 import muse.config.SpotifyConfig
+import muse.domain.session.UserSession
 import muse.domain.spotify.InitialAuthData
-import muse.domain.tables.AppUser
-import muse.service.RequestProcessor.UserLoginEnv
+import muse.domain.table.AppUser
+import muse.server.MuseMiddleware.Auth
 import muse.service.spotify.SpotifyAuthServiceLive
 import muse.service.{RequestProcessor, UserSessions}
 import sttp.client3.SttpBackend
 import zhttp.http.*
 import zhttp.http.Middleware.csrfGenerate
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
-import zio.Console.printLine
 import zio.json.*
-import zio.{Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
 
 object Auth {
-  val scopes = List("user-read-recently-played", "user-follow-read", "ugc-image-upload").mkString(" ")
+  val scopes = List().mkString(" ")
 
   type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory & UserSessions
 
@@ -48,6 +48,7 @@ object Auth {
             }
           }
     }
+    .tapErrorZIO { case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
     .catchAll(error => Http.error(HttpError.InternalServerError(cause = Some(error))))
   // @@ csrfGenerate() // TODO: get this working?
 

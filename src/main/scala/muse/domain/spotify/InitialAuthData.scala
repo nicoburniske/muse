@@ -5,9 +5,9 @@ final case class InitialAuthData(
     @jsonField("token_type") tokenType: String,
     @jsonField("access_token") accessToken: String,
     @jsonField("refresh_token") refreshToken: String,
-    @jsonField("scope") scope: String,
+    @jsonField("scope") scope: Option[String],
     @jsonField("expires_in") expiresIn: Int)
 
 object InitialAuthData {
-  given decoder: JsonCodec[InitialAuthData] = DeriveJsonCodec.gen[InitialAuthData]
+  given decoder: JsonDecoder[InitialAuthData] = DeriveJsonDecoder.gen[InitialAuthData]
 }
