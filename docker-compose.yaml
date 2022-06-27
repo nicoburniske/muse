@@ -3,6 +3,7 @@ version: '3.7'
 services:
   postgres:
     image: postgres:latest
+    container_name: muse_db
     restart: always
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
@@ -13,3 +14,15 @@ services:
       - POSTGRES_DB=muse
     ports:
       - "5432:5432"
+  backend:
+    container_name: muse_backend
+    environment:
+      - DATA_SOURCE_SERVER_NAME=muse_db
+      - SPOTIFY_CLIENT_ID
+      - SPOTIFY_CLIENT_SECRET
+    build:
+      dockerfile: Dockerfile
+    ports:
+      - "8883:8883"
+    depends_on:
+      - postgres
