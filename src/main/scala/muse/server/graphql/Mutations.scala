@@ -15,6 +15,7 @@ import java.sql.SQLException
 type MutationEnv = Auth[UserSession] & DatabaseOps & SpotifyService
 
 // TODO: add sharing.
+// TODO: add checking for what constitutes a valid comment. What does rating represent?
 final case class Mutations(
     createReview: CreateReview => ZIO[MutationEnv, Throwable, Review],
     createComment: CreateComment => ZIO[MutationEnv, Throwable, Comment],
@@ -45,7 +46,7 @@ object Mutations {
 
   def updateReview(update: UpdateReview) = for {
     user <- Auth.currentUser[UserSession]
-    _    <- validatePermissions(update, user)
+    _    <- validateReviewPermissions(update, user)
     _    <- DatabaseOps.updateReview(update)
   } yield true
 
@@ -64,7 +65,7 @@ object Mutations {
       case false => ZIO.fail(InvalidEntity(entityId, entityType))
     }
 
-  private def validatePermissions(update: UpdateReview, user: UserSession) = {
+  private def validateReviewPermissions(update: UpdateReview, user: UserSession) = {
     DatabaseOps.canModifyReview(user.id, update.reviewId).flatMap {
       case true  => ZIO.succeed(())
       case false => ZIO.fail(Forbidden(s"User ${user.id} cannot modify review ${update.reviewId}"))

@@ -11,6 +11,7 @@ import zio.{Chunk, ZIO}
 case class GetAlbum(id: String) extends Request[Throwable, Album]
 
 object GetAlbum {
+  val MAX_ALBUMS_PER_REQUEST = 20
 
   def query(albumId: String) = ZQuery.fromRequest(GetAlbum(albumId))(AlbumDataSource)
 
@@ -29,7 +30,7 @@ object GetAlbum {
         case _           =>
           addTimeLog("Retrieved multiple albums")(
             ZIO
-              .foreachPar(reqs.grouped(20).toVector) { reqs =>
+              .foreachPar(reqs.grouped(MAX_ALBUMS_PER_REQUEST).toVector) { reqs =>
                 SpotifyService.getAlbums(reqs.map(_.id)).either.map(reqs -> _)
               }
               .map { res =>

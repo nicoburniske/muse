@@ -11,6 +11,7 @@ import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 case class GetTrack(id: String) extends Request[Throwable, Track]
 
 object GetTrack {
+  val MAX_TRACKS_PER_REQUEST = 50
 
   def query(trackId: String) = ZQuery.fromRequest(GetTrack(trackId))(TrackDataSource)
 
@@ -31,7 +32,7 @@ object GetTrack {
           // TODO: make constants for max batch size.
           addTimeLog("Retrieved Multiple Tracks")(
             ZIO
-              .foreachPar(reqs.grouped(50).toVector) { reqs =>
+              .foreachPar(reqs.grouped(MAX_TRACKS_PER_REQUEST).toVector) { reqs =>
                 SpotifyService
                   .getTracks(reqs.map(_.id))
                   .map(_.map(Track.fromSpotify(_)))

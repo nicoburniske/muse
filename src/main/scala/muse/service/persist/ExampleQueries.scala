@@ -3,7 +3,6 @@ package muse.service.persist
 import io.getquill.*
 import muse.domain.common.EntityType
 import muse.domain.mutate.CreateReview
-import muse.utils.Parallel
 import zio.*
 import zio.Console.*
 

@@ -10,6 +10,7 @@ case class GetPlaylistTracks(playlistId: String, numTracks: Int)
     extends Request[Throwable, List[PlaylistTrack]]
 
 object GetPlaylistTracks {
+  val MAX_PLAYLIST_TRACKS_PER_REQUEST = 100
 
   def query(playlistId: String, numTracks: Int) =
     ZQuery.fromRequest(GetPlaylistTracks(playlistId, numTracks))(PlaylistTrackDataSource)
@@ -18,11 +19,12 @@ object GetPlaylistTracks {
     DataSource.fromFunctionZIO("PlaylistTrackDataSource") { req =>
       addTimeLog("Retrieved all playlist tracks") {
         ZIO
-          .foreachPar((0 until req.numTracks).grouped(100).map(_.start).toList) { r =>
-            SpotifyService
-              .getSomePlaylistTracks(req.playlistId, 100, Some(r))
-              .map(_.items)
-              .map(_.map(PlaylistTrack.fromSpotify))
+          .foreachPar((0 until req.numTracks).grouped(MAX_PLAYLIST_TRACKS_PER_REQUEST).map(_.start).toList) {
+            r =>
+              SpotifyService
+                .getSomePlaylistTracks(req.playlistId, MAX_PLAYLIST_TRACKS_PER_REQUEST, Some(r))
+                .map(_.items)
+                .map(_.map(PlaylistTrack.fromSpotify))
           }
           .map(_.flatten.toList)
       }

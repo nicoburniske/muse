@@ -7,7 +7,6 @@ import java.time.temporal.ChronoUnit
 
 object Utils {
   val DEFAULT_EXPIRATION_PADDING = 30
-  // TODO: Should this go in package object?
 
   /**
    * @param expiresIn

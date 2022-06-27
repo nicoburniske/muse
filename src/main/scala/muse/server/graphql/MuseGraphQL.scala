@@ -77,6 +77,7 @@ object MuseGraphQL {
 
   val interpreter = api.interpreter.map(errorHandler(_))
 
+  // TODO: Consider handling Spotify 404 error.
   private def errorHandler[R](
       interpreter: GraphQLInterpreter[R, CalibanError]
   ): GraphQLInterpreter[R, CalibanError] = interpreter.mapError {

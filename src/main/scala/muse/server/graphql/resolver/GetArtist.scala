@@ -11,6 +11,7 @@ import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 case class GetArtist(id: String) extends Request[Throwable, Artist]
 
 object GetArtist {
+  val MAX_ARTISTS_PER_REQUEST = 20
 
   def query(artistId: String) = ZQuery.fromRequest(GetArtist(artistId))(ArtistDataSource)
 
@@ -29,7 +30,7 @@ object GetArtist {
         case _           =>
           addTimeLog("Retrieved multiple Artists")(
             ZIO
-              .foreachPar(reqs.grouped(20).toVector) { reqs =>
+              .foreachPar(reqs.grouped(MAX_ARTISTS_PER_REQUEST).toVector) { reqs =>
                 SpotifyService.getArtists(reqs.map(_.id)).map(_.map(Artist.fromSpotify)).either.map(reqs -> _)
               }
               .map { res =>

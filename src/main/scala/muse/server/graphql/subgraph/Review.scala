@@ -17,8 +17,6 @@ final case class Review(
     creator: ZQuery[DatabaseOps, Nothing, User],
     reviewName: String,
     isPublic: Boolean,
-    //    comments: Pagination => ZQuery[DatabaseQueries, Nothing, List[Comment]]
-    //    comments: PageArgs => ZQuery[DatabaseOps, Throwable, List[Comment]],
     comments: ZQuery[DatabaseOps, Throwable, List[Comment]],
     entityId: String,
     entityType: EntityType,

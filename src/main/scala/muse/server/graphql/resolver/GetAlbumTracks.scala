@@ -7,6 +7,7 @@ import zio.ZIO
 import zio.query.ZQuery
 
 object GetAlbumTracks {
+  val MAX_TRACKS_PER_REQUEST = 50
 
   /**
    * Retrieves tracks for the given album.
@@ -24,9 +25,9 @@ object GetAlbumTracks {
         numTracks match {
           case Some(total) =>
             ZIO
-              .foreachPar((0 until total).grouped(50).map(_.start).toList) { r =>
+              .foreachPar((0 until total).grouped(MAX_TRACKS_PER_REQUEST).map(_.start).toList) { r =>
                 SpotifyService
-                  .getSomeAlbumTracks(albumId, Some(50), Some(r))
+                  .getSomeAlbumTracks(albumId, Some(MAX_TRACKS_PER_REQUEST), Some(r))
                   .map(_.items)
                   .map(_.map(t => Track.fromSpotify(t, Some(albumId))))
               }
@@ -37,5 +38,4 @@ object GetAlbumTracks {
               .map(_.map(t => Track.fromSpotify(t, Some(albumId))).toList)
         }
       ))
-
 }

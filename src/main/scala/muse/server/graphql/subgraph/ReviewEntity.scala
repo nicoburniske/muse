@@ -13,9 +13,11 @@ import muse.server.graphql.subgraph
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
+/**
+ * Represents a Spotify Entity that can be reviewed.
+ */
 sealed trait ReviewEntity {
   // TODO: incorporate id into each type.
-  //  def id: String
 }
 
 case class Artist(
@@ -86,7 +88,6 @@ object Album {
 case class Track(
     album: ZQuery[SpotifyService, Throwable, Album],
     artists: ZQuery[SpotifyService, Throwable, List[Artist]],
-    //    artists: ZQuery[Any, Nothing, List[Artist]],
     discNumber: Int,
     durationMs: Int,
     explicit: Boolean,
@@ -136,7 +137,6 @@ case class Playlist(
     primaryColor: Option[String],
     public: Option[Boolean],
     tracks: ZQuery[SpotifyService, Throwable, List[PlaylistTrack]]
-    // tracks: Pagination => ZQuery[SpotifyService, Throwable, List[PlaylistTrack]]
 ) extends ReviewEntity
 
 object Playlist {
