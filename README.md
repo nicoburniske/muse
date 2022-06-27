@@ -22,8 +22,8 @@
            into [application.conf](https://github.com/nicoburniske/muse/tree/master/src/main/resources/application.conf)
         2. Option 2: Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` as System/Environment variables
 5. Run `sbt run`
-   2. Http server will start running at `localhost:8883`
-   3. TODO: run in docker container
+   1. Http server will start running at `localhost:8883`
+   2. TODO: run in docker container
 
 ## Functionality
 - Purely Functional with [ZIO 2.0](https://github.com/zio/zio)
