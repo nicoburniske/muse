@@ -35,6 +35,3 @@ postgres-data
 
 #general
 *.class
-
-# config
-src/main/resources/application.conf

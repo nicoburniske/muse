@@ -15,8 +15,14 @@
     1. This sets up a local PSQL Database
     2. See [initialization file](https://github.com/nicoburniske/muse/tree/master/src/main/resources/sql/init.sql) for
        more information
-4. Run `sbt run`
-    1. Http server will start running
+4. Create API Keys in [Spotify API Developer Dashboard](https://developer.spotify.com/dashboard/login)
+    1. Create an App
+    2. Find Client ID and Client Secret
+        1. Option 1: Input directly
+           into [application.conf](https://github.com/nicoburniske/muse/tree/master/src/main/resources/application.conf)
+        2. Option 2: Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` as System/Environment variables
+5. Run `sbt run`
+    1. Http server will start running at `localhost:8883`
 
 ## Functionality
 - Purely Functional with [ZIO 2.0](https://github.com/zio/zio)
