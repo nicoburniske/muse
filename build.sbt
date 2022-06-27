@@ -35,7 +35,6 @@ lazy val root = (project in file(".")).settings(
     // ZIO Config.
     "dev.zio"                       %% "zio-config"                    % zioConfig,
     "dev.zio"                       %% "zio-config-typesafe"           % zioConfig,
-    "dev.zio"                       %% "zio-config-yaml"               % zioConfig,
     // HTTP Server.
     "io.d11"                        %% "zhttp"                         % zhttp,
     // HTTP Client.
