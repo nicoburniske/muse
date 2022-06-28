@@ -21,6 +21,7 @@ target/
 metals.mv.db
 metals.lock.db
 metals.sbt
+project/metals.sbt
 
 # PSQL Data
 postgres-data
