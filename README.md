@@ -35,6 +35,7 @@
     2. See [initialization file](https://github.com/nicoburniske/muse/tree/main/src/main/resources/sql/init.sql) for
        more information
     3. Http server will start running at `localhost:8883`
+    4. If you only want to start the DB and run the backend locally you can run `docker-compose up -d postgres` instead
 5. Login with Spotify Account @ `localhost:8883/login`
 6. After successful login backend will redirect to localhost:3000 you should have a session cookie in browser
 7. To use Graphql API (`localhost:8883/api/graphql`) download a GraphQL Client (e.g. GraphQL Playground)
@@ -45,7 +46,7 @@
       "Authorization" : "YourSessionCookie"
     }
    ```
-9. Schema Introspection should now be enabled. You can now make GraphQL queries to the backend.
+9. Schema Introspection should take place and you can now make GraphQL queries to the backend!
 
 
 ## TODO
