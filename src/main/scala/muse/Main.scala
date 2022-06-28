@@ -76,7 +76,7 @@ object Main extends ZIOAppDefault {
                            )
                            .forever
   } yield ())
-    .tapError(e => ZIO.logErrorCause("Failed to start server", Cause.fail(e)))
+    .tapError(e => ZIO.logErrorCause(s"Failed to start server: ${e.getMessage}", Cause.fail(e)))
     .exitCode
     .provide(
       AsyncHttpClientZioBackend.layer(),

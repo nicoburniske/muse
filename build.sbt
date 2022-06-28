@@ -26,9 +26,11 @@ inThisBuild(
 )
 
 lazy val root = (project in file(".")).settings(
-  name                      := "muse",
-  Compile / run / mainClass := Some(mainMethod),
-  reStart / mainClass       := Some(mainMethod),
+  name                             := "muse",
+  Compile / run / mainClass        := Some(mainMethod),
+  reStart / mainClass              := Some(mainMethod),
+  assembly / mainClass             := Some(mainMethod),
+  assembly / assemblyJarName       := "muse.jar",
   libraryDependencies ++= Seq(
     "dev.zio"                       %% "zio"                           % zio,
     "dev.zio"                       %% "zio-json"                      % zioJson,
@@ -61,5 +63,10 @@ lazy val root = (project in file(".")).settings(
   ),
   excludeDependencies ++= Seq(
     ExclusionRule("org.scala-lang.modules", "scala-collection-compat_2.13")
-  )
+  ),
+  assembly / assemblyMergeStrategy := {
+    case PathList("module-info.class") => MergeStrategy.discard
+    case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+    case _                             => MergeStrategy.first
+  }
 )
