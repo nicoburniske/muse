@@ -26,7 +26,7 @@ import zio.{Cause, LogLevel, Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
 
 import java.io.File
 
-val SCHEMA_FILE = "src/main/resources/schema.graphql"
+val SCHEMA_FILE = "src/main/resources/graphql/schema.graphql"
 val CONFIG_FILE = "src/main/resources/application.conf"
 
 object Main extends ZIOAppDefault {
@@ -83,6 +83,7 @@ object Main extends ZIOAppDefault {
     .tapError(e => ZIO.logErrorCause(s"Failed to start server: ${e.getMessage}", Cause.fail(e)))
     .exitCode
     .provide(
+      Scope.default,
       AsyncHttpClientZioBackend.layer(),
       zhttpLayer,
       flattenedAppConfigLayer,

@@ -1,5 +1,6 @@
 package muse.server.graphql.subgraph
 
+import caliban.schema.Annotations.GQLInterface
 import muse.domain.spotify
 import muse.server.graphql.resolver.{
   GetAlbum,
@@ -16,8 +17,11 @@ import zio.query.ZQuery
 /**
  * Represents a Spotify Entity that can be reviewed.
  */
+@GQLInterface
 sealed trait ReviewEntity {
   // TODO: incorporate id into each type.
+  def name: String
+  def id: String
 }
 
 case class Artist(
@@ -25,9 +29,9 @@ case class Artist(
     numFollowers: Int,
     genres: List[String],
     href: String,
-    id: String,
+    override val id: String,
     images: List[String],
-    name: String,
+    override val name: String,
     popularity: Int,
     // TODO: pagination.
     albums: ZQuery[SpotifyService, Throwable, List[Album]],
@@ -56,10 +60,10 @@ case class Album(
     albumType: String,
     externalUrls: Map[String, String],
     genres: List[String],
-    id: String,
+    override val id: String,
     images: List[String],
     label: Option[String],
-    name: String,
+    override val name: String,
     popularity: Option[Int],
     releaseDate: String,
     artists: ZQuery[SpotifyService, Throwable, List[Artist]],
@@ -93,9 +97,9 @@ case class Track(
     explicit: Boolean,
     externalUrls: Map[String, String],
     href: String,
-    id: String,
+    override val id: String,
     isPlayable: Option[Boolean],
-    name: String,
+    override val name: String,
     popularity: Option[Int],
     previewUrl: Option[String],
     trackNumber: Int,
@@ -130,9 +134,9 @@ case class Playlist(
     collaborative: Boolean,
     description: String,
     externalUrls: Map[String, String],
-    id: String,
+    override val id: String,
     images: List[String],
-    name: String,
+    override val name: String,
     owner: User,
     primaryColor: Option[String],
     public: Option[Boolean],

@@ -21,7 +21,7 @@ object ExampleQueries extends ZIOAppDefault {
                   "Adrian's Impeccable taste in music",
                   true,
                   EntityType.Playlist,
-                  "2nolvatuHnfTpHhXDOThrm"))
+                  "4sZt86qDfcYJl7gTttPjIL"))
       _    <- DatabaseOps.createReview(
                 "tuckingfypo1",
                 CreateReview(

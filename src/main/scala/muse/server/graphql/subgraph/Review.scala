@@ -20,7 +20,7 @@ final case class Review(
     comments: ZQuery[DatabaseOps, Throwable, List[Comment]],
     entityId: String,
     entityType: EntityType,
-    entity: ZQuery[SpotifyService, Throwable, ReviewEntity]
+    entity: ZQuery[SpotifyService, Nothing, ReviewEntity]
 )
 
 object Review {
@@ -34,6 +34,7 @@ object Review {
       GetReviewComments.query(r.id),
       r.entityId,
       r.entityType,
-      GetEntity.query(r.entityId, r.entityType)
+      // TODO: ensure this is ok
+      GetEntity.query(r.entityId, r.entityType).orDie
     )
 }

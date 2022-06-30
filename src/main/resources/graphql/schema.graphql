@@ -6,8 +6,6 @@ schema {
 "An instantaneous point on the time-line represented by a standard date time string"
 scalar Instant
 
-union ReviewEntity = Album | Artist | Playlist | Track
-
 enum EntityType {
   Album
   Artist
@@ -48,7 +46,13 @@ input UpdateReviewInput {
   isPublic: Boolean!
 }
 
-type Album {
+interface ReviewEntity {
+  name: String!
+  id: String!
+  externalUrls: [KVStringString!]!
+}
+
+type Album implements ReviewEntity {
   albumGroup: String
   albumType: String!
   externalUrls: [KVStringString!]!
@@ -63,7 +67,7 @@ type Album {
   tracks: [Track!]
 }
 
-type Artist {
+type Artist implements ReviewEntity {
   externalUrls: [KVStringString!]!
   numFollowers: Int!
   genres: [String!]!
@@ -106,7 +110,7 @@ type Mutations {
   updateComment(input: UpdateCommentInput!): Boolean
 }
 
-type Playlist {
+type Playlist implements ReviewEntity {
   collaborative: Boolean!
   description: String!
   externalUrls: [KVStringString!]!
@@ -141,7 +145,7 @@ type Review {
   comments: [Comment!]
   entityId: String!
   entityType: EntityType!
-  entity: ReviewEntity
+  entity: ReviewEntity!
 }
 
 type SearchResult {
@@ -161,7 +165,7 @@ type SpotifyProfile {
   numFollowers: Int
 }
 
-type Track {
+type Track implements ReviewEntity {
   album: Album
   artists: [Artist!]
   discNumber: Int!
