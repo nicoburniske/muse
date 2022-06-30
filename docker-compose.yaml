@@ -21,6 +21,7 @@ services:
       - SPOTIFY_CLIENT_ID
       - SPOTIFY_CLIENT_SECRET
     build:
+      context: .
       dockerfile: Dockerfile
     ports:
       - "8883:8883"
