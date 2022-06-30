@@ -1,7 +1,12 @@
 package muse.utils
 
 import zio.ZIO
+import zio._
+import zio.nio.channels._
+import zio.nio.file._
 
+import java.io.IOException
+import java.nio.file.StandardOpenOption
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -21,4 +26,26 @@ object Utils {
 
   def addTimeLog[R, E, A](message: String)(z: ZIO[R, E, A]): ZIO[R, E, A] =
     z.timed.flatMap { case (d, r) => ZIO.logInfo(s"$message in ${d.toMillis}ms").as(r) }
+
+  /**
+   * Writes content to file at given path.
+   *
+   * @param path
+   *   string path to file
+   * @param content
+   *   the content to write to the file
+   * @return
+   *   a program that writes the content to the given file
+   */
+  def writeToFile(path: String, content: String): ZIO[Scope, IOException, Unit] = ZIO.scoped {
+    AsynchronousFileChannel
+      .open(
+        Path(path),
+        StandardOpenOption.WRITE
+      )
+      .flatMap { channel =>
+        val chunk = Chunk(content.getBytes: _*)
+        channel.writeChunk(chunk, 0L)
+      }
+  }
 }

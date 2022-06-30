@@ -15,9 +15,37 @@ enum EntityType {
   Track
 }
 
+input CreateCommentInput {
+  reviewId: ID!
+  parentCommentId: Int
+  comment: String
+  rating: Int
+  entityType: EntityType!
+  entityId: String!
+}
+
+input CreateReviewInput {
+  name: String!
+  isPublic: Boolean!
+  entityType: EntityType!
+  entityId: String!
+}
+
 input PaginationInput {
   first: Int!
   from: Int! = 0
+}
+
+input UpdateCommentInput {
+  commentId: Int!
+  comment: String
+  rating: Int
+}
+
+input UpdateReviewInput {
+  reviewId: ID!
+  name: String!
+  isPublic: Boolean!
 }
 
 type Album {
@@ -72,10 +100,10 @@ type KVStringString {
 }
 
 type Mutations {
-  createReview(name: String!, isPublic: Boolean!, entityType: EntityType!, entityId: String!): Review
-  createComment(reviewId: ID!, parentCommentId: Int, comment: String, rating: Int, entityType: EntityType!, entityId: String!): Comment
-  updateReview(reviewId: ID!, name: String!, isPublic: Boolean!): Boolean
-  updateComment(commentId: Int!, comment: String, rating: Int): Boolean
+  createReview(input: CreateReviewInput!): Review
+  createComment(input: CreateCommentInput!): Comment
+  updateReview(input: UpdateReviewInput!): Boolean
+  updateComment(input: UpdateCommentInput!): Boolean
 }
 
 type Playlist {
@@ -99,8 +127,8 @@ type PlaylistTrack {
 }
 
 type Queries {
-  user(id: String!): User
-  reviews(id: ID!): Review
+  user(id: String): User
+  review(id: ID!): Review
   search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, from: 0}): SearchResult
 }
 
@@ -155,4 +183,4 @@ type User {
   id: String!
   reviews: [Review!]
   spotifyProfile: SpotifyProfile
-}"
+}

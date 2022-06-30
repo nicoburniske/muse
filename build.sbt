@@ -34,6 +34,7 @@ lazy val root = (project in file(".")).settings(
   libraryDependencies ++= Seq(
     "dev.zio"                       %% "zio"                           % zio,
     "dev.zio"                       %% "zio-json"                      % zioJson,
+    "dev.zio"                       %% "zio-nio"                       % "2.0.0-RC7",
     // ZIO Config.
     "dev.zio"                       %% "zio-config"                    % zioConfig,
     "dev.zio"                       %% "zio-config-typesafe"           % zioConfig,

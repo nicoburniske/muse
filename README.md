@@ -8,7 +8,7 @@
   and [ZIO Http](https://github.com/dream11/zio-http)
     - Compile time GraphQL Schema Generation
     - GraphQL Schema Introspection and Apollo Tracing are supported
-    - See [Muse Schema](https://github.com/nicoburniske/muse/tree/main/src/main/resources/schema.graphql)
+    - See [Muse Schema](https://github.com/nicoburniske/muse/tree/main/src/main/resources/graphql/schema.graphql)
 - GraphQL Query Optimization with [ZIO Query](https://github.com/zio/zio-query)
 - [Spotify API](https://developer.spotify.com/documentation/web-api/) Client written in Tagless Final
   with [sttp client](https://github.com/softwaremill/sttp)

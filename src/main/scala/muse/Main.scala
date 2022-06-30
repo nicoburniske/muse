@@ -13,6 +13,7 @@ import muse.server.{Auth, MuseMiddleware}
 import muse.service.UserSessions
 import muse.service.persist.{DatabaseOps, QuillContext}
 import muse.service.spotify.SpotifyService
+import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zhttp.*
 import zhttp.http.*
@@ -25,9 +26,12 @@ import zio.{Cause, LogLevel, Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
 
 import java.io.File
 
+val SCHEMA_FILE = "src/main/resources/schema.graphql"
+val CONFIG_FILE = "src/main/resources/application.conf"
+
 object Main extends ZIOAppDefault {
   val appConfigLayer          =
-    TypesafeConfig.fromHoconFile(new File("src/main/resources/application.conf"), AppConfig.appDescriptor)
+    TypesafeConfig.fromHoconFile(new File(CONFIG_FILE), AppConfig.appDescriptor)
   val flattenedAppConfigLayer = appConfigLayer.flatMap { zlayer =>
     ZLayer.succeed(zlayer.get.spotify) ++ ZLayer.succeed(zlayer.get.sqlConfig)
   }
@@ -67,7 +71,7 @@ object Main extends ZIOAppDefault {
 
   val server = (for {
     interpreter       <- MuseGraphQL.interpreter
-    _                 <- ZIO.logInfo(MuseGraphQL.api.render) // TODO: write to file
+    _                 <- Utils.writeToFile(SCHEMA_FILE, MuseGraphQL.api.render)
     protectedEndpoints = catchUnauthorized(endpointsGraphQL(interpreter) ++ logoutEndpoint)
     _                 <- Server
                            .start(
