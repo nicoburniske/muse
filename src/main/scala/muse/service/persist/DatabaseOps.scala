@@ -6,7 +6,7 @@ import muse.domain.common.EntityType
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.table.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
 import zio.ZLayer.*
-import zio.{IO, ULayer, ZIO, ZLayer}
+import zio.{IO, TaskLayer, ZIO, ZLayer}
 
 import java.sql.{SQLException, Timestamp, Types}
 import java.time.Instant
@@ -118,7 +118,7 @@ object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, Low
     encoder(Types.INTEGER, (index, value, row) => row.setInt(index, value.ordinal))
 
   // TODO: move this somewhere else
-  val dataSourceLayer: ULayer[DataSource] = DataSourceLayer.fromPrefix("database").orDie
+  val dataSourceLayer: TaskLayer[DataSource] = DataSourceLayer.fromPrefix("database")
 }
 
 final case class DataServiceLive(d: DataSource) extends DatabaseOps {

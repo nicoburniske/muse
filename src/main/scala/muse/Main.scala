@@ -22,7 +22,9 @@ import zhttp.http.middleware.Cors.CorsConfig
 import zhttp.service.{ChannelFactory, EventLoopGroup, Server}
 import zio.config.typesafe.TypesafeConfig
 import zio.logging.*
-import zio.{Cause, LogLevel, Ref, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, Duration, LogLevel, Ref, Schedule, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
+import zio.Duration.*
+import zio.durationInt
 
 import java.io.File
 
@@ -40,7 +42,11 @@ object Main extends ZIOAppDefault {
     format = LogFormat.colored
   ) ++ removeDefaultLoggers
 
-  val dbLayer    = QuillContext.dataSourceLayer >>> DatabaseOps.live
+  // Exponential backoff retry strategy for connecting to Postgres DB.
+  val expUpTo10 = Schedule.exponential(1.second) && Schedule.recurs(10)
+  val dbLayer   = (QuillContext.dataSourceLayer >>> DatabaseOps.live).retry(expUpTo10)
+
+  // TODO: move to config file.
   val zhttpLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
 
   val config: CorsConfig =
