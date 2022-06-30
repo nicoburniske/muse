@@ -2,6 +2,9 @@ package muse.server.graphql
 
 import caliban.schema.Annotations.GQLDefault
 import muse.domain.common.EntityType
+import muse.domain.error.Unauthorized
+import muse.domain.session.UserSession
+import muse.server.MuseMiddleware.Auth
 import muse.server.graphql.Pagination.Default
 import muse.server.graphql.resolver.{GetReview, GetSearch, GetUser}
 import muse.server.graphql.subgraph.{Review, SearchResult, User}
@@ -11,7 +14,7 @@ import zio.query.ZQuery
 
 import java.util.UUID
 
-final case class UserArgs(id: String)
+final case class UserArgs(id: Option[String])
 
 final case class ReviewsArgs(id: UUID)
 
@@ -21,8 +24,8 @@ final case class SearchArgs(
     @GQLDefault(Default.Search.annotation) pagination: Option[Pagination])
 
 final case class Queries(
-    user: UserArgs => ZQuery[DatabaseOps, Throwable, User],
-    reviews: ReviewsArgs => ZQuery[DatabaseOps, Throwable, Option[Review]],
+    user: UserArgs => ZQuery[Auth[UserSession] & DatabaseOps, Throwable, User],
+    review: ReviewsArgs => ZQuery[DatabaseOps, Throwable, Option[Review]],
     search: SearchArgs => ZQuery[SpotifyService, Throwable, SearchResult])
 
 object Queries {

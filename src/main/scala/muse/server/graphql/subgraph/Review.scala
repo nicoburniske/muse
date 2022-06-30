@@ -28,7 +28,7 @@ object Review {
     Review(
       r.id,
       r.createdAt,
-      GetUser.query(r.creatorId),
+      GetUser.queryByUserId(r.creatorId),
       r.reviewName,
       r.isPublic,
       GetReviewComments.query(r.id),

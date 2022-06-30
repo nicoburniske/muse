@@ -34,7 +34,7 @@ object Comment {
     r.updatedAt,
     r.parentCommentId,
     r.commenter,
-    GetUser.query(r.commenter),
+    GetUser.queryByUserId(r.commenter),
     r.comment,
     r.rating,
     r.entityId,
