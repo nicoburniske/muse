@@ -17,14 +17,20 @@ type MutationEnv = Auth[UserSession] & DatabaseOps & SpotifyService
 // TODO: add sharing.
 // TODO: add checking for what constitutes a valid comment. What does rating represent?
 final case class Mutations(
-    createReview: CreateReview => ZIO[MutationEnv, Throwable, Review],
-    createComment: CreateComment => ZIO[MutationEnv, Throwable, Comment],
-    updateReview: UpdateReview => ZIO[MutationEnv, Throwable, Boolean],
-    updateComment: UpdateComment => ZIO[MutationEnv, Throwable, Boolean]
+    createReview: Input[CreateReview] => ZIO[MutationEnv, Throwable, Review],
+    createComment: Input[CreateComment] => ZIO[MutationEnv, Throwable, Comment],
+    updateReview: Input[UpdateReview] => ZIO[MutationEnv, Throwable, Boolean],
+    updateComment: Input[UpdateComment] => ZIO[MutationEnv, Throwable, Boolean]
 )
 
+final case class Input[T](input: T)
+
 object Mutations {
-  val live = Mutations(createReview, createComment, updateReview, updateComment)
+  val live = Mutations(
+    i => createReview(i.input),
+    i => createComment(i.input),
+    i => updateReview(i.input),
+    i => updateComment(i.input))
 
   def createReview(create: CreateReview) =
     for {
