@@ -3,7 +3,14 @@ package muse.service.persist
 import io.getquill.*
 import io.getquill.context.ZioJdbc.*
 import muse.domain.common.EntityType
-import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
+import muse.domain.mutate.{
+  CreateComment,
+  CreateReview,
+  DeleteComment,
+  DeleteReview,
+  UpdateComment,
+  UpdateReview
+}
 import muse.domain.table.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
 import zio.ZLayer.*
 import zio.{IO, TaskLayer, ZIO, ZLayer}
@@ -43,13 +50,22 @@ trait DatabaseOps {
   def updateComment(comment: UpdateComment): IO[SQLException, Unit]
 
   /**
+   * Delete!
+   *
+   * Returns whether a record was deleted.
+   */
+  def deleteReview(d: DeleteReview): IO[SQLException, Boolean]
+  def deleteComment(d: DeleteComment): IO[SQLException, Boolean]
+
+  /**
    * Permissions!
    */
   def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean]
   def canViewReview(userId: String, reviewId: UUID): IO[SQLException, Boolean]
   def canModifyReview(userId: String, reviewId: UUID): IO[SQLException, Boolean]
-  def canModifyComment(userId: String, commentId: Int): IO[SQLException, Boolean]
-  // TODO: delete and sharing methods.
+  def canModifyComment(userId: String, reviewId: UUID, commentId: Int): IO[SQLException, Boolean]
+
+  // TODO: sharing methods.
 }
 
 object DatabaseOps {
@@ -86,14 +102,20 @@ object DatabaseOps {
   def updateComment(comment: UpdateComment) =
     ZIO.serviceWithZIO[DatabaseOps](_.updateComment(comment))
 
+  def deleteReview(d: DeleteReview) =
+    ZIO.serviceWithZIO[DatabaseOps](_.deleteReview(d))
+
+  def deleteComment(d: DeleteComment) =
+    ZIO.serviceWithZIO[DatabaseOps](_.deleteComment(d))
+
   def canViewReview(userId: String, reviewId: UUID) =
     ZIO.serviceWithZIO[DatabaseOps](_.canViewReview(userId, reviewId))
 
   def canModifyReview(userId: String, reviewId: UUID) =
     ZIO.serviceWithZIO[DatabaseOps](_.canModifyReview(userId, reviewId))
 
-  def canModifyComment(userId: String, commentId: Int) =
-    ZIO.serviceWithZIO[DatabaseOps](_.canModifyComment(userId, commentId))
+  def canModifyComment(userId: String, reviewId: UUID, commentId: Int) =
+    ZIO.serviceWithZIO[DatabaseOps](_.canModifyComment(userId, reviewId, commentId))
 
   def canMakeComment(userId: String, reviewId: UUID) =
     ZIO.serviceWithZIO[DatabaseOps](_.canMakeComment(userId, reviewId))
@@ -244,11 +266,23 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
   override def updateComment(c: UpdateComment) = run {
     comments
       .filter(_.id == lift(c.commentId))
+      .filter(_.reviewId == lift(c.reviewId))
       .update(
         _.comment -> lift(c.comment),
         _.rating  -> lift(c.rating)
       )
   }.provide(layer).unit
+
+  /**
+   * Delete!
+   */
+  def deleteReview(delete: DeleteReview) = run {
+    reviews.filter(_.id == lift(delete.id)).delete
+  }.provide(layer).map(_ > 0)
+
+  def deleteComment(d: DeleteComment) = run {
+    comments.filter(_.id == lift(d.commentId)).filter(_.reviewId == lift(d.reviewId)).delete
+  }.provide(layer).map(_ > 0)
 
   /**
    * Permissions logic.
@@ -280,8 +314,12 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
     reviewCreator(lift(reviewId)).contains(lift(userId))
   }.provide(layer)
 
-  override def canModifyComment(userId: String, commentId: Int) = run {
-    comments.filter(_.id == lift(commentId)).map(_.commenter).contains(lift(userId))
+  override def canModifyComment(userId: String, reviewId: UUID, commentId: Int) = run {
+    comments
+      .filter(_.id == lift(commentId))
+      .filter(_.reviewId == lift(reviewId))
+      .map(_.commenter)
+      .contains(lift(userId))
   }.provide(layer)
 
   override def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean] = run {
