@@ -25,7 +25,7 @@ object GetTrack {
               .getTrack(head.id)
               .fold(
                 e => CompletedRequestMap.empty.insert(head)(Left(e)),
-                t => CompletedRequestMap.empty.insert(head)(Right(Track.fromSpotify(_)))
+                t => CompletedRequestMap.empty.insert(head)(Right(Track.fromSpotify(t)))
               )
           )
         case reqs        =>
