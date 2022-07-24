@@ -8,15 +8,11 @@ import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.json.*
 import zio.{Task, ZIO}
 
-trait SpotifyAuthService {
-  def getAuthTokens(code: String): Task[InitialAuthData]
-}
-
-object SpotifyAuthServiceLive {
+object SpotifyAuthService {
   type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory & UserSessions
 
   val ENDPOINT = URL(
-    Path.decode("api/token"),
+    Path.decode("/api/token"),
     URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
   )
 

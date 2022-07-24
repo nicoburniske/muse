@@ -8,7 +8,7 @@ import zio.Console.*
 
 object ExampleQueries extends ZIOAppDefault {
   override def run = {
-    val layers  = ZEnv.live ++ (QuillContext.dataSourceLayer >+> DatabaseOps.live)
+    val layers  = QuillContext.dataSourceLayer >+> DatabaseOps.live
     val program = for {
       user <- DatabaseOps.getUserReviews("tuckingfypo1")
       _    <- printLine(s"User: $user")

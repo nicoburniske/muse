@@ -7,7 +7,6 @@ import muse.domain.spotify.*
 import muse.service.UserSessions
 import muse.utils.Givens.given
 import sttp.client3.SttpBackend
-import sttp.client3.asynchttpclient.zio.SttpClient
 import sttp.model.StatusCode
 import zio.{Schedule, Task, ZIO, ZLayer}
 

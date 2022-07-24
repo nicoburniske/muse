@@ -16,9 +16,7 @@ object GetReview {
 
   val ReviewDataSource: DataSource[DatabaseOps, GetReview] =
     DataSource.fromFunctionZIO("ReviewDataSource") { g =>
-      DatabaseOps.getReview(g.reviewId).map {
-        _.map(Review.fromTable)
-      }
+      DatabaseOps.getReview(g.reviewId).map(_.map(Review.fromTable))
     }
 
 }

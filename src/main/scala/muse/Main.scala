@@ -22,7 +22,7 @@ import zhttp.http.middleware.Cors.CorsConfig
 import zhttp.service.{ChannelFactory, EventLoopGroup, Server}
 import zio.config.typesafe.TypesafeConfig
 import zio.logging.*
-import zio.{Cause, Duration, LogLevel, Ref, Schedule, Scope, Task, ZEnv, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, Duration, LogLevel, Ref, Schedule, Scope, Task, ZIO, ZIOAppDefault, ZLayer}
 import zio.Duration.*
 import zio.durationInt
 
@@ -56,33 +56,22 @@ object Main extends ZIOAppDefault {
 
   def endpointsGraphQL(interpreter: GraphQLInterpreter[MuseGraphQL.Env, CalibanError]) =
     MuseMiddleware.UserSessionAuth(Http.collectHttp[Request] {
-      case _ -> !! / "api" / "graphql" =>
-        ZHttpAdapter.makeHttpService(interpreter)
+      case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter)
     })
 
-  val logoutEndpoint = MuseMiddleware.UserSessionAuth(Http.collectZIO[Request] {
-    case Method.POST -> !! / "logout" =>
-      for {
-        session <- MuseMiddleware.Auth.currentUser[UserSession]
-        _       <- UserSessions.deleteUserSession(session.sessionCookie)
-        _       <- ZIO.logInfo(
-                     s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
-      } yield Response.ok
-  })
-
-  def catchUnauthorized[R](http: Http[R, Throwable, Request, Response]) =
-    http.catchSome { case u: Unauthorized => u.http }.tapErrorZIO {
-      case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e))
-    }
+  def catchUnauthorizedAndLogErrors[R](http: Http[R, Throwable, Request, Response]) =
+    http
+      .catchSome { case u: Unauthorized => u.http }
+      .tapErrorZIO { case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
 
   val server = (for {
     interpreter       <- MuseGraphQL.interpreter
     _                 <- Utils.writeToFile(SCHEMA_FILE, MuseGraphQL.api.render)
-    protectedEndpoints = catchUnauthorized(endpointsGraphQL(interpreter) ++ logoutEndpoint)
+    protectedEndpoints = catchUnauthorizedAndLogErrors(endpointsGraphQL(interpreter) ++ Auth.logoutEndpoint)
     _                 <- Server
                            .start(
                              8883,
-                             (Auth.endpoints ++ protectedEndpoints) @@ cors(config)
+                             (Auth.loginEndpoints ++ protectedEndpoints) @@ cors(config)
                            )
                            .forever
   } yield ())

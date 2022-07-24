@@ -5,7 +5,7 @@ import muse.domain.session.UserSession
 import muse.domain.spotify.InitialAuthData
 import muse.domain.table.AppUser
 import muse.server.MuseMiddleware.Auth
-import muse.service.spotify.SpotifyAuthServiceLive
+import muse.service.spotify.SpotifyAuthService
 import muse.service.{RequestProcessor, UserSessions}
 import sttp.client3.SttpBackend
 import zhttp.http.*
@@ -19,7 +19,7 @@ object Auth {
 
   type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory & UserSessions
 
-  val endpoints = Http
+  val loginEndpoints = Http
     .collectZIO[Request] {
       case Method.GET -> !! / "login"          =>
         generateRedirectUrl.map(url => Response.redirect(url.encode, false))
@@ -36,7 +36,7 @@ object Auth {
                 data = HttpData.fromString("Missing 'code' query parameter")))
           } { code =>
             for {
-              authData    <- SpotifyAuthServiceLive.getAuthTokens(code)
+              authData    <- SpotifyAuthService.getAuthTokens(code)
               spotifyUser <- RequestProcessor.handleUserLogin(authData)
               session     <- UserSessions.addUserSession(spotifyUser.id, authData)
               _           <- ZIO.logInfo(session)
@@ -50,13 +50,23 @@ object Auth {
     }
     .tapErrorZIO { case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
     .catchAll(error => Http.error(HttpError.InternalServerError(cause = Some(error))))
+
   // @@ csrfGenerate() // TODO: get this working?
+  val logoutEndpoint = MuseMiddleware.UserSessionAuth(Http.collectZIO[Request] {
+    case Method.POST -> !! / "logout" =>
+      for {
+        session <- MuseMiddleware.Auth.currentUser[UserSession]
+        _       <- UserSessions.deleteUserSession(session.sessionCookie)
+        _       <- ZIO.logInfo(
+                     s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
+      } yield Response.ok
+  })
 
   val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {
     c     <- ZIO.service[SpotifyConfig]
     state <- Random.nextUUID
   } yield URL(
-    Path.decode("authorize"),
+    Path.decode("/authorize"),
     URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443),
     Map(
       "response_type" -> List("code"),

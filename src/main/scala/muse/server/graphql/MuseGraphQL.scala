@@ -8,7 +8,7 @@ import caliban.wrappers.ApolloTracing.apolloTracing
 import caliban.wrappers.Wrappers.printErrors
 import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
-import muse.domain.error.{Forbidden, InvalidEntity, Unauthorized}
+import muse.domain.error.{Forbidden, InvalidEntity, InvalidUser, Unauthorized}
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify
@@ -78,6 +78,7 @@ object MuseGraphQL {
   val interpreter = api.interpreter.map(errorHandler(_))
 
   // TODO: Consider handling Spotify 404 error.
+  // TODO: Incorporate Custom Error Super type.
   private def errorHandler[R](
       interpreter: GraphQLInterpreter[R, CalibanError]
   ): GraphQLInterpreter[R, CalibanError] = interpreter.mapError {
@@ -100,6 +101,13 @@ object MuseGraphQL {
         ObjectValue(
           List(
             "errorCode" -> StringValue("INVALID_ENTITY"),
+            "message"   -> StringValue(n.getMessage)
+          ))))
+    case err @ ExecutionError(_, _, _, Some(n: InvalidUser), _)   =>
+      err.copy(extensions = Some(
+        ObjectValue(
+          List(
+            "errorCode" -> StringValue("INVALID_USER"),
             "message"   -> StringValue(n.getMessage)
           ))))
     case err @ ExecutionError(_, _, _, Some(e: Throwable), _)     =>

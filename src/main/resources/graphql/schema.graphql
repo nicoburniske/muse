@@ -6,6 +6,11 @@ schema {
 "An instantaneous point on the time-line represented by a standard date time string"
 scalar Instant
 
+enum AccessLevel {
+  Collaborator
+  Viewer
+}
+
 enum EntityType {
   Album
   Artist
@@ -29,13 +34,29 @@ input CreateReviewInput {
   entityId: String!
 }
 
+input DeleteCommentInput {
+  reviewId: ID!
+  commentId: Int!
+}
+
+input DeleteReviewInput {
+  id: ID!
+}
+
 input PaginationInput {
   first: Int!
   from: Int! = 0
 }
 
+input ShareReviewInput {
+  reviewId: ID!
+  userId: String!
+  access: AccessLevel!
+}
+
 input UpdateCommentInput {
   commentId: Int!
+  reviewId: ID!
   comment: String
   rating: Int
 }
@@ -108,6 +129,9 @@ type Mutations {
   createComment(input: CreateCommentInput!): Comment
   updateReview(input: UpdateReviewInput!): Boolean
   updateComment(input: UpdateCommentInput!): Boolean
+  deleteReview(input: DeleteReviewInput!): Boolean
+  deleteComment(input: DeleteCommentInput!): Boolean
+  shareReview(input: ShareReviewInput!): Boolean
 }
 
 type Playlist implements ReviewEntity {

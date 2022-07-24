@@ -3,8 +3,8 @@ package muse.server
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.service.UserSessions
-import muse.service.spotify.SpotifyAuthServiceLive.AuthEnv
-import muse.service.spotify.{SpotifyAPI, SpotifyAuthServiceLive, SpotifyService}
+import muse.service.spotify.SpotifyAuthService.AuthEnv
+import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService}
 import muse.utils.Utils
 import sttp.client3.SttpBackend
 import zhttp.http.{Http, HttpApp, HttpData, HttpError, Request, Response, Status}
@@ -66,7 +66,7 @@ object MuseMiddleware {
           ZIO.logInfo(s"Session Retrieved: ${session.conciseString}").as(session)
         else
           for {
-            authData      <- SpotifyAuthServiceLive.requestNewAccessToken(session.refreshToken)
+            authData      <- SpotifyAuthService.requestNewAccessToken(session.refreshToken)
             newExpiration <- Utils.getExpirationInstant(authData.expiresIn)
             newSession    <- UserSessions.updateUserSession(session.sessionCookie) {
                                _.copy(accessToken = authData.accessToken, expiration = newExpiration)

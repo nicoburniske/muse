@@ -8,6 +8,7 @@ import muse.domain.mutate.{
   CreateReview,
   DeleteComment,
   DeleteReview,
+  ShareReview,
   UpdateComment,
   UpdateReview
 }
@@ -46,8 +47,9 @@ trait DatabaseOps {
   /**
    * Update!
    */
-  def updateReview(review: UpdateReview): IO[SQLException, Unit]
-  def updateComment(comment: UpdateComment): IO[SQLException, Unit]
+  def updateReview(review: UpdateReview): IO[SQLException, Boolean]
+  def updateComment(comment: UpdateComment): IO[SQLException, Boolean]
+  def shareReview(share: ShareReview): IO[SQLException, Boolean]
 
   /**
    * Delete!
@@ -101,6 +103,9 @@ object DatabaseOps {
 
   def updateComment(comment: UpdateComment) =
     ZIO.serviceWithZIO[DatabaseOps](_.updateComment(comment))
+
+  def shareReview(share: ShareReview) =
+    ZIO.serviceWithZIO[DatabaseOps](_.shareReview(share))
 
   def deleteReview(d: DeleteReview) =
     ZIO.serviceWithZIO[DatabaseOps](_.deleteReview(d))
@@ -261,7 +266,8 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
         _.reviewName -> lift(r.name),
         _.isPublic   -> lift(r.isPublic)
       )
-  }.provide(layer).unit
+  }.provide(layer)
+    .map(_ > 0)
 
   override def updateComment(c: UpdateComment) = run {
     comments
@@ -271,18 +277,30 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
         _.comment -> lift(c.comment),
         _.rating  -> lift(c.rating)
       )
-  }.provide(layer).unit
+  }.provide(layer)
+    .map(_ > 0)
+
+  override def shareReview(share: ShareReview) = run {
+    reviewAccess.insert(
+      _.reviewId    -> lift(share.reviewId),
+      _.userId      -> lift(share.userId),
+      _.accessLevel -> lift(share.access)
+    )
+  }.provide(layer)
+    .map(_ > 0)
 
   /**
    * Delete!
    */
   def deleteReview(delete: DeleteReview) = run {
     reviews.filter(_.id == lift(delete.id)).delete
-  }.provide(layer).map(_ > 0)
+  }.provide(layer)
+    .map(_ > 0)
 
   def deleteComment(d: DeleteComment) = run {
     comments.filter(_.id == lift(d.commentId)).filter(_.reviewId == lift(d.reviewId)).delete
-  }.provide(layer).map(_ > 0)
+  }.provide(layer)
+    .map(_ > 0)
 
   /**
    * Permissions logic.
