@@ -152,7 +152,7 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
 
   import QuillContext.{*, given}
 
-  val layer = ZLayer.fromFunction(() => d)
+  val layer = ZLayer.succeed(d)
 
   inline def users = querySchema[AppUser]("muse.app_user")
 
@@ -298,7 +298,10 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
     .map(_ > 0)
 
   def deleteComment(d: DeleteComment) = run {
-    comments.filter(_.id == lift(d.commentId)).filter(_.reviewId == lift(d.reviewId)).delete
+    comments
+      .filter(_.id == lift(d.commentId))
+      .filter(_.reviewId == lift(d.reviewId))
+      .delete
   }.provide(layer)
     .map(_ > 0)
 
@@ -324,9 +327,19 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
   inline def allUsersWithWriteAccess(inline reviewId: UUID) =
     reviewCreator(reviewId) union usersWithWriteAccess(reviewId)
 
-  override def canViewReview(userId: String, reviewId: UUID) = run {
-    allReviewUsersWithViewAccess(lift(reviewId)).filter(_ == lift(userId))
-  }.map(_.nonEmpty).provide(layer)
+  inline def isReviewPublic(inline reviewId: UUID): EntityQuery[Boolean] =
+    reviews.filter(_.id == lift(reviewId)).map(_.isPublic)
+
+  // TODO: can this be more efficient / Single query?
+  override def canViewReview(userId: String, reviewId: UUID) =
+    run(isReviewPublic(reviewId)).flatMap {
+      case true  => ZIO.succeed(true)
+      case false =>
+        run {
+          allReviewUsersWithViewAccess(lift(reviewId))
+            .filter(_ == lift(userId))
+        }.map(_.nonEmpty)
+    }
 
   override def canModifyReview(userId: String, reviewId: UUID) = run {
     reviewCreator(lift(reviewId)).contains(lift(userId))

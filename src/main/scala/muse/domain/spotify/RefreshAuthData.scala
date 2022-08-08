@@ -8,7 +8,8 @@ import java.time.temporal.ChronoUnit
 final case class RefreshAuthData(
     @jsonField("access_token") accessToken: String,
     @jsonField("token_type") tokenType: String,
-    scope: String,
+    // If no scopes requested, then no scopes will be received.
+    scope: Option[String],
     @jsonField("expires_in") expiresIn: Int)
 
 object RefreshAuthData {
