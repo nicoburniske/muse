@@ -127,6 +127,9 @@ object DatabaseOps {
 }
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
+  // TODO: move this somewhere else
+  val dataSourceLayer: TaskLayer[DataSource] = DataSourceLayer.fromPrefix("database")
+
   given instantDecoder: Decoder[Instant] = decoder((index, row, session) => row.getTimestamp(index).toInstant)
 
   given instantEncoder: Encoder[Instant] =
@@ -143,9 +146,6 @@ object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, Low
 
   given reviewAccessEncoder: Encoder[AccessLevel] =
     encoder(Types.INTEGER, (index, value, row) => row.setInt(index, value.ordinal))
-
-  // TODO: move this somewhere else
-  val dataSourceLayer: TaskLayer[DataSource] = DataSourceLayer.fromPrefix("database")
 }
 
 final case class DataServiceLive(d: DataSource) extends DatabaseOps {

@@ -29,6 +29,11 @@ object Utils {
       case (d, r) =>
         ZIO.logInfo(s"$message in ${d.toMillis}ms").as(r)
     }
+
+    def addTimeLog(message: String, resultToString: A => String) = z.timed.flatMap {
+      case (d, r) =>
+        ZIO.logInfo(s"$message ${resultToString(r)} in ${d.toMillis}ms").as(r)
+    }
   }
 
   /**

@@ -25,7 +25,7 @@ object GetArtist {
             .fold(
               e => CompletedRequestMap.empty.insert(head)(Left(e)),
               a => CompletedRequestMap.empty.insert(head)(Right(Artist.fromSpotify(a))))
-            .addTimeLog("Retrieved Single Artist")
+            .addTimeLog("Retrieved Artist")
         case _ =>
           ZIO
             .foreachPar(reqs.grouped(MAX_ARTISTS_PER_REQUEST).toVector) { reqs =>
@@ -45,7 +45,7 @@ object GetArtist {
                       }
               }
             }
-            .addTimeLog("Retrieved multiple Artists")
+            .addTimeLog(s"Retrieved Artists ${reqs.size}")
     }
 
 }

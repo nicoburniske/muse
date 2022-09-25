@@ -25,7 +25,7 @@ object GetAlbum {
             .fold(
               e => CompletedRequestMap.empty.insert(head)(Left(e)),
               a => CompletedRequestMap.empty.insert(head)(Right(Album.fromSpotify(a))))
-            .addTimeLog("Retrieved album")
+            .addTimeLog("Retrieved Album")
         case _ =>
           ZIO
             .foreachPar(reqs.grouped(MAX_ALBUMS_PER_REQUEST).toVector) { reqs =>
@@ -39,12 +39,13 @@ object GetAlbum {
                     case Right(albums) =>
                       val grouped = albums.map(Album.fromSpotify).groupBy(_.id).view.mapValues(_.head)
                       reqs.foldLeft(map) { (map, req) =>
-                        val result = grouped.get(req.id).fold(Left(InvalidEntity(req.id, EntityType.Album)))(Right(_))
+                        val result =
+                          grouped.get(req.id).fold(Left(InvalidEntity(req.id, EntityType.Album)))(Right(_))
                         map.insert(req)(result)
                       }
               }
             }
-            .addTimeLog("Retrieved multiple albums")
+            .addTimeLog(s"Retrieved Albums ${reqs.size}")
     }
 
 }

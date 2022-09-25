@@ -31,46 +31,19 @@ import java.io.File
 val SCHEMA_FILE = "src/main/resources/graphql/schema.graphql"
 
 object Main extends ZIOAppDefault {
-  val logger = console(
-    logLevel = LogLevel.Info,
-    format = LogFormat.colored
-  ) ++ removeDefaultLoggers
+  val server = for {
+    interpreter <- MuseGraphQL.interpreter
+    _ <- Utils.writeToFile(SCHEMA_FILE, MuseGraphQL.api.render)
+    protectedEndpoints = createProtectedEndpoints(interpreter)
+    _ <- Server
+      .start(
+        8883,
+        (Auth.loginEndpoints ++ protectedEndpoints) @@ cors(config)
+      )
+      .forever
+  } yield ()
 
-  // Exponential backoff retry strategy for connecting to Postgres DB.
-  val expUpTo10 = Schedule.exponential(1.second) && Schedule.recurs(10)
-  val dbLayer   = (QuillContext.dataSourceLayer >>> DatabaseOps.live).retry(expUpTo10)
-
-  // TODO: move to config file.
-  val zhttpLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
-
-  val config: CorsConfig =
-    CorsConfig(
-      allowedOrigins = _ == "localhost",
-      allowedMethods = Some(Set(Method.POST, Method.GET, Method.PUT, Method.DELETE)))
-
-  def endpointsGraphQL(interpreter: GraphQLInterpreter[MuseGraphQL.Env, CalibanError]) =
-    MuseMiddleware.UserSessionAuth(Http.collectHttp[Request] {
-      case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter)
-    })
-
-  def catchUnauthorizedAndLogErrors[R](http: Http[R, Throwable, Request, Response]) =
-    http
-      .catchSome { case u: Unauthorized => u.http }
-      .tapErrorZIO { case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
-
-  val server = (for {
-    interpreter       <- MuseGraphQL.interpreter
-    _                 <- Utils.writeToFile(SCHEMA_FILE, MuseGraphQL.api.render)
-    protectedEndpoints = catchUnauthorizedAndLogErrors(endpointsGraphQL(interpreter) ++ Auth.logoutEndpoint)
-    _                 <- Server
-                           .start(
-                             8883,
-                             (Auth.loginEndpoints ++ protectedEndpoints) @@ cors(config)
-                           )
-                           .forever
-  } yield ())
-    .tapError(e => ZIO.logErrorCause(s"Failed to start server: ${e.getMessage}", Cause.fail(e)))
-    .exitCode
+  override def run = server
     .provide(
       Scope.default,
       AsyncHttpClientZioBackend.layer(),
@@ -81,6 +54,37 @@ object Main extends ZIOAppDefault {
       UserSessions.live,
       MuseMiddleware.FiberUserSession
     )
+    .tapError(e => ZIO.logErrorCause(s"Failed to start server: ${e.getMessage}", Cause.fail(e)))
+    .exitCode
 
-  override def run = server
+  val logger = console(
+    logLevel = LogLevel.Info,
+    format = LogFormat.colored
+  ) ++ removeDefaultLoggers
+
+  // Exponential backoff retry strategy for connecting to Postgres DB.
+  val expUpTo10 = Schedule.exponential(1.second) && Schedule.recurs(10)
+  val dbLayer = (QuillContext.dataSourceLayer >>> DatabaseOps.live).retry(expUpTo10)
+
+  // TODO: move to config file.
+  val zhttpLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
+
+  lazy val config: CorsConfig =
+    CorsConfig(
+      allowedOrigins = _ == "localhost",
+      allowedMethods = Some(Set(Method.POST, Method.GET, Method.PUT, Method.DELETE)))
+
+  def createProtectedEndpoints(interpreter: GraphQLInterpreter[MuseGraphQL.Env, CalibanError]) =
+    catchUnauthorizedAndLogErrors(endpointsGraphQL(interpreter) ++ Auth.logoutEndpoint)
+
+  def catchUnauthorizedAndLogErrors[R](http: Http[R, Throwable, Request, Response]) =
+    http
+      .catchSome { case u: Unauthorized => u.http }
+      .tapErrorZIO { case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
+
+  def endpointsGraphQL(interpreter: GraphQLInterpreter[MuseGraphQL.Env, CalibanError]) =
+    MuseMiddleware.UserSessionAuth(Http.collectHttp[Request] {
+      case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter)
+    })
+
 }

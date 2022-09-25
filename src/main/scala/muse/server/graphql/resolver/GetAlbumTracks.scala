@@ -34,5 +34,5 @@ object GetAlbumTracks {
               .map(_.map(t => Track.fromSpotify(t, Some(albumId))))
           }
           .map(_.flatten.toList)
-    }).addTimeLog("Retrieved album tracks"))
+    }).addTimeLog("Retrieved Album Tracks", retrievedTracks => retrievedTracks.size.toString))
 }
