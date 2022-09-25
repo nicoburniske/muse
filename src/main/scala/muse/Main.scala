@@ -22,25 +22,23 @@ import zhttp.http.middleware.Cors.CorsConfig
 import zhttp.service.{ChannelFactory, EventLoopGroup, Server}
 import zio.config.typesafe.TypesafeConfig
 import zio.logging.*
-import zio.{Cause, Duration, LogLevel, Ref, Schedule, Scope, Task, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task, ZIO, ZIOAppDefault, ZLayer}
 import zio.Duration.*
 import zio.durationInt
-
-import java.io.File
 
 val SCHEMA_FILE = "src/main/resources/graphql/schema.graphql"
 
 object Main extends ZIOAppDefault {
   val server = for {
-    interpreter <- MuseGraphQL.interpreter
-    _ <- Utils.writeToFile(SCHEMA_FILE, MuseGraphQL.api.render)
+    interpreter       <- MuseGraphQL.interpreter
+    _                 <- Utils.writeToFile(SCHEMA_FILE, MuseGraphQL.api.render)
     protectedEndpoints = createProtectedEndpoints(interpreter)
-    _ <- Server
-      .start(
-        8883,
-        (Auth.loginEndpoints ++ protectedEndpoints) @@ cors(config)
-      )
-      .forever
+    _                 <- Server
+                           .start(
+                             8883,
+                             (Auth.loginEndpoints ++ protectedEndpoints) @@ cors(config)
+                           )
+                           .forever
   } yield ()
 
   override def run = server
@@ -64,7 +62,7 @@ object Main extends ZIOAppDefault {
 
   // Exponential backoff retry strategy for connecting to Postgres DB.
   val expUpTo10 = Schedule.exponential(1.second) && Schedule.recurs(10)
-  val dbLayer = (QuillContext.dataSourceLayer >>> DatabaseOps.live).retry(expUpTo10)
+  val dbLayer   = (QuillContext.dataSourceLayer >>> DatabaseOps.live).retry(expUpTo10)
 
   // TODO: move to config file.
   val zhttpLayer = EventLoopGroup.auto(8) ++ ChannelFactory.auto
@@ -86,5 +84,4 @@ object Main extends ZIOAppDefault {
     MuseMiddleware.UserSessionAuth(Http.collectHttp[Request] {
       case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter)
     })
-
 }

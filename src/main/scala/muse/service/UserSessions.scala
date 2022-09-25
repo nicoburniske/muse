@@ -4,7 +4,10 @@ import muse.domain.session.UserSession
 import muse.domain.spotify.AuthCodeFlowData
 import muse.utils.Utils
 import zio.*
+import zio.json.*
+import zio.stream.{ZPipeline, ZStream}
 
+import java.io.IOException
 import java.sql.SQLException
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -17,8 +20,11 @@ trait UserSessions {
   def deleteUserSessionByUserId(userId: String): UIO[Unit]
   def updateUserSession(sessionId: String)(f: UserSession => UserSession): UIO[Option[UserSession]]
 
-  // TODO: should there be persistence?
-  def loadSessions: UIO[Unit]
+  /**
+   * Persistence.
+   */
+  def loadSessions: ZIO[Scope, Throwable, List[UserSession]]
+  def saveSessions: ZIO[Scope, IOException, Unit]
 
   final def getAccessToken(sessionId: String)  = getUserSession(sessionId).map(_.map(_.accessToken))
   final def getUserId(sessionId: String)       = getUserSession(sessionId).map(_.map(_.id))
@@ -26,7 +32,16 @@ trait UserSessions {
 }
 
 object UserSessions {
-  val live = ZLayer(Ref.Synchronized.make(Map.empty).map(UserSessionsLive.apply(_)))
+  val live = ZLayer.scoped {
+    ZIO.acquireRelease(
+      Ref
+        .Synchronized
+        .make(Map.empty)
+        .map(UserSessionsLive.apply(_))
+        // Load sessions from file. When scope closes, save the sessions to file.
+        .tap(_.loadSessions))(_.saveSessions
+      .catchAll(e => ZIO.logErrorCause(s"Failed to save sessions ${e.toString}", Cause.fail(e))))
+  }
 
   def addUserSession(userId: String, authData: AuthCodeFlowData) =
     ZIO.serviceWithZIO[UserSessions](_.addUserSession(userId, authData))
@@ -68,5 +83,39 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
     }
     .map(_.get(sessionId))
 
-  def loadSessions: UIO[Unit] = ???
+  val SESSIONS_FILE = "src/main/resources/userSessions.json"
+
+  def loadSessions: ZIO[Scope, Throwable, List[UserSession]] = for {
+    partitioned                 <- Utils
+                                     .readFile(SESSIONS_FILE)
+                                     .via(ZPipeline.splitLines)
+                                     .map(_.fromJson[UserSession])
+                                     .partitionEither(ZIO.succeed(_))
+    // Deconstruct tuple.
+    (errorStream, sessionStream) = partitioned
+
+    errorCount <- errorStream.runCount
+    _          <- ZIO.unless(errorCount == 0)(ZIO.logError(s"Could not load $errorCount sessions"))
+    result     <- sessionsR.updateAndGetZIO { sessionsInMem =>
+                    sessionStream.runFold(sessionsInMem)((sessions, s: UserSession) =>
+                      sessions
+                        .get(s.sessionCookie)
+                        // If is already a session loaded in memory for a given session cookie
+                        // ignore the session from file.
+                        .fold(sessions + (s.sessionCookie -> s))(_ => sessions))
+                  }
+    _          <- ZIO.logInfo(s"Successfully loaded ${result.size} session(s).")
+  } yield result.values.toList
+
+  override def saveSessions: ZIO[Scope, IOException, Unit] = for {
+    sessions <- sessionsR.get.map(_.values.toList)
+    stream    = ZStream
+                  .fromIterable(sessions)
+                  .map(_.toJson)
+                  .map(s => s + '\n')
+    count    <- stream.runCount
+    _        <- Utils.writeToFile(SESSIONS_FILE, stream)
+    _        <- ZIO.logInfo(s"Successfully saved $count sessions.")
+  } yield ()
+
 }

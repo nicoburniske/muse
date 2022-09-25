@@ -2,6 +2,7 @@ package muse.domain.session
 
 import muse.domain.session.UserSession.instantString
 
+import zio.json.{JsonCodec, DeriveJsonCodec}
 import java.time.{Instant, ZoneId}
 
 /**
@@ -29,6 +30,9 @@ final case class UserSession(
 }
 
 object UserSession {
-  private val z                         = ZoneId.of("America/New_York")
+  given userSessionCodec: JsonCodec[UserSession] = DeriveJsonCodec.gen[UserSession]
+
+  private val z = ZoneId.of("America/New_York")
+
   private def instantString(i: Instant) = i.atZone(z).toLocalTime.toString
 }
