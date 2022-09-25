@@ -1,7 +1,7 @@
 package muse.service.spotify
 
 import muse.config.SpotifyConfig
-import muse.domain.spotify.{InitialAuthData, RefreshAuthData}
+import muse.domain.spotify.{AuthCodeFlowData, ClientCredentialsFlowData, RefreshAuthData}
 import muse.service.UserSessions
 import zhttp.http.{HeaderValues, Headers, HttpData, Method, Path, Response, Scheme, URL}
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
@@ -16,32 +16,43 @@ object SpotifyAuthService {
     URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
   )
 
-  def getAuthTokens(code: String): ZIO[AuthEnv, Throwable, InitialAuthData] =
+  def getClientCredentials = for {
+    c <- ZIO.service[SpotifyConfig]
+    _ <- ZIO.debug(s"Spotify Config: $c")
+    body = Map("grant_type" -> "client_credentials")
+    response <- executePost(c, body)
+    body <- response.bodyAsString
+    authData <- deserializeBodyOrFail[ClientCredentialsFlowData](body)
+  } yield authData
+
+  // Authorization code flow.
+  def getAuthCode(authCode: String): ZIO[AuthEnv, Throwable, AuthCodeFlowData] =
     for {
-      response <- requestAccessToken(code)
-      body     <- response.bodyAsString
-      authData <- deserializeBodyOrFail[InitialAuthData](body)
+      response <- requestAccessToken(authCode)
+      body <- response.bodyAsString
+      authData <- deserializeBodyOrFail[AuthCodeFlowData](body)
     } yield authData
 
   def requestNewAccessToken(refreshToken: String): ZIO[AuthEnv, Throwable, RefreshAuthData] =
     for {
       response <- refreshAccessToken(refreshToken)
-      body     <- response.bodyAsString
+      body <- response.bodyAsString
       authData <- deserializeBodyOrFail[RefreshAuthData](body)
     } yield authData
 
-  private def deserializeBodyOrFail[T](body: String)(using decoder: JsonDecoder[T]) = body
-    .fromJson[T]
-    .fold(
-      e => ZIO.fail(SpotifyError.JsonError(e, body)),
-      ZIO.succeed(_)
-    )
+  private def deserializeBodyOrFail[T](body: String)(using decoder: JsonDecoder[T]) =
+    body
+      .fromJson[T]
+      .fold(
+        e => ZIO.fail(SpotifyError.JsonError(e, body)),
+        ZIO.succeed(_)
+      )
 
   def requestAccessToken(code: String): ZIO[AuthEnv, Throwable, Response] =
     ZIO.service[SpotifyConfig].flatMap { c =>
       val body = Map(
-        "grant_type"   -> "authorization_code",
-        "code"         -> code,
+        "grant_type" -> "authorization_code",
+        "code" -> code,
         "redirect_uri" -> c.redirectURI
       )
       executePost(c, body)

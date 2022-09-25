@@ -4,7 +4,7 @@ import caliban.*
 import caliban.CalibanError.{ExecutionError, ParsingError, ValidationError}
 import caliban.ResponseValue.ObjectValue
 import caliban.Value.StringValue
-import muse.config.{AppConfig, SpotifyConfig}
+import muse.config.AppConfig
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.table.AppUser
@@ -29,15 +29,9 @@ import zio.durationInt
 import java.io.File
 
 val SCHEMA_FILE = "src/main/resources/graphql/schema.graphql"
-val CONFIG_FILE = "src/main/resources/application.conf"
 
 object Main extends ZIOAppDefault {
-  val appConfigLayer          =
-    TypesafeConfig.fromHoconFile(new File(CONFIG_FILE), AppConfig.appDescriptor)
-  val flattenedAppConfigLayer = appConfigLayer.flatMap { zlayer =>
-    ZLayer.succeed(zlayer.get.spotify) ++ ZLayer.succeed(zlayer.get.sqlConfig)
-  }
-  val logger                  = console(
+  val logger = console(
     logLevel = LogLevel.Info,
     format = LogFormat.colored
   ) ++ removeDefaultLoggers
@@ -81,7 +75,7 @@ object Main extends ZIOAppDefault {
       Scope.default,
       AsyncHttpClientZioBackend.layer(),
       zhttpLayer,
-      flattenedAppConfigLayer,
+      AppConfig.live,
       dbLayer,
       logger,
       UserSessions.live,

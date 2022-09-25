@@ -1,7 +1,7 @@
 package muse.service
 
 import muse.domain.session.UserSession
-import muse.domain.spotify.InitialAuthData
+import muse.domain.spotify.AuthCodeFlowData
 import muse.utils.Utils
 import zio.*
 
@@ -11,7 +11,7 @@ import java.time.temporal.ChronoUnit
 
 // TODO: make generic?
 trait UserSessions {
-  def addUserSession(userId: String, authData: InitialAuthData): UIO[String]
+  def addUserSession(userId: String, authData: AuthCodeFlowData): UIO[String]
   def getUserSession(sessionId: String): UIO[Option[UserSession]]
   def deleteUserSession(sessionId: String): UIO[Unit]
   def deleteUserSessionByUserId(userId: String): UIO[Unit]
@@ -28,7 +28,7 @@ trait UserSessions {
 object UserSessions {
   val live = ZLayer(Ref.Synchronized.make(Map.empty).map(UserSessionsLive.apply(_)))
 
-  def addUserSession(userId: String, authData: InitialAuthData) =
+  def addUserSession(userId: String, authData: AuthCodeFlowData) =
     ZIO.serviceWithZIO[UserSessions](_.addUserSession(userId, authData))
 
   def getUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
@@ -47,7 +47,7 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
     extends UserSessions {
 
   // TODO: confirm this works for multiple sessions.
-  override def addUserSession(userId: String, authData: InitialAuthData) = for {
+  override def addUserSession(userId: String, authData: AuthCodeFlowData) = for {
     expiration <- Utils.getExpirationInstant(authData.expiresIn)
     guid       <- Random.nextUUID
     newSession  = guid.toString

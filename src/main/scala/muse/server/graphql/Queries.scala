@@ -23,6 +23,7 @@ final case class SearchArgs(
     types: Set[EntityType],
     @GQLDefault(Default.Search.annotation) pagination: Option[Pagination])
 
+// TODO: Integrate "Input" for arguments.
 final case class Queries(
     user: UserArgs => ZQuery[Auth[UserSession] & DatabaseOps, Throwable, User],
     review: ReviewsArgs => ZQuery[DatabaseOps, Throwable, Option[Review]],

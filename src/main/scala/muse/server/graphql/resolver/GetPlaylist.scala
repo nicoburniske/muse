@@ -13,6 +13,6 @@ object GetPlaylist {
 
   val PlaylistDataSource: DataSource[SpotifyService, GetPlaylist] =
     DataSource.fromFunctionZIO("PlaylistDataSource") { req =>
-      addTimeLog("Retrieved Playlist")(SpotifyService.getPlaylist(req.id).map(Playlist.fromSpotify))
+      SpotifyService.getPlaylist(req.id).map(Playlist.fromSpotify).addTimeLog("Retrieved Playlist")
     }
 }

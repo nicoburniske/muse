@@ -332,14 +332,20 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
 
   // TODO: can this be more efficient / Single query?
   override def canViewReview(userId: String, reviewId: UUID) =
-    run(isReviewPublic(reviewId)).flatMap {
-      case true  => ZIO.succeed(true)
-      case false =>
-        run {
-          allReviewUsersWithViewAccess(lift(reviewId))
-            .filter(_ == lift(userId))
-        }.map(_.nonEmpty)
-    }
+    run(isReviewPublic(reviewId))
+      .map(_.headOption)
+      .flatMap {
+        case Some(true) => ZIO.succeed(true)
+        case Some(false) =>
+          run {
+            allReviewUsersWithViewAccess(lift(reviewId))
+              .filter(_ == lift(userId))
+          }.map(_.nonEmpty)
+        case _ =>
+          // TODO include logic for NotFoundException?
+          throw new RuntimeException("")
+      }
+      .provide(layer)
 
   override def canModifyReview(userId: String, reviewId: UUID) = run {
     reviewCreator(lift(reviewId)).contains(lift(userId))

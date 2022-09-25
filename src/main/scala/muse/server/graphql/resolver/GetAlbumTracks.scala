@@ -13,29 +13,26 @@ object GetAlbumTracks {
    * Retrieves tracks for the given album.
    *
    * @param albumId
-   *   the album's id
+   * the album's id
    * @param numTracks
-   *   if known, pagination can occur in parallel
+   * if known, pagination can occur in parallel
    * @return
-   *   the tracks from the album
+   * the tracks from the album
    */
   def query(albumId: String, numTracks: Option[Int]): ZQuery[SpotifyService, Throwable, List[Track]] =
-    ZQuery.fromZIO(
-      addTimeLog("Retrieved album tracks")(
-        numTracks match {
-          case Some(total) =>
-            ZIO
-              .foreachPar((0 until total).grouped(MAX_TRACKS_PER_REQUEST).map(_.start).toList) { r =>
-                SpotifyService
-                  .getSomeAlbumTracks(albumId, Some(MAX_TRACKS_PER_REQUEST), Some(r))
-                  .map(_.items)
-                  .map(_.map(t => Track.fromSpotify(t, Some(albumId))))
-              }
-              .map(_.flatten.toList)
-          case None        =>
+    ZQuery.fromZIO((numTracks match {
+      case None =>
+        SpotifyService
+          .getAllAlbumTracks(albumId)
+          .map(_.map(t => Track.fromSpotify(t, Some(albumId))).toList)
+      case Some(total) =>
+        ZIO
+          .foreachPar((0 until total).grouped(MAX_TRACKS_PER_REQUEST).map(_.start).toList) { r =>
             SpotifyService
-              .getAllAlbumTracks(albumId)
-              .map(_.map(t => Track.fromSpotify(t, Some(albumId))).toList)
-        }
-      ))
+              .getSomeAlbumTracks(albumId, Some(MAX_TRACKS_PER_REQUEST), Some(r))
+              .map(_.items)
+              .map(_.map(t => Track.fromSpotify(t, Some(albumId))))
+          }
+          .map(_.flatten.toList)
+    }).addTimeLog("Retrieved album tracks"))
 }

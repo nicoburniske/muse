@@ -2,7 +2,7 @@ package muse.service
 
 import muse.domain.common.EntityType
 import muse.domain.session.UserSession
-import muse.domain.spotify.{Album, Artist, Image, InitialAuthData, Track, User, UserPlaylist}
+import muse.domain.spotify.{Album, Artist, Image, AuthCodeFlowData, Track, User, UserPlaylist}
 import muse.domain.table.{AppUser, Review, ReviewComment}
 import muse.service.persist.DatabaseOps
 import muse.service.spotify.SpotifyService
@@ -23,17 +23,17 @@ object RequestProcessor {
    * Handles a user login.
    *
    * @param auth
-   *   current user auth data from spotify
+   * current user auth data from spotify
    * @return
-   *   true if new User was created, false if current user was updated.
+   * true if new User was created, false if current user was updated.
    */
-  def handleUserLogin(auth: InitialAuthData): ZIO[UserLoginEnv, Throwable, User] =
+  def handleUserLogin(auth: AuthCodeFlowData): ZIO[UserLoginEnv, Throwable, User] =
     for {
-      spotify  <- SpotifyService.live(auth.accessToken)
+      spotify <- SpotifyService.live(auth.accessToken)
       userInfo <- spotify.getCurrentUserProfile
-      res      <- createOrUpdateUser(userInfo.id)
-      resText   = if (res) "Created" else "Updated"
-      _        <-
+      res <- createOrUpdateUser(userInfo.id)
+      resText = if (res) "Created" else "Updated"
+      _ <-
         ZIO.logInfo(
           s"Successfully logged in ${userInfo.id}. $resText account. Access Token = ${auth.accessToken}")
     } yield userInfo

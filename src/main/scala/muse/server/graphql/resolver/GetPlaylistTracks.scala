@@ -17,16 +17,15 @@ object GetPlaylistTracks {
 
   val PlaylistTrackDataSource: DataSource[SpotifyService, GetPlaylistTracks] =
     DataSource.fromFunctionZIO("PlaylistTrackDataSource") { req =>
-      addTimeLog("Retrieved all playlist tracks") {
-        ZIO
-          .foreachPar((0 until req.numTracks).grouped(MAX_PLAYLIST_TRACKS_PER_REQUEST).map(_.start).toList) {
-            r =>
-              SpotifyService
-                .getSomePlaylistTracks(req.playlistId, MAX_PLAYLIST_TRACKS_PER_REQUEST, Some(r))
-                .map(_.items)
-                .map(_.map(PlaylistTrack.fromSpotify))
-          }
-          .map(_.flatten.toList)
-      }
+      ZIO
+        .foreachPar((0 until req.numTracks).grouped(MAX_PLAYLIST_TRACKS_PER_REQUEST).map(_.start).toList) {
+          r =>
+            SpotifyService
+              .getSomePlaylistTracks(req.playlistId, MAX_PLAYLIST_TRACKS_PER_REQUEST, Some(r))
+              .map(_.items)
+              .map(_.map(PlaylistTrack.fromSpotify))
+        }
+        .map(_.flatten.toList)
+        .addTimeLog("Retrieved all playlist tracks")
     }
 }

@@ -2,7 +2,7 @@ package muse.server
 
 import muse.config.SpotifyConfig
 import muse.domain.session.UserSession
-import muse.domain.spotify.InitialAuthData
+import muse.domain.spotify.AuthCodeFlowData
 import muse.domain.table.AppUser
 import muse.server.MuseMiddleware.Auth
 import muse.service.spotify.SpotifyAuthService
@@ -36,7 +36,7 @@ object Auth {
                 data = HttpData.fromString("Missing 'code' query parameter")))
           } { code =>
             for {
-              authData    <- SpotifyAuthService.getAuthTokens(code)
+              authData <- SpotifyAuthService.getAuthCode(code)
               spotifyUser <- RequestProcessor.handleUserLogin(authData)
               session     <- UserSessions.addUserSession(spotifyUser.id, authData)
               _           <- ZIO.logInfo(session)

@@ -15,27 +15,31 @@ object Utils {
 
   /**
    * @param expiresIn
-   *   Number of seconds from now.
+   * Number of seconds from now.
    * @param padding
-   *   Amount of padding expiration should be created with. Must be greater than expiresIn
+   * Amount of padding expiration should be created with. Must be greater than expiresIn
    * @return
-   *   The instant when something has expired
+   * The instant when something has expired
    */
   def getExpirationInstant(expiresIn: Int, padding: Int = DEFAULT_EXPIRATION_PADDING) =
     ZIO.succeed(Instant.now().plus(expiresIn - padding, ChronoUnit.SECONDS))
 
-  def addTimeLog[R, E, A](message: String)(z: ZIO[R, E, A]): ZIO[R, E, A] =
-    z.timed.flatMap { case (d, r) => ZIO.logInfo(s"$message in ${d.toMillis}ms").as(r) }
+  extension[R, E, A] (z: ZIO[R, E, A]) {
+    def addTimeLog(message: String) = z.timed.flatMap {
+      case (d, r) =>
+        ZIO.logInfo(s"$message in ${d.toMillis}ms").as(r)
+    }
+  }
 
   /**
    * Writes content to file at given path.
    *
    * @param path
-   *   string path to file
+   * string path to file
    * @param content
-   *   the content to write to the file
+   * the content to write to the file
    * @return
-   *   a program that writes the content to the given file
+   * a program that writes the content to the given file
    */
   def writeToFile(path: String, content: String): ZIO[Scope, IOException, Unit] = ZIO.scoped {
     AsynchronousFileChannel
