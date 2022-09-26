@@ -3,18 +3,10 @@ package muse.service.persist
 import io.getquill.*
 import io.getquill.context.ZioJdbc.*
 import muse.domain.common.EntityType
-import muse.domain.mutate.{
-  CreateComment,
-  CreateReview,
-  DeleteComment,
-  DeleteReview,
-  ShareReview,
-  UpdateComment,
-  UpdateReview
-}
+import muse.domain.mutate.{CreateComment, CreateReview, DeleteComment, DeleteReview, ShareReview, UpdateComment, UpdateReview}
 import muse.domain.table.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
 import zio.ZLayer.*
-import zio.{IO, TaskLayer, ZIO, ZLayer}
+import zio.{IO, Schedule, TaskLayer, ZIO, ZLayer, durationInt}
 
 import java.sql.{SQLException, Timestamp, Types}
 import java.time.Instant
@@ -71,9 +63,7 @@ trait DatabaseOps {
 }
 
 object DatabaseOps {
-  val live: ZLayer[DataSource, Nothing, DatabaseOps] = ZLayer(for {
-    ds <- ZIO.service[DataSource]
-  } yield DataServiceLive(ds))
+  val live: ZLayer[DataSource, Nothing, DatabaseOps] = ZLayer.fromFunction(DataServiceLive.apply(_))
 
   def createUser(userId: String) = ZIO.serviceWithZIO[DatabaseOps](_.createUser(userId))
 
@@ -127,8 +117,9 @@ object DatabaseOps {
 }
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
-  // TODO: move this somewhere else
-  val dataSourceLayer: TaskLayer[DataSource] = DataSourceLayer.fromPrefix("database")
+  // Exponential backoff retry strategy for connecting to Postgres DB.
+  val schedule = Schedule.exponential(1.second) && Schedule.recurs(10)
+  val dataSourceLayer = DataSourceLayer.fromPrefix("database").retry(schedule)
 
   given instantDecoder: Decoder[Instant] = decoder((index, row, session) => row.getTimestamp(index).toInstant)
 

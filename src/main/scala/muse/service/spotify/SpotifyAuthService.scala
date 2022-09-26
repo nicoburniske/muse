@@ -9,7 +9,7 @@ import zio.json.*
 import zio.{Task, ZIO}
 
 object SpotifyAuthService {
-  type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory & UserSessions
+  type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory
 
   val ENDPOINT = URL(
     Path.decode("/api/token"),

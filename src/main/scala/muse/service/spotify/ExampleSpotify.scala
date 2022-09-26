@@ -1,20 +1,20 @@
 package muse.service.spotify
 
 import muse.config.AppConfig
-import muse.utils.Givens.given
 import muse.domain.spotify.{PlaylistTrack, Track, UserPlaylist}
+import muse.utils.Givens.given
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zhttp.service.{ChannelFactory, EventLoopGroup}
 import zio.Console.printLine
 import zio.{Schedule, Task, ZIO, ZIOAppDefault}
 
 import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, ZoneId}
 import java.time.format.DateTimeFormatter
+import java.time.{Instant, LocalDate, ZoneId}
 import java.util.Date
 import scala.annotation.tailrec
-import scala.util.{Failure, Try}
 import scala.collection.immutable.AbstractSet
+import scala.util.{Failure, Try}
 
 // TODO: communal listening session, chat?
 object ExampleSpotify extends ZIOAppDefault {

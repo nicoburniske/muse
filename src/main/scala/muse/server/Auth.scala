@@ -4,7 +4,6 @@ import muse.config.SpotifyConfig
 import muse.domain.session.UserSession
 import muse.domain.spotify.AuthCodeFlowData
 import muse.domain.table.AppUser
-import muse.server.MuseMiddleware.Auth
 import muse.service.spotify.SpotifyAuthService
 import muse.service.{RequestProcessor, UserSessions}
 import sttp.client3.SttpBackend
@@ -36,7 +35,7 @@ object Auth {
                 data = HttpData.fromString("Missing 'code' query parameter")))
           } { code =>
             for {
-              authData <- SpotifyAuthService.getAuthCode(code)
+              authData    <- SpotifyAuthService.getAuthCode(code)
               spotifyUser <- RequestProcessor.handleUserLogin(authData)
               session     <- UserSessions.addUserSession(spotifyUser.id, authData)
               _           <- ZIO.logInfo(session)
@@ -52,7 +51,7 @@ object Auth {
     .catchAll(error => Http.error(HttpError.InternalServerError(cause = Some(error))))
 
   // @@ csrfGenerate() // TODO: get this working?
-  val logoutEndpoint = MuseMiddleware.UserSessionAuth(Http.collectZIO[Request] {
+  val logoutEndpoint = Http.collectZIO[Request] {
     case Method.POST -> !! / "logout" =>
       for {
         session <- MuseMiddleware.Auth.currentUser[UserSession]
@@ -60,7 +59,7 @@ object Auth {
         _       <- ZIO.logInfo(
                      s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
       } yield Response.ok
-  })
+  }
 
   val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {
     c     <- ZIO.service[SpotifyConfig]

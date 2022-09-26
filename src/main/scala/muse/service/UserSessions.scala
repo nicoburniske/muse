@@ -39,9 +39,13 @@ object UserSessions {
         .make(Map.empty)
         .map(UserSessionsLive.apply(_))
         // Load sessions from file. When scope closes, save the sessions to file.
-        .tap(_.loadSessions))(_.saveSessions
-      .catchAll(e => ZIO.logErrorCause(s"Failed to save sessions ${e.toString}", Cause.fail(e))))
+        .tap(_.loadSessions))(cleanup)
   }
+
+  def cleanup(sessions: UserSessions) =
+    sessions
+      .saveSessions
+      .catchAll(e => ZIO.logErrorCause(s"Failed to save sessions ${e.toString}", Cause.fail(e)))
 
   def addUserSession(userId: String, authData: AuthCodeFlowData) =
     ZIO.serviceWithZIO[UserSessions](_.addUserSession(userId, authData))
@@ -57,7 +61,6 @@ object UserSessions {
     ZIO.serviceWithZIO[UserSessions](_.deleteUserSessionByUserId(userId))
 }
 
-// TODO: should this ref be synchronized?
 final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSession]])
     extends UserSessions {
 
@@ -83,14 +86,15 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
     }
     .map(_.get(sessionId))
 
-  val SESSIONS_FILE = "src/main/resources/userSessions.json"
+  // TODO: use config.
+  val SESSIONS_FILE = "src/main/resources/UserSessions.json"
 
   def loadSessions: ZIO[Scope, Throwable, List[UserSession]] = for {
-    partitioned                 <- Utils
-                                     .readFile(SESSIONS_FILE)
-                                     .via(ZPipeline.splitLines)
-                                     .map(_.fromJson[UserSession])
-                                     .partitionEither(ZIO.succeed(_))
+    partitioned <- Utils
+      .readFile(SESSIONS_FILE)
+      .via(ZPipeline.splitLines)
+      .map(_.fromJson[UserSession])
+      .partitionEither(ZIO.succeed(_))
     // Deconstruct tuple.
     (errorStream, sessionStream) = partitioned
 
