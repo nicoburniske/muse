@@ -43,25 +43,21 @@ object MuseMiddleware {
     }
   }
 
-  type NoSpotifyService[R]  = R & Auth[UserSession] & SttpBackend[Task, Any]
-  type YesSpotifyService[R] = NoSpotifyService[R] & SpotifyService
-
-  def userSessionAuth[R](app: Http[YesSpotifyService[R], Throwable, Request, Response]) =
-    Http
-      .fromFunctionZIO[Request] { request =>
-        val maybeCookie = request
-          .cookieValue(COOKIE_KEY)
-          .orElse(request.authorization)
-        maybeCookie.fold(
+  def userSessionAuth[R](app: Http[R & SpotifyService, Throwable, Request, Response]) = Http
+    .fromFunctionZIO[Request] { request =>
+      request
+        .cookieValue(COOKIE_KEY)
+        .orElse(request.authorization)
+        .fold(
           ZIO.logInfo("Missing Auth") *> ZIO.fail(Unauthorized("Missing Auth"))
         )(cookie =>
           for {
             session <- getSession(cookie.toString)
             _       <- Auth.setUser[UserSession](Some(session))
-          } yield app
-            .provideSomeLayer[NoSpotifyService[R], SpotifyService, Throwable](SpotifyService.layer))
-      }
-      .flatten
+            layer   <- SpotifyService.getLayer
+          } yield app.provideSomeLayer[R, SpotifyService, Throwable](layer))
+    }
+    .flatten
 
   def getSession(cookie: String): ZIO[SpotifyAuthService & UserSessions, Throwable, UserSession] =
     for {
@@ -101,8 +97,8 @@ object MuseMiddleware {
   /**
    * Logs the requests made to the server.
    *
-   * It also adds a request ID to the logging context, so any further logging that occurs in the handler can
-   * be associated with the same request.
+   * It also adds a request ID to the logging context, so any further logging that occurs in the handler can be associated with
+   * the same request.
    */
   val loggingMiddleware: HttpMiddleware[Any, Nothing] = new HttpMiddleware[Any, Nothing] {
     override def apply[R1 <: Any, E1 >: Nothing](

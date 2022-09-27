@@ -14,17 +14,10 @@ import zio.{Schedule, Task, ZIO, ZLayer}
 
 trait SpotifyService {
   def getCurrentUserProfile: Task[User]
-  def search(
-      query: String,
-      entityTypes: Set[EntityType],
-      limit: Int = 50,
-      offset: Option[Int] = None): Task[SearchResult]
+  def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None): Task[SearchResult]
   def getUserProfile(userId: String): Task[User]
   def isValidEntity(entityId: String, entityType: EntityType): Task[Boolean]
-  def getPlaylist(
-      playlistId: String,
-      fields: Option[String] = None,
-      market: Option[String] = None): Task[UserPlaylist]
+  def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None): Task[UserPlaylist]
   def getTrack(id: String, market: Option[String] = None): Task[Track]
   def getTracks(ids: Seq[String], market: Option[String] = None): Task[Vector[Track]]
   def getArtist(id: String): Task[Artist]
@@ -33,26 +26,20 @@ trait SpotifyService {
   def getAlbums(ids: Seq[String]): Task[Vector[Album]]
   def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None): Task[Paging[UserPlaylist]]
   def getAllUserPlaylists(userId: String): Task[Vector[UserPlaylist]]
-  def getSomePlaylistTracks(
-      playlistId: String,
-      limit: Int,
-      offset: Option[Int] = None): Task[Paging[PlaylistTrack]]
+  def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): Task[Paging[PlaylistTrack]]
   def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]]
-  def getSomeAlbumTracks(
-      album: String,
-      limit: Option[Int] = None,
-      offset: Option[Int] = None): Task[Paging[Track]]
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Track]]
   def getAllAlbumTracks(albumId: String): Task[Vector[Track]]
-  def getSomeArtistAlbums(
-      artistId: String,
-      limit: Option[Int] = None,
-      offset: Option[Int] = None): Task[Paging[Album]]
+  def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Album]]
   def getAllArtistAlbums(artistId: String): Task[Vector[Album]]
   def getArtistTopTracks(artistId: String, country: String = "US"): Task[Vector[Track]]
 }
 
 object SpotifyService {
+  // TODO: Does this have to be scoped? I am not sure.
   lazy val layer = ZLayer.suspend(ZLayer.scoped(live))
+
+  val getLayer = live.map(ZLayer.succeed(_))
 
   lazy val live = for {
     session <- Auth.currentUser[UserSession]
@@ -134,10 +121,7 @@ case class SpotifyServiceImpl(s: SpotifyAPI[Task]) extends SpotifyService {
   def isValidEntity(entityId: String, entityType: EntityType): Task[Boolean] =
     s.isValidEntity(entityId, entityType)
 
-  def getPlaylist(
-      playlistId: String,
-      fields: Option[String] = None,
-      market: Option[String] = None): Task[UserPlaylist] =
+  def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None): Task[UserPlaylist] =
     s.getPlaylist(playlistId, fields, market)
 
   def getTrack(id: String, market: Option[String] = None): Task[Track] =
@@ -162,28 +146,19 @@ case class SpotifyServiceImpl(s: SpotifyAPI[Task]) extends SpotifyService {
   def getAllUserPlaylists(userId: String): Task[Vector[UserPlaylist]] =
     s.getAllUserPlaylists(userId)
 
-  def getSomePlaylistTracks(
-      playlistId: String,
-      limit: Int,
-      offset: Option[Int] = None): Task[Paging[PlaylistTrack]] =
+  def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): Task[Paging[PlaylistTrack]] =
     s.getSomePlaylistTracks(playlistId, limit, offset)
 
   def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]] =
     s.getAllPlaylistTracks(playlistId)
 
-  def getSomeAlbumTracks(
-      album: String,
-      limit: Option[Int] = None,
-      offset: Option[Int] = None): Task[Paging[Track]] =
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Track]] =
     s.getSomeAlbumTracks(album, limit, offset)
 
   def getAllAlbumTracks(albumId: String): Task[Vector[Track]] =
     s.getAllAlbumTracks(albumId)
 
-  def getSomeArtistAlbums(
-      artistId: String,
-      limit: Option[Int] = None,
-      offset: Option[Int] = None): Task[Paging[Album]] =
+  def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Album]] =
     s.getSomeArtistAlbums(artistId, limit, offset)
 
   def getAllArtistAlbums(artistId: String): Task[Vector[Album]] = s.getAllArtistAlbums(artistId)
