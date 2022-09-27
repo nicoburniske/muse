@@ -43,25 +43,6 @@ object MuseMiddleware {
     }
   }
 
-  //
-  //  def userSessionAuth[R](app: Http[R & SpotifyService, Throwable, Request, Response]) =
-  //    Http
-  //      .fromFunctionZIO[Request] { (request: Request) =>
-  //        request.cookieValue(COOKIE_KEY).orElse(request.authorization) match
-  //          case None         =>
-  //            ZIO.logInfo("Missing Auth") *> ZIO.fail(Unauthorized("Missing Auth"))
-  //          case Some(cookie) =>
-  //            for {
-  //              session  <- getSession(cookie.toString)
-  //              _        <- Auth.setUser[UserSession](Some(session))
-  //              spotify  <- SpotifyService.live(session.accessToken)
-  //              asLayer   = ZLayer.succeed(spotify)
-  //              withLayer = app.provideSomeLayer[R, SpotifyService, Throwable](asLayer)
-  // Why on earth is the error an optional?
-  //              response <- withLayer.apply(request).mapError(_.get)
-  //            } yield response
-  //      }
-
   type NoSpotifyService[R]  = R & Auth[UserSession] & SttpBackend[Task, Any]
   type YesSpotifyService[R] = NoSpotifyService[R] & SpotifyService
 
@@ -71,7 +52,6 @@ object MuseMiddleware {
         val maybeCookie = request
           .cookieValue(COOKIE_KEY)
           .orElse(request.authorization)
-
         maybeCookie.fold(
           ZIO.logInfo("Missing Auth") *> ZIO.fail(Unauthorized("Missing Auth"))
         )(cookie =>
@@ -79,7 +59,7 @@ object MuseMiddleware {
             session <- getSession(cookie.toString)
             _       <- Auth.setUser[UserSession](Some(session))
           } yield app
-            .provideSomeLayer[NoSpotifyService[R], SpotifyService, Throwable](SpotifyService.layer.fresh))
+            .provideSomeLayer[NoSpotifyService[R], SpotifyService, Throwable](SpotifyService.layer))
       }
       .flatten
 

@@ -52,7 +52,7 @@ trait SpotifyService {
 }
 
 object SpotifyService {
-  lazy val layer = ZLayer.fromZIO(live)
+  lazy val layer = ZLayer.suspend(ZLayer.scoped(live))
 
   lazy val live = for {
     session <- Auth.currentUser[UserSession]

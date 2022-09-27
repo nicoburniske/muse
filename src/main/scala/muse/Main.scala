@@ -39,6 +39,7 @@ object Main extends ZIOAppDefault {
       AppConfig.layer,
       DatabaseService.layer,
       UserSessions.layer,
+      SpotifyService.layer,
       MuseMiddleware.FiberUserSession.layer,
       QuillContext.dataSourceLayer,
       logLayer,
