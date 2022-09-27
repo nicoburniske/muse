@@ -2,14 +2,7 @@ package muse.server.graphql.subgraph
 
 import caliban.schema.Annotations.GQLInterface
 import muse.domain.spotify
-import muse.server.graphql.resolver.{
-  GetAlbum,
-  GetAlbumTracks,
-  GetArtist,
-  GetArtistAlbums,
-  GetArtistTopTracks,
-  GetPlaylistTracks
-}
+import muse.server.graphql.resolver.{GetAlbum, GetAlbumTracks, GetArtist, GetArtistAlbums, GetArtistTopTracks, GetPlaylistTracks}
 import muse.server.graphql.subgraph
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery

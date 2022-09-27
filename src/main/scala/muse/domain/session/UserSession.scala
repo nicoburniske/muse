@@ -1,8 +1,8 @@
 package muse.domain.session
 
 import muse.domain.session.UserSession.instantString
+import zio.json.{DeriveJsonCodec, JsonCodec}
 
-import zio.json.{JsonCodec, DeriveJsonCodec}
 import java.time.{Instant, ZoneId}
 
 /**

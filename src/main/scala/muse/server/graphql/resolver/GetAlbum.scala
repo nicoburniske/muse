@@ -18,7 +18,7 @@ object GetAlbum {
   val AlbumDataSource: DataSource[SpotifyService, GetAlbum] =
     DataSource.Batched.make("AlbumDataSource") { (reqs: Chunk[GetAlbum]) =>
       reqs.toList match
-        case Nil => ZIO.succeed(CompletedRequestMap.empty)
+        case Nil         => ZIO.succeed(CompletedRequestMap.empty)
         case head :: Nil =>
           SpotifyService
             .getAlbum(head.id)
@@ -26,7 +26,7 @@ object GetAlbum {
               e => CompletedRequestMap.empty.insert(head)(Left(e)),
               a => CompletedRequestMap.empty.insert(head)(Right(Album.fromSpotify(a))))
             .addTimeLog("Retrieved Album")
-        case _ =>
+        case _           =>
           ZIO
             .foreachPar(reqs.grouped(MAX_ALBUMS_PER_REQUEST).toVector) { reqs =>
               SpotifyService.getAlbums(reqs.map(_.id)).either.map(reqs -> _)
@@ -35,8 +35,8 @@ object GetAlbum {
               res.foldLeft(CompletedRequestMap.empty) {
                 case (map: CompletedRequestMap, (reqs, result)) =>
                   result match
-                    case error@Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
-                    case Right(albums) =>
+                    case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
+                    case Right(albums)   =>
                       val grouped = albums.map(Album.fromSpotify).groupBy(_.id).view.mapValues(_.head)
                       reqs.foldLeft(map) { (map, req) =>
                         val result =

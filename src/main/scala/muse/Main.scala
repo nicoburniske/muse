@@ -11,8 +11,8 @@ import muse.domain.table.AppUser
 import muse.server.graphql.MuseGraphQL
 import muse.server.{Auth, MuseMiddleware, MuseServer}
 import muse.service.UserSessions
-import muse.service.persist.{DatabaseOps, QuillContext}
-import muse.service.spotify.SpotifyService
+import muse.service.persist.{DatabaseService, QuillContext}
+import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zhttp.*
@@ -33,21 +33,24 @@ object Main extends ZIOAppDefault {
       ZLayer.Debug.mermaid,
       Scope.default,
       AsyncHttpClientZioBackend.layer(),
-      zhttpLayer,
-      AppConfig.live,
+      ChannelFactory.auto,
+      // Muse layers.
+      SpotifyAuthService.layer,
+      AppConfig.layer,
+      DatabaseService.layer,
+      UserSessions.layer,
+      MuseMiddleware.FiberUserSession.layer,
+      QuillContext.dataSourceLayer,
       logLayer,
-      DatabaseOps.live,
-      UserSessions.live,
-      MuseMiddleware.FiberUserSession,
-      QuillContext.dataSourceLayer
+      zhttpLayer
     )
     .tapError(e => ZIO.logErrorCause(s"Failed to start server: ${e.getMessage}", Cause.fail(e)))
     .exitCode
 
   val zhttpLayer = for {
     serverConfig <- ZLayer.environment[ServerConfig]
-    http <- EventLoopGroup.auto(serverConfig.get.nThreads) ++ ChannelFactory.auto
+    http         <- EventLoopGroup.auto(serverConfig.get.nThreads)
   } yield http
 
-  val logLayer = removeDefaultLoggers >>> SLF4J.slf4j(LogLevel.Info, LogFormat.colored)
+  val logLayer = removeDefaultLoggers >>> SLF4J.slf4j(LogLevel.Debug, LogFormat.colored)
 }

@@ -1,7 +1,7 @@
 package muse.server.graphql.resolver
 
 import muse.server.graphql.subgraph.Review
-import muse.service.persist.DatabaseOps
+import muse.service.persist.DatabaseService
 import zio.query.{DataSource, Request, ZQuery}
 
 import java.sql.SQLException
@@ -15,9 +15,9 @@ case class GetReview(reviewId: UUID) extends Request[SQLException, Option[Review
 object GetReview {
   def query(reviewId: UUID) = ZQuery.fromRequest(GetReview(reviewId))(ReviewDataSource)
 
-  val ReviewDataSource: DataSource[DatabaseOps, GetReview] =
+  val ReviewDataSource: DataSource[DatabaseService, GetReview] =
     DataSource.fromFunctionZIO("ReviewDataSource") { g =>
-      DatabaseOps.getReview(g.reviewId).map(_.map(Review.fromTable))
+      DatabaseService.getReview(g.reviewId).map(_.map(Review.fromTable))
     }
 
 }

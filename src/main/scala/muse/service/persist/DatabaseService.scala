@@ -13,7 +13,7 @@ import java.time.Instant
 import java.util.UUID
 import javax.sql.DataSource
 
-trait DatabaseOps {
+trait DatabaseService {
 
   /**
    * Create!
@@ -60,65 +60,79 @@ trait DatabaseOps {
   def canModifyComment(userId: String, reviewId: UUID, commentId: Int): IO[SQLException, Boolean]
 
   // TODO: sharing methods.
+
+  /**
+   * If username already exists, update existing row's auth information. Otherwise create user.
+   *
+   * @param userId
+   *   current user request
+   * @return
+   *   true if new User was created, false if current user was updated.
+   */
+  def createOrUpdateUser(userId: String): IO[SQLException, Boolean] =
+    getUserById(userId).map(_.isDefined).flatMap {
+      case true  => ZIO.succeed(true)
+      case false => createUser(userId).as(false)
+    }
 }
 
-object DatabaseOps {
-  val live: ZLayer[DataSource, Nothing, DatabaseOps] = ZLayer.fromFunction(DataServiceLive.apply(_))
+object DatabaseService {
+  val layer = ZLayer.fromFunction(DatabaseServiceLive.apply(_))
 
-  def createUser(userId: String) = ZIO.serviceWithZIO[DatabaseOps](_.createUser(userId))
+  def createUser(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.createUser(userId))
 
   def createReview(userId: String, review: CreateReview) =
-    ZIO.serviceWithZIO[DatabaseOps](_.createReview(userId, review))
+    ZIO.serviceWithZIO[DatabaseService](_.createReview(userId, review))
 
   def createReviewComment(userId: String, c: CreateComment) =
-    ZIO.serviceWithZIO[DatabaseOps](_.createReviewComment(userId, c))
+    ZIO.serviceWithZIO[DatabaseService](_.createReviewComment(userId, c))
 
-  def getUserById(userId: String) = ZIO.serviceWithZIO[DatabaseOps](_.getUserById(userId))
+  def getUserById(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getUserById(userId))
 
-  def getReview(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseOps](_.getReview(reviewId))
+  def getReview(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReview(reviewId))
 
-  def getUsers = ZIO.serviceWithZIO[DatabaseOps](_.getUsers)
+  def getUsers = ZIO.serviceWithZIO[DatabaseService](_.getUsers)
 
-  def getUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseOps](_.getUserReviews(userId))
+  def getUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getUserReviews(userId))
 
-  def getAllUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseOps](_.getAllUserReviews(userId))
+  def getAllUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getAllUserReviews(userId))
 
-  def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseOps](_.getReviewComments(reviewId))
+  def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewComments(reviewId))
 
   def getAllReviewComments(reviewIds: List[UUID]) =
-    ZIO.serviceWithZIO[DatabaseOps](_.getMultiReviewComments(reviewIds))
+    ZIO.serviceWithZIO[DatabaseService](_.getMultiReviewComments(reviewIds))
 
   def updateReview(review: UpdateReview) =
-    ZIO.serviceWithZIO[DatabaseOps](_.updateReview(review))
+    ZIO.serviceWithZIO[DatabaseService](_.updateReview(review))
 
   def updateComment(comment: UpdateComment) =
-    ZIO.serviceWithZIO[DatabaseOps](_.updateComment(comment))
+    ZIO.serviceWithZIO[DatabaseService](_.updateComment(comment))
 
   def shareReview(share: ShareReview) =
-    ZIO.serviceWithZIO[DatabaseOps](_.shareReview(share))
+    ZIO.serviceWithZIO[DatabaseService](_.shareReview(share))
 
   def deleteReview(d: DeleteReview) =
-    ZIO.serviceWithZIO[DatabaseOps](_.deleteReview(d))
+    ZIO.serviceWithZIO[DatabaseService](_.deleteReview(d))
 
   def deleteComment(d: DeleteComment) =
-    ZIO.serviceWithZIO[DatabaseOps](_.deleteComment(d))
+    ZIO.serviceWithZIO[DatabaseService](_.deleteComment(d))
 
   def canViewReview(userId: String, reviewId: UUID) =
-    ZIO.serviceWithZIO[DatabaseOps](_.canViewReview(userId, reviewId))
+    ZIO.serviceWithZIO[DatabaseService](_.canViewReview(userId, reviewId))
 
   def canModifyReview(userId: String, reviewId: UUID) =
-    ZIO.serviceWithZIO[DatabaseOps](_.canModifyReview(userId, reviewId))
+    ZIO.serviceWithZIO[DatabaseService](_.canModifyReview(userId, reviewId))
 
   def canModifyComment(userId: String, reviewId: UUID, commentId: Int) =
-    ZIO.serviceWithZIO[DatabaseOps](_.canModifyComment(userId, reviewId, commentId))
+    ZIO.serviceWithZIO[DatabaseService](_.canModifyComment(userId, reviewId, commentId))
 
   def canMakeComment(userId: String, reviewId: UUID) =
-    ZIO.serviceWithZIO[DatabaseOps](_.canMakeComment(userId, reviewId))
+    ZIO.serviceWithZIO[DatabaseService](_.canMakeComment(userId, reviewId))
 }
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
   // Exponential backoff retry strategy for connecting to Postgres DB.
-  val schedule = Schedule.exponential(1.second) && Schedule.recurs(10)
+  val schedule        = Schedule.exponential(1.second) && Schedule.recurs(10)
   val dataSourceLayer = DataSourceLayer.fromPrefix("database").retry(schedule)
 
   given instantDecoder: Decoder[Instant] = decoder((index, row, session) => row.getTimestamp(index).toInstant)
@@ -139,7 +153,7 @@ object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, Low
     encoder(Types.INTEGER, (index, value, row) => row.setInt(index, value.ordinal))
 }
 
-final case class DataServiceLive(d: DataSource) extends DatabaseOps {
+final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   import QuillContext.{*, given}
 
@@ -326,13 +340,13 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
     run(isReviewPublic(reviewId))
       .map(_.headOption)
       .flatMap {
-        case Some(true) => ZIO.succeed(true)
+        case Some(true)  => ZIO.succeed(true)
         case Some(false) =>
           run {
             allReviewUsersWithViewAccess(lift(reviewId))
               .filter(_ == lift(userId))
           }.map(_.nonEmpty)
-        case _ =>
+        case _           =>
           // TODO include logic for NotFoundException?
           throw new RuntimeException("")
       }

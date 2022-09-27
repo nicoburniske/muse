@@ -3,7 +3,7 @@ package muse.server.graphql.subgraph
 import muse.domain.common.EntityType
 import muse.domain.table
 import muse.server.graphql.resolver.{GetEntity, GetReviewComments, GetUser}
-import muse.service.persist.DatabaseOps
+import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
@@ -14,10 +14,10 @@ import java.util.UUID
 final case class Review(
     id: UUID,
     createdAt: Instant,
-    creator: ZQuery[DatabaseOps, Nothing, User],
+    creator: ZQuery[DatabaseService, Nothing, User],
     reviewName: String,
     isPublic: Boolean,
-    comments: ZQuery[DatabaseOps, Throwable, List[Comment]],
+    comments: ZQuery[DatabaseService, Throwable, List[Comment]],
     entityId: String,
     entityType: EntityType,
     entity: ZQuery[SpotifyService, Nothing, ReviewEntity]

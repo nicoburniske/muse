@@ -8,7 +8,7 @@ import muse.server.MuseMiddleware.Auth
 import muse.server.graphql.Pagination.Default
 import muse.server.graphql.resolver.{GetReview, GetSearch, GetUser}
 import muse.server.graphql.subgraph.{Review, SearchResult, User}
-import muse.service.persist.DatabaseOps
+import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
@@ -25,8 +25,8 @@ final case class SearchArgs(
 
 // TODO: Integrate "Input" for arguments.
 final case class Queries(
-    user: UserArgs => ZQuery[Auth[UserSession] & DatabaseOps, Throwable, User],
-    review: ReviewsArgs => ZQuery[DatabaseOps, Throwable, Option[Review]],
+    user: UserArgs => ZQuery[Auth[UserSession] & DatabaseService, Throwable, User],
+    review: ReviewsArgs => ZQuery[DatabaseService, Throwable, Option[Review]],
     search: SearchArgs => ZQuery[SpotifyService, Throwable, SearchResult])
 
 object Queries {

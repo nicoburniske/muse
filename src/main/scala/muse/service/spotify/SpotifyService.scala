@@ -2,8 +2,10 @@ package muse.service.spotify
 
 import muse.config.SpotifyConfig
 import muse.domain.common.EntityType
+import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.*
+import muse.server.MuseMiddleware.Auth
 import muse.service.UserSessions
 import muse.utils.Givens.given
 import sttp.client3.SttpBackend
@@ -50,13 +52,17 @@ trait SpotifyService {
 }
 
 object SpotifyService {
-  val live = for { api <- ZIO.service[SpotifyAPI[Task]] } yield SpotifyServiceImpl(api)
+  lazy val layer = ZLayer.fromZIO(live)
+
+  lazy val live = for {
+    session <- Auth.currentUser[UserSession]
+    backend <- ZIO.service[SttpBackend[Task, Any]]
+    spotify  = SpotifyAPI(backend, session.accessToken)
+  } yield SpotifyServiceImpl(spotify)
 
   def live(accessToken: String) = for {
     backend <- ZIO.service[SttpBackend[Task, Any]]
   } yield SpotifyServiceImpl(SpotifyAPI(backend, accessToken))
-
-  val layer = ZLayer.fromZIO(live)
 
   def getCurrentUserProfile = ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserProfile)
 

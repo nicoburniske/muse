@@ -4,7 +4,7 @@ import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.server.MuseMiddleware.Auth
 import muse.server.graphql.subgraph.User
-import muse.service.persist.DatabaseOps
+import muse.service.persist.DatabaseService
 import zio.query.{DataSource, Request, ZQuery}
 
 case class GetUser(id: String) extends Request[Nothing, User]
@@ -18,7 +18,7 @@ object GetUser {
   def queryByUserId(userId: String) =
     ZQuery.succeed(User(userId, GetUserReviews.query(userId), GetSpotifyProfile.query(userId)))
 
-  def currentUser: ZQuery[Auth[UserSession] & DatabaseOps, Unauthorized, User] = for {
+  def currentUser: ZQuery[Auth[UserSession] & DatabaseService, Unauthorized, User] = for {
     userSession <- ZQuery.fromZIO(Auth.currentUser[UserSession])
     user        <- queryByUserId(userSession.id)
   } yield user

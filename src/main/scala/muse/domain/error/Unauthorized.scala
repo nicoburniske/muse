@@ -3,7 +3,7 @@ package muse.domain.error
 import zhttp.http.{Http, HttpData, Response, Status}
 
 final case class Unauthorized(msg: Option[String])
-    extends Exception(msg.map(m => s"Unauthorized: $m").getOrElse("Unauthorized")) {
+    extends Throwable(msg.map(m => s"Unauthorized: $m").getOrElse("Unauthorized")) {
   val http = Http.response(Response(Status.Unauthorized, data = HttpData.fromString(this.getMessage)))
 }
 

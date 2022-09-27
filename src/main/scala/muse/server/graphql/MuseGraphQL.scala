@@ -15,19 +15,8 @@ import muse.domain.spotify
 import muse.domain.spotify.AlbumType
 import muse.domain.table.ReviewComment
 import muse.server.MuseMiddleware.Auth
-import muse.server.graphql.subgraph.{
-  Album,
-  Artist,
-  Comment,
-  Playlist,
-  PlaylistTrack,
-  Review,
-  ReviewEntity,
-  SearchResult,
-  Track,
-  User
-}
-import muse.service.persist.DatabaseOps
+import muse.server.graphql.subgraph.{Album, Artist, Comment, Playlist, PlaylistTrack, Review, ReviewEntity, SearchResult, Track, User}
+import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.*
@@ -39,17 +28,17 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  given userSchema: Schema[DatabaseOps & SpotifyService, User] = Schema.gen
+  given userSchema: Schema[DatabaseService & SpotifyService, User] = Schema.gen
 
-  given reviewSchema: Schema[DatabaseOps & SpotifyService, Review] = Schema.gen
+  given reviewSchema: Schema[DatabaseService & SpotifyService, Review] = Schema.gen
 
-  given commentsSchema: Schema[DatabaseOps & SpotifyService, Comment] = Schema.gen
+  given commentsSchema: Schema[DatabaseService & SpotifyService, Comment] = Schema.gen
 
-  given entitySchema: Schema[DatabaseOps & SpotifyService, ReviewEntity] = Schema.gen
+  given entitySchema: Schema[DatabaseService & SpotifyService, ReviewEntity] = Schema.gen
 
-  given playlistSchema: Schema[DatabaseOps & SpotifyService, Playlist] = Schema.gen
+  given playlistSchema: Schema[DatabaseService & SpotifyService, Playlist] = Schema.gen
 
-  given playlistTrackSchema: Schema[DatabaseOps & SpotifyService, PlaylistTrack] = Schema.gen
+  given playlistTrackSchema: Schema[DatabaseService & SpotifyService, PlaylistTrack] = Schema.gen
 
   given albumSchema: Schema[SpotifyService, Album] = Schema.gen
 
@@ -57,19 +46,19 @@ object MuseGraphQL {
 
   given trackSchema: Schema[SpotifyService, Track] = Schema.gen
 
-  given createReview: Schema[Auth[UserSession] & DatabaseOps, CreateReview] = Schema.gen
+  given createReview: Schema[Auth[UserSession] & DatabaseService, CreateReview] = Schema.gen
 
-  given createComment: Schema[Auth[UserSession] & DatabaseOps, CreateComment] = Schema.gen
+  given createComment: Schema[Auth[UserSession] & DatabaseService, CreateComment] = Schema.gen
 
-  given updateReview: Schema[Auth[UserSession] & DatabaseOps, UpdateReview] = Schema.gen
+  given updateReview: Schema[Auth[UserSession] & DatabaseService, UpdateReview] = Schema.gen
 
-  given updateComment: Schema[Auth[UserSession] & DatabaseOps, UpdateComment] = Schema.gen
+  given updateComment: Schema[Auth[UserSession] & DatabaseService, UpdateComment] = Schema.gen
 
-  given searchSchema: Schema[DatabaseOps & SpotifyService, SearchResult] = Schema.gen
+  given searchSchema: Schema[DatabaseService & SpotifyService, SearchResult] = Schema.gen
 
   given userArgs: Schema[Nothing, UserArgs] = Schema.gen
 
-  type Env = Auth[UserSession] & DatabaseOps & SpotifyService
+  type Env = Auth[UserSession] & DatabaseService & SpotifyService
 
   val api =
     GraphQL.graphQL[Env, Queries, Mutations, Unit](

@@ -16,8 +16,6 @@ import zio.{Cause, Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, Z
 object Auth {
   val scopes = List().mkString(" ")
 
-  type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory & UserSessions
-
   val loginEndpoints = Http
     .collectZIO[Request] {
       case Method.GET -> !! / "login"          =>

@@ -17,18 +17,18 @@ val COOKIE_KEY = "XSESSION"
 
 object MuseServer {
   val live = for {
-    interpreter <- MuseGraphQL.interpreter
+    interpreter  <- MuseGraphQL.interpreter
     serverConfig <- ZIO.service[ServerConfig]
-    _ <- Utils.writeToFile(serverConfig.schemaFile, MuseGraphQL.api.render)
-    allEndpoints = (Auth.loginEndpoints ++ createProtectedEndpoints(interpreter)) @@
-      (cors(config) ++ MuseMiddleware.logErrors)
-    _ <- service
-      .Server
-      .start(
-        serverConfig.port,
-        allEndpoints
-      )
-      .forever
+    _            <- Utils.writeToFile(serverConfig.schemaFile, MuseGraphQL.api.render)
+    allEndpoints  = (Auth.loginEndpoints ++ createProtectedEndpoints(interpreter)) @@
+                      (cors(config) ++ MuseMiddleware.logErrors)
+    _            <- service
+                      .Server
+                      .start(
+                        serverConfig.port,
+                        allEndpoints
+                      )
+                      .forever
   } yield ()
 
   val config: CorsConfig =

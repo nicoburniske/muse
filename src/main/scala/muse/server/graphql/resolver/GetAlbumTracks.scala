@@ -13,15 +13,15 @@ object GetAlbumTracks {
    * Retrieves tracks for the given album.
    *
    * @param albumId
-   * the album's id
+   *   the album's id
    * @param numTracks
-   * if known, pagination can occur in parallel
+   *   if known, pagination can occur in parallel
    * @return
-   * the tracks from the album
+   *   the tracks from the album
    */
   def query(albumId: String, numTracks: Option[Int]): ZQuery[SpotifyService, Throwable, List[Track]] =
     ZQuery.fromZIO((numTracks match {
-      case None =>
+      case None        =>
         SpotifyService
           .getAllAlbumTracks(albumId)
           .map(_.map(t => Track.fromSpotify(t, Some(albumId))).toList)

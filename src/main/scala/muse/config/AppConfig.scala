@@ -15,12 +15,12 @@ object AppConfig {
 
   lazy val flattened = for {
     appConfigEnv <- ZLayer.environment[AppConfig]
-    spotify <- ZLayer.succeed(appConfigEnv.get.spotify)
-    sql <- ZLayer.succeed(appConfigEnv.get.sqlConfig)
-    server <- ZLayer.succeed(appConfigEnv.get.serverConfig)
+    spotify      <- ZLayer.succeed(appConfigEnv.get.spotify)
+    sql          <- ZLayer.succeed(appConfigEnv.get.sqlConfig)
+    server       <- ZLayer.succeed(appConfigEnv.get.serverConfig)
   } yield spotify ++ sql ++ server
 
-  lazy val live = appConfigLayer >>> flattened
+  lazy val layer = appConfigLayer >>> flattened
 
   lazy val appConfigLayer =
     TypesafeConfig.fromHoconFile(new File(CONFIG_FILE), AppConfig.appDescriptor)

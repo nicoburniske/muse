@@ -18,7 +18,7 @@ object GetTrack {
   val TrackDataSource: DataSource[SpotifyService, GetTrack] =
     DataSource.Batched.make("TrackDataSource") { reqChunks =>
       reqChunks.toList match
-        case Nil => ZIO.succeed(CompletedRequestMap.empty)
+        case Nil         => ZIO.succeed(CompletedRequestMap.empty)
         case head :: Nil =>
           SpotifyService
             .getTrack(head.id)
@@ -27,7 +27,7 @@ object GetTrack {
               t => CompletedRequestMap.empty.insert(head)(Right(Track.fromSpotify(t)))
             )
             .addTimeLog("Retrieved Single Track")
-        case reqs =>
+        case reqs        =>
           // TODO: make constants for max batch size.
           ZIO
             .foreachPar(reqs.grouped(MAX_TRACKS_PER_REQUEST).toVector) { reqs =>
@@ -42,8 +42,8 @@ object GetTrack {
               res.foldLeft(CompletedRequestMap.empty) {
                 case (map: CompletedRequestMap, (reqs, result)) =>
                   result match
-                    case error@Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
-                    case Right(tracks) =>
+                    case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
+                    case Right(tracks)   =>
                       val grouped =
                         tracks.groupBy(_.id).view.mapValues(_.head)
                       reqs.foldLeft(map) { (map, req) =>

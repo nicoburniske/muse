@@ -1,7 +1,7 @@
 package muse.server.graphql.resolver
 
 import muse.server.graphql.subgraph.Comment
-import muse.service.persist.DatabaseOps
+import muse.service.persist.DatabaseService
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 import zio.{Chunk, ZIO}
 
@@ -14,11 +14,11 @@ object GetReviewComments {
   def query(reviewId: UUID) = ZQuery.fromRequest(GetReviewComments(reviewId))(CommentDataSource)
 
   // TODO: incorporate permissions
-  val CommentDataSource: DataSource[DatabaseOps, GetReviewComments] =
+  val CommentDataSource: DataSource[DatabaseService, GetReviewComments] =
     DataSource.Batched.make("ReviewCommentsDataSource") { (requests: Chunk[GetReviewComments]) =>
       requests.toList match
         case req :: Nil =>
-          DatabaseOps
+          DatabaseService
             .getReviewComments(req.reviewId)
             .fold(
               e => CompletedRequestMap.empty.insert(req)(Left(e)),
@@ -27,7 +27,7 @@ object GetReviewComments {
         case reqs       =>
           val ids = reqs.map(_.reviewId)
           for {
-            maybeComments <- DatabaseOps.getAllReviewComments(ids).either
+            maybeComments <- DatabaseService.getAllReviewComments(ids).either
             _             <- if (maybeComments.isRight) ZIO.logInfo(s"Retrieved reviews: ${ids.mkString(", ")}")
                              else ZIO.logInfo(s"Failed to retrieve reviews: ${ids.mkString(",")}")
           } yield {

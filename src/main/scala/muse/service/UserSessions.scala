@@ -32,7 +32,7 @@ trait UserSessions {
 }
 
 object UserSessions {
-  val live = ZLayer.scoped {
+  val layer: ZLayer[Scope, Throwable, UserSessionsLive] = ZLayer.scoped {
     ZIO.acquireRelease(
       Ref
         .Synchronized
@@ -90,11 +90,11 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
   val SESSIONS_FILE = "src/main/resources/UserSessions.json"
 
   def loadSessions: ZIO[Scope, Throwable, List[UserSession]] = for {
-    partitioned <- Utils
-      .readFile(SESSIONS_FILE)
-      .via(ZPipeline.splitLines)
-      .map(_.fromJson[UserSession])
-      .partitionEither(ZIO.succeed(_))
+    partitioned                 <- Utils
+                                     .readFile(SESSIONS_FILE)
+                                     .via(ZPipeline.splitLines)
+                                     .map(_.fromJson[UserSession])
+                                     .partitionEither(ZIO.succeed(_))
     // Deconstruct tuple.
     (errorStream, sessionStream) = partitioned
 
