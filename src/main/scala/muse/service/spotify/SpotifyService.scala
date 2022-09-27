@@ -45,11 +45,11 @@ object SpotifyService {
     session <- Auth.currentUser[UserSession]
     backend <- ZIO.service[SttpBackend[Task, Any]]
     spotify  = SpotifyAPI(backend, session.accessToken)
-  } yield SpotifyServiceImpl(spotify)
+  } yield SpotifyServiceLive(spotify)
 
   def live(accessToken: String) = for {
     backend <- ZIO.service[SttpBackend[Task, Any]]
-  } yield SpotifyServiceImpl(SpotifyAPI(backend, accessToken))
+  } yield SpotifyServiceLive(SpotifyAPI(backend, accessToken))
 
   def getCurrentUserProfile = ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserProfile)
 
@@ -109,7 +109,7 @@ object SpotifyService {
     ZIO.serviceWithZIO[SpotifyService](_.getArtistTopTracks(artistId, country))
 }
 
-case class SpotifyServiceImpl(s: SpotifyAPI[Task]) extends SpotifyService {
+case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
   def getCurrentUserProfile = s.getCurrentUserProfile
 
   def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None) =

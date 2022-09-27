@@ -5,7 +5,7 @@ import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
 import muse.service.UserSessions
-import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService, SpotifyServiceImpl}
+import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService}
 import muse.utils.Utils
 import sttp.client3.SttpBackend
 import zhttp.http.middleware.HttpMiddleware
