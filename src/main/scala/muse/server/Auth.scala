@@ -1,11 +1,12 @@
 package muse.server
 
-import muse.config.SpotifyConfig
+import muse.config.{ServerConfig, SpotifyConfig}
 import muse.domain.session.UserSession
 import muse.domain.spotify.AuthCodeFlowData
 import muse.domain.table.AppUser
-import muse.service.spotify.SpotifyAuthService
-import muse.service.{RequestProcessor, UserSessions}
+import muse.service.persist.DatabaseService
+import muse.service.spotify.{SpotifyAuthService, SpotifyService}
+import muse.service.{RequestSession, UserSessions}
 import sttp.client3.SttpBackend
 import zhttp.http.*
 import zhttp.http.Middleware.csrfGenerate
@@ -27,21 +28,18 @@ object Auth {
           .get("code")
           .flatMap(_.headOption)
           .fold {
-            ZIO.succeed(
-              Response(
-                status = Status.BadRequest,
-                data = HttpData.fromString("Missing 'code' query parameter")))
+            ZIO.succeed(Response(status = Status.BadRequest, data = HttpData.fromString("Missing 'code' query parameter")))
           } { code =>
             for {
               authData    <- SpotifyAuthService.getAuthCode(code)
-              spotifyUser <- RequestProcessor.handleUserLogin(authData)
+              spotifyUser <- handleUserLogin(authData)
+              frontendURL <- ZIO.serviceWith[ServerConfig](_.frontendUrl)
               session     <- UserSessions.addUserSession(spotifyUser.id, authData)
               _           <- ZIO.logInfo(session)
             } yield {
-              // TODO: yield redirect to actual site
               // TODO: add domain to cookie.
               val cookie = Cookie(COOKIE_KEY, session, isSecure = true, isHttpOnly = true)
-              Response.redirect("http://localhost:3000").addCookie(cookie)
+              Response.redirect(frontendURL).addCookie(cookie)
             }
           }
     }
@@ -52,10 +50,9 @@ object Auth {
   val logoutEndpoint = Http.collectZIO[Request] {
     case Method.POST -> !! / "logout" =>
       for {
-        session <- MuseMiddleware.Auth.currentUser[UserSession]
+        session <- RequestSession.get[UserSession]
         _       <- UserSessions.deleteUserSession(session.sessionCookie)
-        _       <- ZIO.logInfo(
-                     s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
+        _       <- ZIO.logInfo(s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
       } yield Response.ok
   }
 
@@ -73,4 +70,21 @@ object Auth {
       "state"         -> List(state.toString.take(15))
     )
   )
+
+  /**
+   * Handles a user login. TODO: add retry schedule.
+   *
+   * @param auth
+   *   current user auth data from spotify
+   * @return
+   *   true if new User was created, false if current user was updated.
+   */
+  def handleUserLogin(auth: AuthCodeFlowData) =
+    for {
+      spotify  <- SpotifyService.live(auth.accessToken)
+      userInfo <- spotify.getCurrentUserProfile
+      res      <- DatabaseService.createOrUpdateUser(userInfo.id)
+      resText   = if (res) "Created" else "Updated"
+      _        <- ZIO.logInfo(s"Successfully logged in ${userInfo.id}. $resText account")
+    } yield userInfo
 }

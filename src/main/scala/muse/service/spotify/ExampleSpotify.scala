@@ -39,29 +39,29 @@ trait Eq[T] {
   extension (t: T) def getHashCodes: Set[Int] = hashCodes(t)
 }
 
-final class SetWithEq[T] private (items: Map[Int, T])(using e: Eq[T]) extends Set[T] {
-  def iterator: Iterator[T] = items.values.iterator
-
-  def contains(elem: T): Boolean = elem.getHashCodes.exists(items.contains)
-
+final class SetWithEq[T: Eq] private (items: Map[Int, T]) extends Set[T] {
   def getElem(elem: T): Option[T] = elem
     .getHashCodes
     .find(h => items.contains(h))
     .flatMap(items.get)
 
-  def excl(elem: T): SetWithEq[T] = {
+  override def iterator: Iterator[T] = items.values.iterator
+
+  override def contains(elem: T): Boolean = elem.getHashCodes.exists(items.contains)
+
+  override def excl(elem: T): SetWithEq[T] = {
     val newElems = elem.getHashCodes.foldLeft(items)((acc, c) => acc - c)
     SetWithEq(newElems)
   }
 
-  def incl(elem: T): SetWithEq[T] = {
+  override def incl(elem: T): SetWithEq[T] = {
     val newItems = elem.getHashCodes.foldLeft(items)((acc, c) => acc + (c -> elem))
     SetWithEq(newItems)
   }
 }
 
 object SetWithEq {
-  def empty[T](using eq: Eq[T]) = SetWithEq(Map.empty)
+  def empty[T: Eq] = SetWithEq(Map.empty)
 }
 
 case class WeeklyAnalysis(spotify: SpotifyAPI[Task]) {
@@ -130,8 +130,9 @@ case class WeeklyAnalysis(spotify: SpotifyAPI[Task]) {
   def findWeeklyTracks: Task[Vector[PlaylistTrack]] = for {
     weeklies      <- getWeeklyPlaylists
     sortedOldToNew = weeklies.sortBy { case (_, d) => d.toEpochDay }.map(_._1)
+    names          = sortedOldToNew.reverse.map(_.name).mkString(", ")
     ids            = sortedOldToNew.map(_.id)
-    _             <- printLine(s"${weeklies.size} Playlists Found: ${sortedOldToNew.map(_.name).mkString(", ")}")
+    _             <- printLine(s"${weeklies.size} Playlists Found: $names")
     tracks        <- ZIO.foreachPar(ids)(spotify.getAllPlaylistTracks).map(_.flatten)
     _             <- printLine(s"${tracks.size} Tracks Found")
   } yield tracks

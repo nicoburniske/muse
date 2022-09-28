@@ -14,8 +14,8 @@ import muse.domain.session.UserSession
 import muse.domain.spotify
 import muse.domain.spotify.AlbumType
 import muse.domain.table.ReviewComment
-import muse.server.MuseMiddleware.Auth
 import muse.server.graphql.subgraph.{Album, Artist, Comment, Playlist, PlaylistTrack, Review, ReviewEntity, SearchResult, Track, User}
+import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
@@ -46,23 +46,22 @@ object MuseGraphQL {
 
   given trackSchema: Schema[SpotifyService, Track] = Schema.gen
 
-  given createReview: Schema[Auth[UserSession] & DatabaseService, CreateReview] = Schema.gen
+  given createReview: Schema[RequestSession[UserSession] & DatabaseService, CreateReview] = Schema.gen
 
-  given createComment: Schema[Auth[UserSession] & DatabaseService, CreateComment] = Schema.gen
+  given createComment: Schema[RequestSession[UserSession] & DatabaseService, CreateComment] = Schema.gen
 
-  given updateReview: Schema[Auth[UserSession] & DatabaseService, UpdateReview] = Schema.gen
+  given updateReview: Schema[RequestSession[UserSession] & DatabaseService, UpdateReview] = Schema.gen
 
-  given updateComment: Schema[Auth[UserSession] & DatabaseService, UpdateComment] = Schema.gen
+  given updateComment: Schema[RequestSession[UserSession] & DatabaseService, UpdateComment] = Schema.gen
 
   given searchSchema: Schema[DatabaseService & SpotifyService, SearchResult] = Schema.gen
 
   given userArgs: Schema[Nothing, UserArgs] = Schema.gen
 
-  type Env = Auth[UserSession] & DatabaseService & SpotifyService
+  type Env = RequestSession[UserSession] & DatabaseService & SpotifyService
 
   val api =
-    GraphQL.graphQL[Env, Queries, Mutations, Unit](
-      RootResolver(Queries.live, Mutations.live)) @@ printErrors @@ apolloTracing
+    GraphQL.graphQL[Env, Queries, Mutations, Unit](RootResolver(Queries.live, Mutations.live)) @@ printErrors @@ apolloTracing
 
   val interpreter = api.interpreter.map(errorHandler(_))
 

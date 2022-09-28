@@ -4,8 +4,8 @@ import caliban.{CalibanError, GraphQLInterpreter, ZHttpAdapter}
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
-import muse.service.UserSessions
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService}
+import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils
 import sttp.client3.SttpBackend
 import zhttp.http.middleware.HttpMiddleware
@@ -15,45 +15,18 @@ import zio.*
 import java.time.Instant
 
 object MuseMiddleware {
-
-  trait Auth[T] {
-    def currentUser: IO[Unauthorized, T]
-    def setUser(session: Option[T]): UIO[Unit]
-  }
-
-  object Auth {
-    def currentUser[T: Tag] = ZIO.serviceWithZIO[Auth[T]](_.currentUser)
-
-    def setUser[T: Tag](t: Option[T]) = ZIO.serviceWithZIO[Auth[T]](_.setUser(t))
-  }
-
-  object FiberUserSession {
-    val layer: ULayer[Auth[UserSession]] = ZLayer.scoped {
-      FiberRef.make[Option[UserSession]](None).map { ref =>
-        new Auth {
-          def currentUser: IO[Unauthorized, UserSession] =
-            ref.get.flatMap {
-              case Some(v) => ZIO.succeed(v)
-              case None    => ZIO.fail(Unauthorized(None))
-            }
-
-          def setUser(session: Option[UserSession]): UIO[Unit] = ref.set(session)
-        }
-      }
-    }
-  }
-
-  def userSessionAuth[R](app: Http[R & SpotifyService, Throwable, Request, Response]) = Http
+  def checkAuthAddSession[R](app: Http[R & SpotifyService, Throwable, Request, Response]) = Http
     .fromFunctionZIO[Request] { request =>
       request
         .cookieValue(COOKIE_KEY)
         .orElse(request.authorization)
+        .map(_.toString)
         .fold(
           ZIO.logInfo("Missing Auth") *> ZIO.fail(Unauthorized("Missing Auth"))
-        )(cookie =>
+        )(auth =>
           for {
-            session <- getSession(cookie.toString)
-            _       <- Auth.setUser[UserSession](Some(session))
+            session <- getSession(auth)
+            _       <- RequestSession.set[UserSession](Some(session))
             layer   <- SpotifyService.getLayer
           } yield app.provideSomeLayer[R, SpotifyService, Throwable](layer))
     }

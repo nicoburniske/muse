@@ -4,8 +4,8 @@ import muse.domain.common.EntityType
 import muse.domain.error.{Forbidden, InvalidEntity, InvalidUser}
 import muse.domain.mutate.{CreateComment, CreateReview, DeleteComment, DeleteReview, ShareReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
-import muse.server.MuseMiddleware.Auth
 import muse.server.graphql.subgraph.{Comment, Review}
+import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import zio.{IO, ZIO}
@@ -13,7 +13,7 @@ import zio.{IO, ZIO}
 import java.sql.SQLException
 import java.util.UUID
 
-type MutationEnv = Auth[UserSession] & DatabaseService & SpotifyService
+type MutationEnv = RequestSession[UserSession] & DatabaseService & SpotifyService
 
 // TODO: add un-sharing.
 // TODO: add checking for what constitutes a valid comment. What does rating represent?
@@ -47,44 +47,44 @@ object Mutations {
   )
 
   def createReview(create: CreateReview) = for {
-    user <- Auth.currentUser[UserSession]
+    user <- RequestSession.get[UserSession]
     _    <- validateEntity(create.entityId, create.entityType)
     r    <- DatabaseService.createReview(user.id, create)
   } yield Review.fromTable(r)
 
   def createComment(create: CreateComment) = for {
-    user <- Auth.currentUser[UserSession]
+    user <- RequestSession.get[UserSession]
     _    <- validateEntity(create.entityId, create.entityType) <&>
               validateCommentPermissions(user.id, create.reviewId)
     c    <- DatabaseService.createReviewComment(user.id, create)
   } yield Comment.fromTable(c)
 
   def updateReview(update: UpdateReview) = for {
-    user   <- Auth.currentUser[UserSession]
+    user   <- RequestSession.get[UserSession]
     _      <- validateReviewPermissions(user.id, update.reviewId)
     result <- DatabaseService.updateReview(update)
   } yield result
 
   def updateComment(update: UpdateComment) = for {
-    user   <- Auth.currentUser[UserSession]
+    user   <- RequestSession.get[UserSession]
     _      <- validateCommentEditingPermissions(user.id, update.reviewId, update.commentId)
     result <- DatabaseService.updateComment(update)
   } yield result
 
   def deleteComment(d: DeleteComment) = for {
-    user   <- Auth.currentUser[UserSession]
+    user   <- RequestSession.get[UserSession]
     _      <- validateCommentEditingPermissions(user.id, d.reviewId, d.commentId)
     result <- DatabaseService.deleteComment(d)
   } yield result
 
   def deleteReview(d: DeleteReview) = for {
-    user   <- Auth.currentUser[UserSession]
+    user   <- RequestSession.get[UserSession]
     _      <- validateReviewPermissions(user.id, d.id)
     result <- DatabaseService.deleteReview(d)
   } yield result
 
   def shareReview(s: ShareReview) = for {
-    user   <- Auth.currentUser[UserSession]
+    user   <- RequestSession.get[UserSession]
     _      <- validateReviewPermissions(user.id, s.reviewId) <&> validateUser(s.userId)
     result <- DatabaseService.shareReview(s)
   } yield result

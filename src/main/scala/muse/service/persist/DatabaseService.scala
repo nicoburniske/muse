@@ -61,19 +61,6 @@ trait DatabaseService {
 
   // TODO: sharing methods.
 
-  /**
-   * If username already exists, update existing row's auth information. Otherwise create user.
-   *
-   * @param userId
-   *   current user request
-   * @return
-   *   true if new User was created, false if current user was updated.
-   */
-  def createOrUpdateUser(userId: String): IO[SQLException, Boolean] =
-    getUserById(userId).map(_.isDefined).flatMap {
-      case true  => ZIO.succeed(true)
-      case false => createUser(userId).as(false)
-    }
 }
 
 object DatabaseService {
@@ -128,6 +115,37 @@ object DatabaseService {
 
   def canMakeComment(userId: String, reviewId: UUID) =
     ZIO.serviceWithZIO[DatabaseService](_.canMakeComment(userId, reviewId))
+
+  /**
+   * If username already exists, update existing row's auth information. Otherwise create user.
+   *
+   * @param userId
+   *   current user request
+   * @return
+   *   true if new User was created, false if current user was updated.
+   */
+  def createOrUpdateUser(userId: String) =
+    getUserById(userId).map(_.isDefined).flatMap {
+      case true  => ZIO.succeed(false)
+      case false => createUser(userId).as(true)
+    }
+
+  /**
+   * TODO: FIX BELOW?
+   */
+  enum ReviewOptions:
+    case UserOwnedReviewsPublic, UserOwnedReviewsPrivate, UserOwnedReviewsAll, UserAccessReviews
+
+  def userReviewsOptions(userId: String, options: ReviewOptions) = options match
+    case ReviewOptions.UserOwnedReviewsPublic  =>
+      DatabaseService.getUserReviews(userId).map(_.filter(_.isPublic))
+    case ReviewOptions.UserOwnedReviewsPrivate =>
+      DatabaseService.getUserReviews(userId).map(_.filterNot(_.isPublic))
+    case ReviewOptions.UserOwnedReviewsAll     =>
+      DatabaseService.getUserReviews(userId)
+    case ReviewOptions.UserAccessReviews       =>
+      DatabaseService.getAllUserReviews(userId)
+
 }
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
@@ -248,17 +266,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .returningGenerated(c => (c.id, c.createdAt, c.updatedAt))
   }.provide(layer).map {
     case (id, created, updated) =>
-      ReviewComment(
-        id,
-        c.reviewId,
-        created,
-        updated,
-        c.parentCommentId,
-        userId,
-        c.comment,
-        c.rating,
-        c.entityType,
-        c.entityId)
+      ReviewComment(id, c.reviewId, created, updated, c.parentCommentId, userId, c.comment, c.rating, c.entityType, c.entityId)
   }
 
   /**

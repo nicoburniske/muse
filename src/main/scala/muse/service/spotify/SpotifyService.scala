@@ -5,8 +5,7 @@ import muse.domain.common.EntityType
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.*
-import muse.server.MuseMiddleware.Auth
-import muse.service.UserSessions
+import muse.service.{RequestSession, UserSessions}
 import muse.utils.Givens.given
 import sttp.client3.SttpBackend
 import sttp.model.StatusCode
@@ -36,16 +35,15 @@ trait SpotifyService {
 }
 
 object SpotifyService {
-  // TODO: Does this have to be scoped? I am not sure.
-  lazy val layer = ZLayer.suspend(ZLayer.scoped(live))
-
-  val getLayer = live.map(ZLayer.succeed(_))
-
-  lazy val live = for {
-    session <- Auth.currentUser[UserSession]
-    backend <- ZIO.service[SttpBackend[Task, Any]]
-    spotify  = SpotifyAPI(backend, session.accessToken)
+  val live = for {
+    accessToken <- RequestSession.get[UserSession].map(_.accessToken)
+    backend     <- ZIO.service[SttpBackend[Task, Any]]
+    spotify      = SpotifyAPI(backend, accessToken)
   } yield SpotifyServiceLive(spotify)
+
+  // TODO: Does this have to be scoped? I am not sure.
+  val layer    = ZLayer.fromZIO(live)
+  val getLayer = live.map(ZLayer.succeed(_))
 
   def live(accessToken: String) = for {
     backend <- ZIO.service[SttpBackend[Task, Any]]

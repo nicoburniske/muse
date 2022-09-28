@@ -8,14 +8,9 @@ import sttp.model.{Method, ResponseMetadata, Uri}
 import zio.Task
 import zio.json.*
 
-final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: String)(
-    using m: MonadError[F, Throwable]) {
+final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: String)(using m: MonadError[F, Throwable]) {
 
-  def search(
-      query: String,
-      entityTypes: Set[EntityType],
-      limit: Int = 50,
-      offset: Option[Int] = None): F[SearchResult] = {
+  def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None): F[SearchResult] = {
     val encodedTypes = entityTypes.map(_.toString.toLowerCase).mkString(",")
     val uri          = uri"${SpotifyAPI.API_BASE}/search?q=$query&type=$encodedTypes&limit=$limit&offset=$offset"
     execute(uri, Method.GET)
@@ -38,10 +33,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       case EntityType.Playlist => getPlaylist(entityId).isSuccess
       case EntityType.Track    => getTrack(entityId).isSuccess
 
-  def getPlaylist(
-      playlistId: String,
-      fields: Option[String] = None,
-      market: Option[String] = None): F[UserPlaylist] = {
+  def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None): F[UserPlaylist] = {
     val uri = uri"${SpotifyAPI.API_BASE}/playlists/$playlistId?fields=$fields&market=$market"
     execute(uri, Method.GET)
   }
@@ -91,10 +83,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     getAllPaging(request, MAX_PER_REQUEST)
   }
 
-  def getSomePlaylistTracks(
-      playlistId: String,
-      limit: Int,
-      offset: Option[Int] = None): F[Paging[PlaylistTrack]] = {
+  def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): F[Paging[PlaylistTrack]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/playlists/$playlistId/tracks?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
@@ -105,10 +94,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     getAllPaging(request, MAX_PER_REQUEST)
   }
 
-  def getSomeAlbumTracks(
-      album: String,
-      limit: Option[Int] = None,
-      offset: Option[Int] = None): F[Paging[Track]] = {
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): F[Paging[Track]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/albums/$album/tracks?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
@@ -119,10 +105,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     getAllPaging(request, MAX_PER_REQUEST)
   }
 
-  def getSomeArtistAlbums(
-      artistId: String,
-      limit: Option[Int] = None,
-      offset: Option[Int] = None): F[Paging[Album]] = {
+  def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None): F[Paging[Album]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/artists/$artistId/albums?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
@@ -140,8 +123,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     execute[MultiTrack](uri, Method.GET).map(_.tracks)
   }
 
-  def getAllPaging[T](request: Int => F[Paging[T]], pageSize: Int = 50)(
-      using decoder: JsonDecoder[T]): F[Vector[T]] = {
+  def getAllPaging[T: JsonDecoder](request: Int => F[Paging[T]], pageSize: Int = 50): F[Vector[T]] = {
     def go(acc: Vector[T], offset: Int): F[Vector[T]] = {
       request(offset).flatMap { (paging: Paging[T]) =>
         paging.next match {
@@ -154,7 +136,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     go(Vector.empty, 0)
   }
 
-  def execute[T](uri: Uri, method: Method)(using decoder: JsonDecoder[T]): F[T] = {
+  def execute[T: JsonDecoder](uri: Uri, method: Method): F[T] = {
     val base            = basicRequest.copy[Identity, Either[String, String], Any](uri = uri, method = method)
     val withPermissions = addPermissions(base)
     val mappedResponse  = withPermissions.response.mapWithMetadata {

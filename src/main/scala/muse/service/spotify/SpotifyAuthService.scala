@@ -30,10 +30,7 @@ object SpotifyAuthService {
 
 }
 
-case class SpotifyAuthRepo(
-    config: SpotifyConfig,
-    eventLoopGroup: EventLoopGroup,
-    channelFactory: ChannelFactory)
+case class SpotifyAuthRepo(config: SpotifyConfig, eventLoopGroup: EventLoopGroup, channelFactory: ChannelFactory)
     extends SpotifyAuthService {
 
   val TOKEN_ENDPOINT = URL(
@@ -71,7 +68,7 @@ case class SpotifyAuthRepo(
       .flatMap(deserializeBodyOrFail[RefreshAuthData])
       .provideLayer(layer)
 
-  private def deserializeBodyOrFail[T](body: String)(using decoder: JsonDecoder[T]) =
+  private def deserializeBodyOrFail[T: JsonDecoder](body: String) =
     body
       .fromJson[T]
       .fold(

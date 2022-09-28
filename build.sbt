@@ -1,22 +1,22 @@
-ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / version      := "0.1.0-SNAPSHOT"
 ThisBuild / organization := "io.nicoburniske"
 
 ThisBuild / scalaVersion := "3.1.0"
 
-val zio = "2.0.0"
-val zioJson = "0.3.0-RC10"
-val zioConfig = "3.0.1"
-val zhttp = "2.0.0-RC10"
-val protoQuill = "4.0.0"
-val postgresql = "42.3.6"
-val sttp = "3.7.0"
+val zio          = "2.0.0"
+val zioJson      = "0.3.0-RC10"
+val zioConfig    = "3.0.1"
+val zhttp        = "2.0.0-RC10"
+val protoQuill   = "4.0.0"
+val postgresql   = "42.3.6"
+val sttp         = "3.7.0"
 val slf4jVersion = "1.7.36"
 
 lazy val mainMethod = "muse.Main"
 
 inThisBuild(
   List(
-    developers := List(
+    developers    := List(
       Developer(
         "nicoburniske",
         "Nico Burniske",
@@ -39,24 +39,24 @@ lazy val root = (project in file(".")).settings(
     "dev.zio"                       %% "zio-nio"                       % zio,
     // ZIO Config.
     "dev.zio"                       %% "zio-config"                    % zioConfig,
-    "dev.zio" %% "zio-config-typesafe" % zioConfig,
+    "dev.zio"                       %% "zio-config-typesafe"           % zioConfig,
     // HTTP Server.
-    "io.d11" %% "zhttp" % zhttp,
+    "io.d11"                        %% "zhttp"                         % zhttp,
     // HTTP Client.
-    "com.softwaremill.sttp.client3" %% "core" % sttp,
+    "com.softwaremill.sttp.client3" %% "core"                          % sttp,
     "com.softwaremill.sttp.client3" %% "async-http-client-backend-zio" % sttp,
     // Quill JDBC ZIO.
-    "io.getquill" %% "quill-jdbc-zio" % protoQuill,
-    "org.postgresql" % "postgresql" % postgresql,
+    "io.getquill"                   %% "quill-jdbc-zio"                % protoQuill,
+    "org.postgresql"                 % "postgresql"                    % postgresql,
     // Logging.
-    "dev.zio" %% "zio-logging-slf4j" % zio,
-    "org.slf4j" % "slf4j-api" % slf4jVersion,
-    "org.slf4j" % "slf4j-simple" % slf4jVersion,
+    "dev.zio"                       %% "zio-logging-slf4j"             % zio,
+    "org.slf4j"                      % "slf4j-api"                     % slf4jVersion,
+    "org.slf4j"                      % "slf4j-simple"                  % slf4jVersion,
     // Graphql.
-    "com.github.ghostdogpr" %% "caliban" % "2.0.0",
-    "com.github.ghostdogpr" %% "caliban-zio-http" % "2.0.0",
+    "com.github.ghostdogpr"         %% "caliban"                       % "2.0.0",
+    "com.github.ghostdogpr"         %% "caliban-zio-http"              % "2.0.0",
     // Test Libraries.
-    "dev.zio" %% "zio-test" % zio % Test
+    "dev.zio"                       %% "zio-test"                      % zio % Test
   ),
   scalacOptions ++= Seq(
     "-Xmax-inlines:45"
