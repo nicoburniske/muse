@@ -15,24 +15,31 @@ import zio.*
 import java.time.Instant
 
 object MuseMiddleware {
-  def checkAuthAddSession[R](app: Http[R & SpotifyService, Throwable, Request, Response]) = Http
-    .fromFunctionZIO[Request] { request =>
-      request
-        .cookieValue(COOKIE_KEY)
-        .orElse(request.authorization)
-        .map(_.toString)
-        .fold(
+  def checkAuthAddSession[R](app: Http[R & SpotifyService, Throwable, Request, Response]) =
+    Http
+      .fromFunctionZIO[Request] { request =>
+        val maybeAuth = request
+          .cookieValue(COOKIE_KEY)
+          .orElse(request.authorization)
+          .map(_.toString)
+        maybeAuth.fold {
           ZIO.logInfo("Missing Auth") *> ZIO.fail(Unauthorized("Missing Auth"))
-        )(auth =>
+        } { auth =>
           for {
             session <- getSession(auth)
             _       <- RequestSession.set[UserSession](Some(session))
+            // Build layer using Environment.
             layer   <- SpotifyService.getLayer
-          } yield app.provideSomeLayer[R, SpotifyService, Throwable](layer))
-    }
-    .flatten
+          } yield app.provideSomeLayer[R, SpotifyService, Throwable](layer)
+        }
+      }
+      .flatten
+      .catchAll {
+        case u: Unauthorized => u.http
+        case t: Throwable    => Http.error(HttpError.InternalServerError(cause = Some(t)))
+      }
 
-  def getSession(cookie: String): ZIO[SpotifyAuthService & UserSessions, Throwable, UserSession] =
+  def getSession(cookie: String): ZIO[SpotifyAuthService & UserSessions, Unauthorized | Throwable, UserSession] =
     for {
       maybeUser <- UserSessions.getUserSession(cookie)
       session   <- ZIO.fromOption(maybeUser).orElseFail(Unauthorized("Invalid Auth"))
@@ -57,14 +64,15 @@ object MuseMiddleware {
     ): Http[R1, E1, Request, Response] =
       http
         .tapErrorZIO { case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
+
     //        .catchAll{ case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
   }
 
-  val catchUnauthorized: HttpMiddleware[Any, Nothing] = new HttpMiddleware[Any, Nothing] {
-    override def apply[R1 <: Any, E1 >: Nothing](
-        http: Http[R1, E1, Request, Response]
-    ): Http[R1, E1, Request, Response] =
-      http.catchSome { case u: Unauthorized => u.http }
+  // This doesn't work?
+  val catchUnauthorized: HttpMiddleware[Any, Unauthorized] = new HttpMiddleware[Any, Unauthorized] {
+    override def apply[R1 <: Any, E1 >: Unauthorized](http: Http[R1, E1, Request, Response]) = {
+      http.catchAll { case u: Unauthorized => u.http }
+    }
   }
 
   /**

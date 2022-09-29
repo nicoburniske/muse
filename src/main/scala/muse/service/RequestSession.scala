@@ -16,7 +16,7 @@ object RequestSession {
         def get: IO[Unauthorized, UserSession] =
           ref.get.flatMap {
             case Some(v) => ZIO.succeed(v)
-            case None    => ZIO.fail(Unauthorized(None))
+            case None    => ZIO.fail(Unauthorized.empty)
           }
 
         def set(session: Option[UserSession]): UIO[Unit] = ref.set(session)

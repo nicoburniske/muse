@@ -47,14 +47,16 @@ object Auth {
     .catchAll(error => Http.error(HttpError.InternalServerError(cause = Some(error))))
 
   // @@ csrfGenerate() // TODO: get this working?
-  val logoutEndpoint = Http.collectZIO[Request] {
-    case Method.POST -> !! / "logout" =>
-      for {
-        session <- RequestSession.get[UserSession]
-        _       <- UserSessions.deleteUserSession(session.sessionCookie)
-        _       <- ZIO.logInfo(s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
-      } yield Response.ok
-  }
+  val logoutEndpoint = Http
+    .collectZIO[Request] {
+      case Method.POST -> !! / "logout" =>
+        for {
+          session <- RequestSession.get[UserSession]
+          _       <- UserSessions.deleteUserSession(session.sessionCookie)
+          _       <- ZIO.logInfo(s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
+        } yield Response.ok
+    }
+    .catchAll(_.http)
 
   val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {
     c     <- ZIO.service[SpotifyConfig]

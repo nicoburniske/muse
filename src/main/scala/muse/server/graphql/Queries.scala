@@ -25,7 +25,7 @@ final case class SearchArgs(
 
 // TODO: Integrate "Input" for arguments.
 final case class Queries(
-    user: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, User],
+    user: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Unauthorized, User],
     review: ReviewsArgs => ZQuery[DatabaseService, Throwable, Option[Review]],
     search: SearchArgs => ZQuery[SpotifyService, Throwable, SearchResult])
 

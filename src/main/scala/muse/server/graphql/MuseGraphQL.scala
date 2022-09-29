@@ -8,7 +8,7 @@ import caliban.wrappers.ApolloTracing.apolloTracing
 import caliban.wrappers.Wrappers.printErrors
 import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
-import muse.domain.error.{Forbidden, InvalidEntity, InvalidUser, Unauthorized}
+import muse.domain.error.{Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify
@@ -17,7 +17,7 @@ import muse.domain.table.ReviewComment
 import muse.server.graphql.subgraph.{Album, Artist, Comment, Playlist, PlaylistTrack, Review, ReviewEntity, SearchResult, Track, User}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
-import muse.service.spotify.SpotifyService
+import muse.service.spotify.{SpotifyError, SpotifyService}
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.*
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
@@ -28,6 +28,8 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
+  type Env = RequestSession[UserSession] & DatabaseService & SpotifyService
+
   given userSchema: Schema[DatabaseService & SpotifyService, User] = Schema.gen
 
   given reviewSchema: Schema[DatabaseService & SpotifyService, Review] = Schema.gen
@@ -46,19 +48,13 @@ object MuseGraphQL {
 
   given trackSchema: Schema[SpotifyService, Track] = Schema.gen
 
-  given createReview: Schema[RequestSession[UserSession] & DatabaseService, CreateReview] = Schema.gen
-
-  given createComment: Schema[RequestSession[UserSession] & DatabaseService, CreateComment] = Schema.gen
-
-  given updateReview: Schema[RequestSession[UserSession] & DatabaseService, UpdateReview] = Schema.gen
-
-  given updateComment: Schema[RequestSession[UserSession] & DatabaseService, UpdateComment] = Schema.gen
-
-  given searchSchema: Schema[DatabaseService & SpotifyService, SearchResult] = Schema.gen
-
-  given userArgs: Schema[Nothing, UserArgs] = Schema.gen
-
-  type Env = RequestSession[UserSession] & DatabaseService & SpotifyService
+  // TODO: give this another shot?
+//  given errorSchema[A](using Schema[Any, A]): Schema[Any, IO[Throwable | MuseError, A]] =
+//    Schema.customErrorEffectSchema((e: Throwable | MuseError) =>
+//      e.match
+//        case museError: MuseError => ExecutionError(museError.message, innerThrowable = Some(MuseThrowable(museError)))
+//        case throwable: Throwable => ExecutionError(throwable.getMessage, innerThrowable = Some(throwable))
+//    )
 
   val api =
     GraphQL.graphQL[Env, Queries, Mutations, Unit](RootResolver(Queries.live, Mutations.live)) @@ printErrors @@ apolloTracing
@@ -70,35 +66,21 @@ object MuseGraphQL {
   private def errorHandler[R](
       interpreter: GraphQLInterpreter[R, CalibanError]
   ): GraphQLInterpreter[R, CalibanError] = interpreter.mapError {
-    case err @ ExecutionError(_, _, _, Some(u: Unauthorized), _)  =>
+    case err @ ExecutionError(_, _, _, Some(m: MuseError), _)    =>
       err.copy(extensions = Some(
         ObjectValue(
           List(
-            "errorCode" -> StringValue("UNAUTHORIZED"),
-            "message"   -> StringValue(u.getMessage)
+            "errorCode" -> StringValue(m.code),
+            "message"   -> StringValue(m.message)
           ))))
-    case err @ ExecutionError(_, _, _, Some(n: Forbidden), _)     =>
+    case err @ ExecutionError(_, _, _, Some(e: SpotifyError), _) =>
       err.copy(extensions = Some(
         ObjectValue(
           List(
-            "errorCode" -> StringValue("FORBIDDEN"),
-            "message"   -> StringValue(n.getMessage)
+            "errorCode" -> StringValue("SERVER_ERROR_SPOTIFY"),
+            "message"   -> StringValue(e.getMessage)
           ))))
-    case err @ ExecutionError(_, _, _, Some(n: InvalidEntity), _) =>
-      err.copy(extensions = Some(
-        ObjectValue(
-          List(
-            "errorCode" -> StringValue("INVALID_ENTITY"),
-            "message"   -> StringValue(n.getMessage)
-          ))))
-    case err @ ExecutionError(_, _, _, Some(n: InvalidUser), _)   =>
-      err.copy(extensions = Some(
-        ObjectValue(
-          List(
-            "errorCode" -> StringValue("INVALID_USER"),
-            "message"   -> StringValue(n.getMessage)
-          ))))
-    case err @ ExecutionError(_, _, _, Some(e: Throwable), _)     =>
+    case err @ ExecutionError(_, _, _, Some(e: Throwable), _)    =>
       err.copy(extensions = Some(
         ObjectValue(
           List(
@@ -106,11 +88,11 @@ object MuseGraphQL {
             "errorType" -> StringValue(e.getClass.toString),
             "message"   -> StringValue(e.getMessage)
           ))))
-    case err: ExecutionError                                      =>
+    case err: ExecutionError                                     =>
       err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("EXECUTION_ERROR")))))
-    case err: ValidationError                                     =>
+    case err: ValidationError                                    =>
       err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("VALIDATION_ERROR")))))
-    case err: ParsingError                                        =>
+    case err: ParsingError                                       =>
       err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("PARSING_ERROR")))))
   }
 }
