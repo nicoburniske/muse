@@ -12,7 +12,7 @@ import zhttp.http.*
 import zhttp.http.Middleware.csrfGenerate
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.json.*
-import zio.{Cause, Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
 
 object Auth {
   val scopes = List().mkString(" ")
@@ -43,8 +43,6 @@ object Auth {
             }
           }
     }
-    .tapErrorZIO { case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
-    .catchAll(error => Http.error(HttpError.InternalServerError(cause = Some(error))))
 
   // @@ csrfGenerate() // TODO: get this working?
   val logoutEndpoint = Http
@@ -56,7 +54,6 @@ object Auth {
           _       <- ZIO.logInfo(s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
         } yield Response.ok
     }
-    .catchAll(_.http)
 
   val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {
     c     <- ZIO.service[SpotifyConfig]
@@ -84,9 +81,10 @@ object Auth {
   def handleUserLogin(auth: AuthCodeFlowData) =
     for {
       spotify  <- SpotifyService.live(auth.accessToken)
-      userInfo <- spotify.getCurrentUserProfile
-      res      <- DatabaseService.createOrUpdateUser(userInfo.id)
+      userInfo <- spotify.getCurrentUserProfile.retry(Schedule.recurs(2))
+      id        = userInfo.id
+      res      <- DatabaseService.createOrUpdateUser(id)
       resText   = if (res) "Created" else "Updated"
-      _        <- ZIO.logInfo(s"Successfully logged in ${userInfo.id}. $resText account")
+      _        <- ZIO.logInfo(s"Successfully logged in $id. $resText account")
     } yield userInfo
 }

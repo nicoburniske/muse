@@ -101,6 +101,11 @@ type Artist implements ReviewEntity {
   topTracks: [Track!]
 }
 
+type Collaborator {
+  user: User!
+  accessLevel: AccessLevel!
+}
+
 type Comment {
   id: Int!
   reviewId: ID!
@@ -170,6 +175,7 @@ type Review {
   entityId: String!
   entityType: EntityType!
   entity: ReviewEntity!
+  collaborators: [Collaborator!]
 }
 
 type SearchResult {

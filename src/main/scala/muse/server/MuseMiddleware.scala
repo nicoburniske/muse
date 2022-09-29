@@ -1,6 +1,7 @@
 package muse.server
 
 import caliban.{CalibanError, GraphQLInterpreter, ZHttpAdapter}
+import io.netty.handler.codec.http.HttpHeaderNames
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
@@ -9,7 +10,7 @@ import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils
 import sttp.client3.SttpBackend
 import zhttp.http.middleware.HttpMiddleware
-import zhttp.http.{Http, HttpApp, HttpError, Middleware, Request, Response, Status}
+import zhttp.http.{Header, Headers, Http, HttpApp, HttpError, Method, Middleware, Request, Response, Status}
 import zio.*
 
 import java.time.Instant
@@ -35,10 +36,6 @@ object MuseMiddleware {
         }
       }
       .flatten
-      .catchAll {
-        case u: Unauthorized => u.http
-        case t: Throwable    => Http.error(HttpError.InternalServerError(cause = Some(t)))
-      }
 
   def getSession(cookie: String): ZIO[SpotifyAuthService & UserSessions, Unauthorized | Throwable, UserSession] =
     for {
@@ -59,20 +56,17 @@ object MuseMiddleware {
           } yield newSession.get
     } yield session
 
-  val logErrors: HttpMiddleware[Any, Nothing] = new HttpMiddleware[Any, Nothing] {
-    override def apply[R1 <: Any, E1 >: Nothing](
-        http: Http[R1, E1, Request, Response]
-    ): Http[R1, E1, Request, Response] =
+  val handleErrors: HttpMiddleware[Any, Throwable] = new HttpMiddleware[Any, Throwable] {
+    override def apply[R1 <: Any, E1 >: Throwable](http: Http[R1, E1, Request, Response]) = {
       http
-        .tapErrorZIO { case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
-
-    //        .catchAll{ case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
-  }
-
-  // This doesn't work?
-  val catchUnauthorized: HttpMiddleware[Any, Unauthorized] = new HttpMiddleware[Any, Unauthorized] {
-    override def apply[R1 <: Any, E1 >: Unauthorized](http: Http[R1, E1, Request, Response]) = {
-      http.catchAll { case u: Unauthorized => u.http }
+        .tapErrorZIO {
+          case u: Unauthorized => ZIO.logInfo(u.message)
+          case t: Throwable    => ZIO.logError(s"Something went wrong: ${t.getMessage}")
+        }
+        .catchAll {
+          case u: Unauthorized => u.http
+          case t: Throwable    => Http.error(HttpError.InternalServerError("Something went wrong", Some(t)))
+        }
     }
   }
 
@@ -82,7 +76,7 @@ object MuseMiddleware {
    * It also adds a request ID to the logging context, so any further logging that occurs in the handler can be associated with
    * the same request.
    */
-  val loggingMiddleware: HttpMiddleware[Any, Nothing] = new HttpMiddleware[Any, Nothing] {
+  val requestLoggingTrace: HttpMiddleware[Any, Nothing] = new HttpMiddleware[Any, Nothing] {
     override def apply[R1 <: Any, E1 >: Nothing](
         http: Http[R1, E1, Request, Response]
     ): Http[R1, E1, Request, Response] =

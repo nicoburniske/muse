@@ -1,10 +1,15 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
+import muse.domain.error.Forbidden
+import muse.domain.session.UserSession
 import muse.domain.table
-import muse.server.graphql.resolver.{GetEntity, GetReviewComments, GetUser}
+import muse.domain.table.AccessLevel
+import muse.server.graphql.resolver.{GetCollaborators, GetEntity, GetReviewComments, GetUser}
+import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
+import zio.ZIO
 import zio.query.ZQuery
 
 import java.time.Instant
@@ -20,11 +25,26 @@ final case class Review(
     comments: ZQuery[DatabaseService, Throwable, List[Comment]],
     entityId: String,
     entityType: EntityType,
-    entity: ZQuery[SpotifyService, Nothing, ReviewEntity]
+    entity: ZQuery[SpotifyService, Nothing, ReviewEntity],
+    // TODO: this can be forbidden.
+    collaborators: ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Collaborator]]
 )
 
+case class Collaborator(user: User, accessLevel: AccessLevel)
+
 object Review {
-  def fromTable(r: table.Review) =
+  def fromTable(r: table.Review) = {
+    val collaborators = for {
+      reviewAccess <- GetCollaborators.query(r.id)
+      user         <- ZQuery.fromZIO(RequestSession.get[UserSession]).map(_.id)
+      _            <- if (reviewAccess.exists(_.userId == user)) ZQuery.unit
+                      else ZQuery.fail(Forbidden("You are not allowed to view this review"))
+      subQueries    = reviewAccess.map { reviewAccess =>
+                        GetUser.queryByUserId(reviewAccess.userId).map(user => Collaborator(user, reviewAccess.accessLevel))
+                      }
+      allUsers     <- ZQuery.collectAll(subQueries)
+    } yield allUsers
+
     Review(
       r.id,
       r.createdAt,
@@ -35,6 +55,8 @@ object Review {
       r.entityId,
       r.entityType,
       // TODO: ensure this is ok
-      GetEntity.query(r.entityId, r.entityType).orDie
+      GetEntity.query(r.entityId, r.entityType).orDie,
+      collaborators
     )
+  }
 }

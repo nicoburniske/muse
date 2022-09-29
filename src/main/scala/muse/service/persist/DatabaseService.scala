@@ -35,6 +35,7 @@ trait DatabaseService {
   def getMultiReviewComments(reviewIds: List[UUID]): IO[SQLException, List[ReviewComment]]
   def getReviews(reviewIds: List[UUID]): IO[SQLException, List[Review]]
   def getReview(reviewId: UUID): IO[SQLException, Option[Review]]
+  def getUsersWithAccess(reviewId: UUID): IO[SQLException, List[ReviewAccess]]
 
   /**
    * Update!
@@ -88,6 +89,9 @@ object DatabaseService {
 
   def getAllReviewComments(reviewIds: List[UUID]) =
     ZIO.serviceWithZIO[DatabaseService](_.getMultiReviewComments(reviewIds))
+
+  def getUsersWithAccess(reviewId: UUID) =
+    ZIO.serviceWithZIO[DatabaseService](_.getUsersWithAccess(reviewId))
 
   def updateReview(review: UpdateReview) =
     ZIO.serviceWithZIO[DatabaseService](_.updateReview(review))
@@ -225,6 +229,10 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   override def getReviews(reviewIds: List[UUID]) = run {
     reviews.filter(c => liftQuery(reviewIds.toSet).contains(c.id))
+  }.provideLayer(layer)
+
+  override def getUsersWithAccess(reviewId: UUID) = run {
+    reviewAccess.filter(_.reviewId == lift(reviewId))
   }.provideLayer(layer)
 
   /**

@@ -30,10 +30,10 @@ object Main extends ZIOAppDefault {
   override def run = MuseServer
     .live
     .provide(
-//      ZLayer.Debug.mermaid,
       Scope.default,
       AsyncHttpClientZioBackend.layer(),
       ChannelFactory.auto,
+      eventLoopGroupLayer,
       // Muse layers.
       SpotifyAuthService.layer,
       AppConfig.layer,
@@ -41,12 +41,11 @@ object Main extends ZIOAppDefault {
       UserSessions.layer,
       RequestSession.layer,
       QuillContext.dataSourceLayer,
-      zhttpLayer
     )
     .tapErrorCause(e => ZIO.logErrorCause("Failed to start server", e))
     .exitCode
 
-  val zhttpLayer = for {
+  val eventLoopGroupLayer = for {
     serverConfig <- ZLayer.environment[ServerConfig]
     http         <- EventLoopGroup.auto(serverConfig.get.nThreads)
   } yield http

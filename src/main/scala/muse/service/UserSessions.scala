@@ -61,10 +61,8 @@ object UserSessions {
     ZIO.serviceWithZIO[UserSessions](_.deleteUserSessionByUserId(userId))
 }
 
-final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSession]])
-    extends UserSessions {
+final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSession]]) extends UserSessions {
 
-  // TODO: confirm this works for multiple sessions.
   override def addUserSession(userId: String, authData: AuthCodeFlowData) = for {
     expiration <- Utils.getExpirationInstant(authData.expiresIn)
     guid       <- Random.nextUUID
@@ -73,18 +71,17 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
     _          <- sessionsR.update(_ + (newSession -> session))
   } yield newSession
 
-  override def getUserSession(sessionId: String) = sessionsR.get.map(_.get(sessionId))
+  override def getUserSession(sessionId: String) = sessionsR.get.map { sessions => sessions.get(sessionId) }
 
   override def deleteUserSession(sessionId: String) = sessionsR.update(_.removed(sessionId))
 
   override def deleteUserSessionByUserId(userId: String) =
     sessionsR.update(_.filterNot(_._2.id == userId))
 
-  override def updateUserSession(sessionId: String)(f: UserSession => UserSession) = sessionsR
-    .updateAndGet { sessions =>
-      sessions.get(sessionId).fold(sessions) { current => sessions.updated(sessionId, f(current)) }
-    }
-    .map(_.get(sessionId))
+  override def updateUserSession(sessionId: String)(f: UserSession => UserSession) =
+    sessionsR
+      .updateAndGet { sessions => sessions.get(sessionId).fold(sessions) { current => sessions.updated(sessionId, f(current)) } }
+      .map(_.get(sessionId))
 
   // TODO: use config.
   val SESSIONS_FILE = "src/main/resources/UserSessions.json"

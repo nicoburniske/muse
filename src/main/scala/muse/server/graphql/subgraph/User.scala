@@ -13,12 +13,7 @@ final case class User(
 )
 
 object User {
-  def missingSome(
-      userId: String,
-      displayName: Option[String],
-      href: String,
-      uri: String,
-      externalUrls: Map[String, String]) =
+  def missingSome(userId: String, displayName: Option[String], href: String, uri: String, externalUrls: Map[String, String]) =
     User(
       userId,
       GetUserReviews.query(userId),

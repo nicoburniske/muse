@@ -26,16 +26,15 @@ object MuseServer {
     port               <- ZIO.serviceWith[ServerConfig](_.port)
     _                  <- writeSchemaToFile
     protectedEndpoints <- createProtectedEndpoints
-    allEndpoints        = Auth.loginEndpoints ++ protectedEndpoints @@ MuseMiddleware.logErrors
+    allEndpoints        = Auth.loginEndpoints ++ protectedEndpoints @@ MuseMiddleware.handleErrors
     _                  <- service.Server.start(port, allEndpoints).forever
   } yield ()
 
-  val config: CorsConfig =
-    CorsConfig(allowedOrigins = _ == "localhost", allowedMethods = Some(Set(Method.POST, Method.GET, Method.PUT, Method.DELETE)))
+  val config: CorsConfig = CorsConfig(allowedOrigins = _ => true)
 
   def createProtectedEndpoints = endpointsGraphQL.map { graphqlEndpoints =>
     MuseMiddleware.checkAuthAddSession(Auth.logoutEndpoint ++ graphqlEndpoints) @@
-      (MuseMiddleware.loggingMiddleware ++ cors(config))
+      (MuseMiddleware.requestLoggingTrace ++ cors(config))
   }
 
   val endpointsGraphQL = for {

@@ -30,23 +30,23 @@ import scala.util.Try
 object MuseGraphQL {
   type Env = RequestSession[UserSession] & DatabaseService & SpotifyService
 
-  given userSchema: Schema[DatabaseService & SpotifyService, User] = Schema.gen
+  given userSchema: Schema[Env, User] = Schema.gen
 
-  given reviewSchema: Schema[DatabaseService & SpotifyService, Review] = Schema.gen
+  given reviewSchema: Schema[Env, Review] = Schema.gen
 
-  given commentsSchema: Schema[DatabaseService & SpotifyService, Comment] = Schema.gen
+  given commentsSchema: Schema[Env, Comment] = Schema.gen
 
-  given entitySchema: Schema[DatabaseService & SpotifyService, ReviewEntity] = Schema.gen
+  given entitySchema: Schema[Env, ReviewEntity] = Schema.gen
 
-  given playlistSchema: Schema[DatabaseService & SpotifyService, Playlist] = Schema.gen
+  given playlistSchema: Schema[Env, Playlist] = Schema.gen
 
-  given playlistTrackSchema: Schema[DatabaseService & SpotifyService, PlaylistTrack] = Schema.gen
+  given playlistTrackSchema: Schema[Env, PlaylistTrack] = Schema.gen
 
-  given albumSchema: Schema[SpotifyService, Album] = Schema.gen
+  given albumSchema: Schema[Env, Album] = Schema.gen
 
-  given artistSchema: Schema[SpotifyService, Artist] = Schema.gen
+  given artistSchema: Schema[Env, Artist] = Schema.gen
 
-  given trackSchema: Schema[SpotifyService, Track] = Schema.gen
+  given trackSchema: Schema[Env, Track] = Schema.gen
 
   // TODO: give this another shot?
 //  given errorSchema[A](using Schema[Any, A]): Schema[Any, IO[Throwable | MuseError, A]] =
@@ -62,7 +62,6 @@ object MuseGraphQL {
   val interpreter = api.interpreter.map(errorHandler(_))
 
   // TODO: Consider handling Spotify 404 error.
-  // TODO: Incorporate Custom Error Super type.
   private def errorHandler[R](
       interpreter: GraphQLInterpreter[R, CalibanError]
   ): GraphQLInterpreter[R, CalibanError] = interpreter.mapError {
@@ -85,7 +84,7 @@ object MuseGraphQL {
         ObjectValue(
           List(
             "errorCode" -> StringValue("SERVER_ERROR"),
-            "errorType" -> StringValue(e.getClass.toString),
+            "errorType" -> StringValue(e.getClass.getSimpleName),
             "message"   -> StringValue(e.getMessage)
           ))))
     case err: ExecutionError                                     =>
