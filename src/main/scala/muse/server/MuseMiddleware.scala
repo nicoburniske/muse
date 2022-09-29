@@ -9,11 +9,12 @@ import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils
 import sttp.client3.SttpBackend
 import zhttp.http.middleware.HttpMiddleware
-import zhttp.http.{Http, HttpApp, HttpData, HttpError, Middleware, Request, Response, Status}
+import zhttp.http.{Http, HttpApp, HttpError, Middleware, Request, Response, Status}
 import zio.*
 
 import java.time.Instant
 
+// TODO: add Username log annotation?
 object MuseMiddleware {
   def checkAuthAddSession[R](app: Http[R & SpotifyService, Throwable, Request, Response]) =
     Http
@@ -87,7 +88,7 @@ object MuseMiddleware {
     ): Http[R1, E1, Request, Response] =
       Http.fromOptionFunction[Request] { request =>
         Random.nextUUID.flatMap { requestId =>
-          ZIO.logAnnotate("REQUEST-ID", requestId.toString) {
+          ZIO.logAnnotate("trace_id", requestId.toString) {
             http(request)
           }
         }
