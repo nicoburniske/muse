@@ -17,18 +17,10 @@ object ExampleQueries extends ZIOAppDefault {
                 CreateReview("I'm not real", true, EntityType.Artist, "3FjdJbt6Myq32uv7P4owM1"))
       _    <- DatabaseService.createReview(
                 "tuckingfypo1",
-                CreateReview(
-                  "Adrian's Impeccable taste in music",
-                  true,
-                  EntityType.Playlist,
-                  "4sZt86qDfcYJl7gTttPjIL"))
+                CreateReview("Adrian's Impeccable taste in music", true, EntityType.Playlist, "4sZt86qDfcYJl7gTttPjIL"))
       _    <- DatabaseService.createReview(
                 "tuckingfypo1",
-                CreateReview(
-                  "are alden's bumps all that hard?",
-                  true,
-                  EntityType.Playlist,
-                  "5AGvFHPvaNS8SgVb9xAax3"))
+                CreateReview("are alden's bumps all that hard?", true, EntityType.Playlist, "5AGvFHPvaNS8SgVb9xAax3"))
       _    <- DatabaseService.createReview(
                 "tuckingfypo1",
                 CreateReview("Is RadioHead Overrated?", true, EntityType.Album, "1HrMmB5useeZ0F5lHrMvl0"))

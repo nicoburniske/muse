@@ -17,7 +17,7 @@ object GetArtist {
 
   val ArtistDataSource: DataSource[SpotifyService, GetArtist] =
     DataSource.Batched.make("ArtistDataSource") { reqs =>
-      reqs.toList match
+      reqs.distinct.toList match
         case Nil         => ZIO.succeed(CompletedRequestMap.empty)
         case head :: Nil =>
           SpotifyService
@@ -37,10 +37,12 @@ object GetArtist {
                   result match
                     case error @ Left(_) => reqs.foldLeft(map)((map, req) => map.insert(req)(error))
                     case Right(tracks)   =>
+                      // Trying to account for missing tracks in api response.
                       val grouped = tracks.groupBy(_.id).view.mapValues(_.head)
                       reqs.foldLeft(map) { (map, req) =>
-                        val result =
-                          grouped.get(req.id).fold(Left(InvalidEntity(req.id, EntityType.Artist)))(Right(_))
+                        val result = grouped
+                          .get(req.id)
+                          .fold(Left(InvalidEntity(req.id, EntityType.Artist)))(Right(_))
                         map.insert(req)(result)
                       }
               }

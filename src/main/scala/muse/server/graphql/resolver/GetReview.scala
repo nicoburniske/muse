@@ -16,8 +16,6 @@ object GetReview {
   def query(reviewId: UUID) = ZQuery.fromRequest(GetReview(reviewId))(ReviewDataSource)
 
   val ReviewDataSource: DataSource[DatabaseService, GetReview] =
-    DataSource.fromFunctionZIO("ReviewDataSource") { g =>
-      DatabaseService.getReview(g.reviewId).map(_.map(Review.fromTable))
-    }
+    DataSource.fromFunctionZIO("ReviewDataSource") { g => DatabaseService.getReview(g.reviewId).map(_.map(Review.fromTable)) }
 
 }

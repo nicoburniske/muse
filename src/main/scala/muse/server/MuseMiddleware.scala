@@ -39,9 +39,9 @@ object MuseMiddleware {
 
   def getSession(cookie: String): ZIO[SpotifyAuthService & UserSessions, Unauthorized | Throwable, UserSession] =
     for {
-      maybeUser <- UserSessions.getUserSession(cookie)
-      session   <- ZIO.fromOption(maybeUser).orElseFail(Unauthorized("Invalid Auth"))
-      session   <-
+      maybeUser      <- UserSessions.getUserSession(cookie)
+      session        <- ZIO.fromOption(maybeUser).orElseFail(Unauthorized("Invalid Auth"))
+      updatedSession <-
         if (session.expiration.isAfter(Instant.now()))
           ZIO.logInfo(s"Session Retrieved: ${session.conciseString}").as(session)
         else
@@ -54,7 +54,7 @@ object MuseMiddleware {
             // These 'get' calls should be a-ok.
             _             <- ZIO.logInfo(s"Session Updated ${newSession.get.conciseString}")
           } yield newSession.get
-    } yield session
+    } yield updatedSession
 
   val handleErrors: HttpMiddleware[Any, Throwable] = new HttpMiddleware[Any, Throwable] {
     override def apply[R1 <: Any, E1 >: Throwable](http: Http[R1, E1, Request, Response]) = {

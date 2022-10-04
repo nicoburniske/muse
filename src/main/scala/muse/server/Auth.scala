@@ -15,7 +15,14 @@ import zio.json.*
 import zio.{Cause, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
 
 object Auth {
-  val scopes = List().mkString(" ")
+  val scopes = List(
+    "user-library-read",
+    "playlist-read-private",
+    "playlist-read-collaborative",
+    "user-modify-playback-state",
+    "user-read-playback-state",
+    "user-read-currently-playing"
+  ).mkString(" ")
 
   val loginEndpoints = Http
     .collectZIO[Request] {

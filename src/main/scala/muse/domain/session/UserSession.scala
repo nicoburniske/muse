@@ -25,8 +25,8 @@ final case class UserSession(
     refreshToken: String
 ) {
   val conciseString =
-    s"UserID: $id, Session Cookie: ${sessionCookie.take(10)}, Expiration: ${instantString(
-      expiration)}, Access: ${accessToken.take(10)}, Refresh: ${refreshToken.take(10)}"
+    s"UserID: $id, Session Cookie: ${sessionCookie.take(10)}, Expiration: ${instantString(expiration)}, Access: ${accessToken
+      .take(10)}, Refresh: ${refreshToken.take(10)}"
 }
 
 object UserSession {

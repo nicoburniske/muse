@@ -45,7 +45,8 @@ lazy val root = (project in file(".")).settings(
     // HTTP Client.
     "com.softwaremill.sttp.client3" %% "core"                          % sttp,
     "com.softwaremill.sttp.client3" %% "async-http-client-backend-zio" % sttp,
-    // Quill JDBC ZIO.
+    "com.softwaremill.sttp.client3" %% "zio-json"                      % sttp,
+// Quill JDBC ZIO.
     "io.getquill"                   %% "quill-jdbc-zio"                % protoQuill,
     "org.postgresql"                 % "postgresql"                    % postgresql,
     // Logging.

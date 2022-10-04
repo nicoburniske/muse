@@ -2,6 +2,7 @@ package muse.server.graphql.resolver
 
 import muse.server.graphql.subgraph.Comment
 import muse.service.persist.DatabaseService
+import muse.utils.Utils.*
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 import zio.{Chunk, ZIO}
 
@@ -23,13 +24,13 @@ object GetReviewComments {
             .fold(
               e => CompletedRequestMap.empty.insert(req)(Left(e)),
               comments => CompletedRequestMap.empty.insert(req)(Right(comments.map(Comment.fromTable)))
-            )
+            ).addTimeLog("Retrieved review comments")
         case reqs       =>
           val ids = reqs.map(_.reviewId)
           for {
             maybeComments <- DatabaseService.getAllReviewComments(ids).either
-            _             <- if (maybeComments.isRight) ZIO.logInfo(s"Retrieved reviews: ${ids.mkString(", ")}")
-                             else ZIO.logInfo(s"Failed to retrieve reviews: ${ids.mkString(",")}")
+            _             <- if (maybeComments.isRight) ZIO.logInfo(s"Retrieved review comments for reviews: ${ids.mkString(", ")}")
+                             else ZIO.logInfo(s"Failed to retrieve review comments: ${ids.mkString(",")}")
           } yield {
             maybeComments match
               case Left(value)        =>

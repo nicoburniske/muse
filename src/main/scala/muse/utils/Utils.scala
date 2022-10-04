@@ -101,8 +101,8 @@ object Utils {
     }
 
   /**
-   * Writes the given stream of strings to a file. File content will be overwritten. The file will be created
-   * if it doesn't already exist.
+   * Writes the given stream of strings to a file. File content will be overwritten. The file will be created if it doesn't
+   * already exist.
    * @param path
    *   file path
    * @param stream
@@ -124,9 +124,7 @@ object Utils {
           stream
             .map(_.getBytes)
             .map(Chunk(_: _*))
-            .runFoldZIO(0L) { (offset, chunk) =>
-              fileChannel.writeChunk(chunk, offset).as(offset + chunk.length)
-            })
+            .runFoldZIO(0L) { (offset, chunk) => fileChannel.writeChunk(chunk, offset).as(offset + chunk.length) })
         .unit
     )
 }

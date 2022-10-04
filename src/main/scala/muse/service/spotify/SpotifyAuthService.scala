@@ -72,7 +72,7 @@ case class SpotifyAuthRepo(config: SpotifyConfig, eventLoopGroup: EventLoopGroup
     body
       .fromJson[T]
       .fold(
-        e => ZIO.fail(SpotifyError.JsonError(e, body)),
+        e => ZIO.fail(SpotifyError.JsonError(e, body, TOKEN_ENDPOINT.toString)),
         ZIO.succeed(_)
       )
 

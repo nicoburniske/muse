@@ -18,6 +18,11 @@ enum EntityType {
   Track
 }
 
+input ContextInput {
+  entityType: EntityType!
+  entityId: String!
+}
+
 input CreateCommentInput {
   reviewId: ID!
   parentCommentId: Int
@@ -43,15 +48,33 @@ input DeleteReviewInput {
   id: ID!
 }
 
+input EntityOffsetInput {
+  outer: ContextInput!
+  inner: ContextInput!
+}
+
 input PaginationInput {
   first: Int!
   from: Int! = 0
+}
+
+input PositionOffsetInput {
+  context: ContextInput!
+  position: Int!
 }
 
 input ShareReviewInput {
   reviewId: ID!
   userId: String!
   access: AccessLevel!
+}
+
+input StartPlaybackInput {
+  deviceId: String
+  uris: [String!]
+  positionOffset: PositionOffsetInput
+  entityOffset: EntityOffsetInput
+  positionMs: Int
 }
 
 input UpdateCommentInput {
@@ -69,6 +92,7 @@ input UpdateReviewInput {
 
 interface ReviewEntity {
   name: String!
+  uri: String!
   id: String!
   externalUrls: [KVStringString!]!
 }
@@ -84,6 +108,7 @@ type Album implements ReviewEntity {
   name: String!
   popularity: Int
   releaseDate: String!
+  uri: String!
   artists: [Artist!]
   tracks: [Track!]
 }
@@ -96,6 +121,7 @@ type Artist implements ReviewEntity {
   id: String!
   images: [String!]!
   name: String!
+  uri: String!
   popularity: Int!
   albums: [Album!]
   topTracks: [Track!]
@@ -137,6 +163,17 @@ type Mutations {
   deleteReview(input: DeleteReviewInput!): Boolean
   deleteComment(input: DeleteCommentInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
+  startPlayback(input: StartPlaybackInput!): Boolean
+}
+
+type PlaybackDevice {
+  id: String!
+  isActive: Boolean!
+  isPrivateSession: Boolean!
+  isRestricted: Boolean!
+  name: String!
+  type: String!
+  volumePercent: Int!
 }
 
 type Playlist implements ReviewEntity {
@@ -146,6 +183,7 @@ type Playlist implements ReviewEntity {
   id: String!
   images: [String!]!
   name: String!
+  uri: String!
   owner: User!
   primaryColor: String
   public: Boolean
@@ -163,6 +201,7 @@ type Queries {
   user(id: String): User
   review(id: ID!): Review
   search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, from: 0}): SearchResult
+  availableDevices: [PlaybackDevice!]
 }
 
 type Review {
@@ -211,6 +250,7 @@ type Track implements ReviewEntity {
   trackNumber: Int!
   isLocal: Boolean!
   uri: String!
+  isLiked: Boolean
 }
 
 type User {

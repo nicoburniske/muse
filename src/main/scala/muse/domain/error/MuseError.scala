@@ -4,9 +4,10 @@ import muse.domain.common.EntityType
 import zhttp.http.{Http, HttpData, Response, Status}
 
 sealed trait MuseError extends Throwable:
+  override def getMessage = message
+
   def code: String
   def message: String
-  override def getMessage = message
 
 final case class InvalidEntity(entityId: String, entityType: EntityType) extends MuseError:
   val code    = "INVALID_ENTITY"
@@ -25,6 +26,10 @@ final case class Unauthorized(reason: Option[String]) extends MuseError:
   val code    = "UNAUTHORIZED"
   val message = reason.fold("Unauthorized")(m => s"Unauthorized: $m")
   val http    = Http.response(Response(Status.Unauthorized, data = HttpData.fromString(message)))
+
+final case class BadRequest(reason: Option[String]) extends MuseError:
+  val code    = "INVALID_REQUEST"
+  val message = reason.fold("Invalid Request")(m => s"Invalid Request: $m")
 
 object Forbidden:
   val empty                       = Forbidden(None)

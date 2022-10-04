@@ -32,6 +32,10 @@ trait SpotifyService {
   def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Album]]
   def getAllArtistAlbums(artistId: String): Task[Vector[Album]]
   def getArtistTopTracks(artistId: String, country: String = "US"): Task[Vector[Track]]
+  def checkUserSavedTracks(trackIds: Vector[String]): Task[Vector[(String, Boolean)]]
+  def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody): Task[Boolean]
+  def getAvailableDevices: Task[Vector[PlaybackDevice]]
+  def transferPlayback(deviceId: String): Task[Boolean]
 }
 
 object SpotifyService {
@@ -41,7 +45,6 @@ object SpotifyService {
     spotify      = SpotifyAPI(backend, accessToken)
   } yield SpotifyServiceLive(spotify)
 
-  // TODO: Does this have to be scoped? I am not sure.
   val layer    = ZLayer.fromZIO(live)
   val getLayer = live.map(ZLayer.succeed(_))
 
@@ -105,6 +108,18 @@ object SpotifyService {
 
   def getArtistTopTracks(artistId: String, country: String = "US") =
     ZIO.serviceWithZIO[SpotifyService](_.getArtistTopTracks(artistId, country))
+
+  def checkUserSavedTracks(trackIds: Vector[String]) =
+    ZIO.serviceWithZIO[SpotifyService](_.checkUserSavedTracks(trackIds))
+
+  def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody) =
+    ZIO.serviceWithZIO[SpotifyService](_.startPlayback(device, startPlaybackBody))
+
+  def getAvailableDevices =
+    ZIO.serviceWithZIO[SpotifyService](_.getAvailableDevices)
+
+  def transferPlayback(deviceId: String) =
+    ZIO.serviceWithZIO[SpotifyService](_.transferPlayback(deviceId))
 }
 
 case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
@@ -163,4 +178,13 @@ case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
 
   def getArtistTopTracks(artistId: String, country: String = "US"): Task[Vector[Track]] =
     s.getArtistTopTracks(artistId, country)
+
+  def checkUserSavedTracks(trackIds: Vector[String]): Task[Vector[(String, Boolean)]] =
+    s.checkUserSavedTracks(trackIds)
+
+  def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody) =
+    s.startPlayback(device, startPlaybackBody)
+
+  def getAvailableDevices                = s.getAvailableDevices
+  def transferPlayback(deviceId: String) = s.transferPlayback(deviceId)
 }

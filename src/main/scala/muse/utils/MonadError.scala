@@ -17,4 +17,5 @@ trait MonadError[F[_], E] {
 
   extension [A](a: F[A]) def isSuccess: F[Boolean] = a.map(_ => true).handleErrorWith(_ => false.pure)
   extension [A, B](a: F[A]) def as(b: B): F[B]     = a.map(_ => b)
+  extension [A](a: F[A]) def unit: F[Unit]         = a.as(())
 }

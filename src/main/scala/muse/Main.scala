@@ -40,9 +40,9 @@ object Main extends ZIOAppDefault {
       DatabaseService.layer,
       UserSessions.layer,
       RequestSession.layer,
-      QuillContext.dataSourceLayer,
+      QuillContext.dataSourceLayer
     )
-    .tapErrorCause(e => ZIO.logErrorCause("Failed to start server", e))
+    .tapErrorCause(e => ZIO.logErrorCause(s"Failed to start server ${e.toString}", e))
     .exitCode
 
   val eventLoopGroupLayer = for {

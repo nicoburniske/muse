@@ -6,8 +6,7 @@ import muse.utils.Utils.addTimeLog
 import zio.ZIO
 import zio.query.{DataSource, Request, ZQuery}
 
-case class GetPlaylistTracks(playlistId: String, numTracks: Int)
-    extends Request[Throwable, List[PlaylistTrack]]
+case class GetPlaylistTracks(playlistId: String, numTracks: Int) extends Request[Throwable, List[PlaylistTrack]]
 
 object GetPlaylistTracks {
   val MAX_PLAYLIST_TRACKS_PER_REQUEST = 100

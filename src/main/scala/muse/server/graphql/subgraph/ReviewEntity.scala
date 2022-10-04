@@ -2,7 +2,7 @@ package muse.server.graphql.subgraph
 
 import caliban.schema.Annotations.GQLInterface
 import muse.domain.spotify
-import muse.server.graphql.resolver.{GetAlbum, GetAlbumTracks, GetArtist, GetArtistAlbums, GetArtistTopTracks, GetPlaylistTracks}
+import muse.server.graphql.resolver.{CheckUserLikedSong, GetAlbum, GetAlbumTracks, GetArtist, GetArtistAlbums, GetArtistTopTracks, GetPlaylistTracks}
 import muse.server.graphql.subgraph
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
@@ -15,6 +15,7 @@ sealed trait ReviewEntity {
   // TODO: incorporate id into each type.
   def name: String
   def id: String
+  def uri: String
 }
 
 case class Artist(
@@ -25,6 +26,7 @@ case class Artist(
     override val id: String,
     images: List[String],
     override val name: String,
+    override val uri: String,
     popularity: Int,
     // TODO: pagination.
     albums: ZQuery[SpotifyService, Throwable, List[Album]],
@@ -41,6 +43,7 @@ object Artist {
       a.id,
       a.images.fold(Nil)(_.map(_.url)),
       a.name,
+      a.uri,
       a.popularity.get,
       GetArtistAlbums.query(a.id),
       GetArtistTopTracks.query(a.id)
@@ -59,6 +62,7 @@ case class Album(
     override val name: String,
     popularity: Option[Int],
     releaseDate: String,
+    override val uri: String,
     artists: ZQuery[SpotifyService, Throwable, List[Artist]],
     tracks: ZQuery[SpotifyService, Throwable, List[Track]]
 ) extends ReviewEntity
@@ -76,6 +80,7 @@ object Album {
       a.name,
       a.popularity,
       a.releaseDate,
+      a.uri,
       ZQuery.foreachPar(a.artists.map(_.id))(GetArtist.query),
       GetAlbumTracks.query(a.id, a.tracks.map(_.total))
     )
@@ -97,7 +102,8 @@ case class Track(
     previewUrl: Option[String],
     trackNumber: Int,
     isLocal: Boolean,
-    uri: String
+    uri: String,
+    isLiked: ZQuery[SpotifyService, Throwable, Boolean]
 ) extends ReviewEntity
 
 object Track {
@@ -117,7 +123,8 @@ object Track {
       t.previewUrl,
       t.trackNumber,
       t.isLocal,
-      t.uri
+      t.uri,
+      CheckUserLikedSong.query(t.id)
     )
   }
 }
@@ -130,6 +137,7 @@ case class Playlist(
     override val id: String,
     images: List[String],
     override val name: String,
+    override val uri: String,
     owner: User,
     primaryColor: Option[String],
     public: Option[Boolean],
@@ -145,6 +153,7 @@ object Playlist {
       p.id,
       p.images.map(_.url),
       p.name,
+      p.uri,
       User.missingSome(p.owner.id, p.owner.displayName, p.owner.href, p.owner.uri, p.owner.externalUrls),
       p.primaryColor,
       p.public,

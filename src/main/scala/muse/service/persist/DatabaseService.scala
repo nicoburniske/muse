@@ -377,8 +377,8 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .filter(_.id == lift(commentId))
       .filter(_.reviewId == lift(reviewId))
       .map(_.commenter)
-      .contains(lift(userId))
   }.provide(layer)
+    .map(_.contains(userId))
 
   override def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean] = run {
     allUsersWithWriteAccess(lift(reviewId)).filter(_ == lift(userId))
