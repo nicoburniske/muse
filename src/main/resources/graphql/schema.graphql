@@ -1,10 +1,13 @@
 schema {
   query: Queries
   mutation: Mutations
+  subscription: Subscriptions
 }
 
 "An instantaneous point on the time-line represented by a standard date time string"
 scalar Instant
+
+scalar Long
 
 enum AccessLevel {
   Collaborator
@@ -70,6 +73,7 @@ input ShareReviewInput {
 }
 
 input StartPlaybackInput {
+  "If device id is specified, playback will be transferred to that device. Otherwise, playback will be executed on user's active device."
   deviceId: String
   uris: [String!]
   positionOffset: PositionOffsetInput
@@ -164,6 +168,15 @@ type Mutations {
   deleteComment(input: DeleteCommentInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
   startPlayback(input: StartPlaybackInput!): Boolean
+  saveTracks(input: [String!]!): Boolean
+}
+
+type PlaybackContext {
+  uri: String!
+  metadata: [KVStringString!]!
+  externalUrls: [KVStringString!]!
+  href: String!
+  type: String!
 }
 
 type PlaybackDevice {
@@ -174,6 +187,18 @@ type PlaybackDevice {
   name: String!
   type: String!
   volumePercent: Int!
+}
+
+type PlaybackState {
+  device: PlaybackDevice!
+  shuffleState: Boolean!
+  repeatState: String!
+  timestamp: Long!
+  context: PlaybackContext!
+  progressMs: Long!
+  item: Track!
+  currentlyPlayingType: String!
+  isPlaying: Boolean!
 }
 
 type Playlist implements ReviewEntity {
@@ -232,6 +257,11 @@ type SpotifyProfile {
   externalUrls: [KVStringString!]!
   images: [String!]
   numFollowers: Int
+}
+
+type Subscriptions {
+  nowPlaying: PlaybackState
+  availableDevices: [PlaybackDevice!]
 }
 
 type Track implements ReviewEntity {

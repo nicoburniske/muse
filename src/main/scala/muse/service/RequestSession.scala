@@ -10,7 +10,7 @@ trait RequestSession[T] {
 }
 
 object RequestSession {
-  val layer: ULayer[RequestSession[UserSession]] = ZLayer.scoped {
+  val fiberRefLayer: ULayer[RequestSession[UserSession]] = ZLayer.scoped {
     FiberRef.make[Option[UserSession]](None).map { ref =>
       new RequestSession {
         def get: IO[Unauthorized, UserSession] =

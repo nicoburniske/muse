@@ -36,6 +36,8 @@ trait SpotifyService {
   def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody): Task[Boolean]
   def getAvailableDevices: Task[Vector[PlaybackDevice]]
   def transferPlayback(deviceId: String): Task[Boolean]
+  def saveTracks(trackIds: Vector[String]): Task[Boolean]
+  def currentPlaybackState: Task[PlaybackState]
 }
 
 object SpotifyService {
@@ -120,6 +122,12 @@ object SpotifyService {
 
   def transferPlayback(deviceId: String) =
     ZIO.serviceWithZIO[SpotifyService](_.transferPlayback(deviceId))
+
+  def saveTracks(trackIds: Vector[String]) =
+    ZIO.serviceWithZIO[SpotifyService](_.saveTracks(trackIds))
+
+  def currentPlaybackState =
+    ZIO.serviceWithZIO[SpotifyService](_.currentPlaybackState)
 }
 
 case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
@@ -185,6 +193,8 @@ case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
   def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody) =
     s.startPlayback(device, startPlaybackBody)
 
-  def getAvailableDevices                = s.getAvailableDevices
-  def transferPlayback(deviceId: String) = s.transferPlayback(deviceId)
+  def getAvailableDevices                  = s.getAvailableDevices
+  def transferPlayback(deviceId: String)   = s.transferPlayback(deviceId)
+  def saveTracks(trackIds: Vector[String]) = s.saveTracks(trackIds)
+  def currentPlaybackState: Task[PlaybackState] = s.getPlaybackState
 }

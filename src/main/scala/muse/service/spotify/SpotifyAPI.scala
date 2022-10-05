@@ -130,15 +130,15 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     execute[Vector[Boolean]](uri, Method.GET).map(distinct.zip(_))
   }
 
+  def getAvailableDevices: F[Vector[PlaybackDevice]] =
+    val uri = uri"${SpotifyAPI.API_BASE}/me/player/devices"
+    execute[PlaybackDevices](uri, Method.GET).map(_.devices)
+
   def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody): F[Boolean] = {
     val uri  = uri"${SpotifyAPI.API_BASE}/me/player/play?device_id=$device"
     val body = startPlaybackBody.toJson
     executeAndIgnoreResponse(uri, Method.PUT, Some(body)).as(true)
   }
-
-  def getAvailableDevices: F[Vector[PlaybackDevice]] =
-    val uri = uri"${SpotifyAPI.API_BASE}/me/player/devices"
-    execute[PlaybackDevices](uri, Method.GET).map(_.devices)
 
   // device id must be active!
   def transferPlayback(deviceId: String): F[Boolean] =
@@ -147,9 +147,13 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     executeAndIgnoreResponse(uri, Method.PUT, Some(body)).as(true)
 
   def saveTracks(trackIds: Vector[String]): F[Boolean] = {
-    val distinct = trackIds.distinct
-    val uri      = uri"${SpotifyAPI.API_BASE}/me/tracks/ids=${distinct.mkString(",")}"
+    val uri = uri"${SpotifyAPI.API_BASE}/me/tracks/ids=${trackIds.distinct.mkString(",")}"
     executeAndIgnoreResponse(uri, Method.PUT).as(true)
+  }
+
+  def getPlaybackState: F[PlaybackState] = {
+    val uri = uri"${SpotifyAPI.API_BASE}/me/player"
+    execute[PlaybackState](uri, Method.GET)
   }
 
   def getAllPaging[T: JsonDecoder](request: Int => F[Paging[T]], pageSize: Int = 50): F[Vector[T]] = {

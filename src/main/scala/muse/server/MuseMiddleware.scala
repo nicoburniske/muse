@@ -1,6 +1,8 @@
 package muse.server
 
-import caliban.{CalibanError, GraphQLInterpreter, ZHttpAdapter}
+import caliban.Value.StringValue
+import caliban.interop.tapir.{StreamTransformer, WebSocketHooks}
+import caliban.{CalibanError, GraphQLInterpreter, GraphQLWSOutput, InputValue, ZHttpAdapter}
 import io.netty.handler.codec.http.HttpHeaderNames
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
@@ -12,6 +14,7 @@ import sttp.client3.SttpBackend
 import zhttp.http.middleware.HttpMiddleware
 import zhttp.http.{Header, Headers, Http, HttpApp, HttpError, Method, Middleware, Request, Response, Status}
 import zio.*
+import zio.stream.ZStream
 
 import java.time.Instant
 
@@ -37,7 +40,7 @@ object MuseMiddleware {
       }
       .flatten
 
-  def getSession(cookie: String): ZIO[SpotifyAuthService & UserSessions, Unauthorized | Throwable, UserSession] =
+  def getSession(cookie: String): ZIO[SpotifyAuthService & UserSessions, Throwable, UserSession] =
     for {
       maybeUser      <- UserSessions.getUserSession(cookie)
       session        <- ZIO.fromOption(maybeUser).orElseFail(Unauthorized("Invalid Auth"))
@@ -88,4 +91,54 @@ object MuseMiddleware {
         }
       }
   }
+
+//  object Websockets {
+//    private val wsSession = Http.fromZIO(Ref.make[Option[UserSession]](None))
+//
+//    def live[R <: RequestSession[UserSession] & UserSessions & SpotifyAuthService & SttpBackend[Task, Any]](
+//        interpreter: GraphQLInterpreter[R, CalibanError]
+//    ) =
+//      wsSession.flatMap { wsSesh =>
+//        val auth =
+//          new RequestSession[UserSession] {
+//            def get: IO[Unauthorized, UserSession]           =
+//              wsSesh.get.flatMap {
+//                case Some(v) => ZIO.succeed(v)
+//                case None    => ZIO.fail(Unauthorized("Missing Auth??"))
+//              }
+//            def set(session: Option[UserSession]): UIO[Unit] = wsSesh.set(session)
+//          }
+//
+//        val connectionInit = WebSocketHooks.init[R, Throwable](payload =>
+//          ZIO.logInfo(s"Payload ${payload.toString} ${payload.toInputString}") *>
+//            ZIO
+//              .fromOption {
+//                payload match
+//                  case InputValue.ObjectValue(fields) =>
+//                    fields.get("Authorization").orElse(fields.get(COOKIE_KEY)).flatMap {
+//                      case StringValue(s) => Some(s)
+//                      case _              => None
+//                    }
+//                  case _                              => None
+//              }.orElseFail(CalibanError.ExecutionError("Unable to decode payload"))
+//              .flatMap(auth => getSession(auth))
+//              .flatMap(user => zio.Console.printLine(s"???!${user}") *> auth.set(Some(user))))
+//
+//        val transformService = WebSocketHooks.message(new StreamTransformer[R, Throwable] {
+//          def transform[R1 <: R, E1 >: Throwable](
+//              stream: ZStream[R1, E1, GraphQLWSOutput]
+//          ): ZStream[R1, E1, GraphQLWSOutput] =
+//            for {
+//              spot <- ZStream.fromZIO(SpotifyService.live)
+//              layer = ZLayer.succeed(spot)
+//              s    <- stream.updateService[RequestSession[UserSession]](_ => auth).provideSomeLayer(layer)
+//            } yield s
+//        })
+//
+//        ZHttpAdapter.makeWebSocketService(
+//          interpreter,
+//          webSocketHooks = connectionInit
+//        )
+//      }
+//  }
 }

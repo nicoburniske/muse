@@ -45,7 +45,12 @@ object Auth {
               _           <- ZIO.logInfo(session)
             } yield {
               // TODO: add domain to cookie.
-              val cookie = Cookie(COOKIE_KEY, session, isSecure = true, isHttpOnly = true)
+              val cookie = Cookie(
+                COOKIE_KEY,
+                session,
+                isSecure = true,
+                // NOTE: This is so that websockets can be used.
+                isHttpOnly = false)
               Response.redirect(frontendURL).addCookie(cookie)
             }
           }

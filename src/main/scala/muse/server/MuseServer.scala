@@ -40,6 +40,7 @@ object MuseServer {
   val endpointsGraphQL = for {
     interpreter <- MuseGraphQL.interpreter
   } yield Http.collectHttp[Request] { case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter) }
+//    -> Http.collectHttp[Request] { case r -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
 
   val writeSchemaToFile = for {
     serverConfig <- ZIO.service[ServerConfig]

@@ -2,26 +2,16 @@ package muse.server.graphql
 
 import muse.domain.common.EntityType
 import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
-import muse.domain.mutate.{
-  Context,
-  CreateComment,
-  CreateReview,
-  DeleteComment,
-  DeleteReview,
-  EntityOffset,
-  PositionOffset,
-  ShareReview,
-  StartPlayback,
-  UpdateComment,
-  UpdateReview
-}
+import muse.domain.mutate.{Context, CreateComment, CreateReview, DeleteComment, DeleteReview, EntityOffset, PositionOffset, ShareReview, StartPlayback, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
-import muse.domain.spotify.{StartPlaybackBody, UriOffset, PositionOffset as SpotifyPostionOffset}
+import muse.domain.spotify.{ErrorReason, ErrorResponse, StartPlaybackBody, UriOffset, PositionOffset as SpotifyPostionOffset}
 import muse.server.graphql.subgraph.{Comment, Review}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
-import muse.service.spotify.SpotifyService
-import zio.{IO, ZIO}
+import muse.service.spotify.{SpotifyError, SpotifyService}
+import muse.utils.Utils.*
+import sttp.model.{Method, Uri}
+import zio.{IO, Task, UIO, ZIO}
 
 import java.sql.SQLException
 import java.util.UUID
@@ -43,13 +33,11 @@ final case class Mutations(
     deleteReview: Input[DeleteReview] => ZIO[MutationEnv, MutationError, Boolean],
     deleteComment: Input[DeleteComment] => ZIO[MutationEnv, MutationError, Boolean],
     shareReview: Input[ShareReview] => ZIO[MutationEnv, MutationError, Boolean],
-    startPlayback: Input[StartPlayback] => ZIO[MutationEnv, MutationError, Boolean]
+    startPlayback: Input[StartPlayback] => ZIO[MutationEnv, MutationError, Boolean],
+    saveTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean]
 )
 
 final case class Input[T](input: T)
-
-// TODO: Consider trying to make Scoped layer or something?
-case class MutationsLive(user: UserSession) {}
 
 object Mutations {
 
@@ -61,7 +49,8 @@ object Mutations {
     i => deleteReview(i.input),
     i => deleteComment(i.input),
     i => shareReview(i.input),
-    i => startPlayback(i.input)
+    i => startPlayback(i.input),
+    i => saveTracks(i.input)
   )
 
   type Mutation[A] = ZIO[MutationEnv, MutationError, A]
@@ -115,7 +104,7 @@ object Mutations {
   } yield result
 
   def startPlayback(playback: StartPlayback) =
-    val body = (playback.positionOffset, playback.entityOffset) match
+    val getBody       = (playback.positionOffset, playback.entityOffset) match
       case (Some(_), Some(_))                                                                   =>
         ZIO.fail(BadRequest(Some("Playback can only use one kind of offset (Position, Entity).")))
       case (None, Some(EntityOffset(Context(outerType, outerId), Context(innerType, innerId)))) =>
@@ -127,10 +116,20 @@ object Mutations {
           StartPlaybackBody(Some(toUri(eType, id)), playback.uris, Some(SpotifyPostionOffset(position)), playback.positionMs))
       case (None, None)                                                                         =>
         ZIO.succeed(StartPlaybackBody(None, playback.uris, None, playback.positionMs))
-    for {
-      _ <- playback.deviceId.fold(ZIO.unit)(SpotifyService.transferPlayback(_))
-      _ <- body.flatMap(SpotifyService.startPlayback(playback.deviceId, _))
-    } yield true
+    val startPlayback = getBody.flatMap(SpotifyService.startPlayback(None, _))
+    playback
+      .deviceId.fold(startPlayback) { deviceId =>
+        SpotifyService
+          .transferPlayback(deviceId).foldZIO(
+            _ => ZIO.logInfo("Failed to transfer playback, starting playback on any device") *> startPlayback,
+            _ =>
+              ZIO.logInfo("Succeeded transferring playback") *>
+                getBody.flatMap(SpotifyService.startPlayback(Some(deviceId), _))
+          )
+      }.addTimeLog("Playback started")
+
+  def saveTracks(trackIds: List[String]) =
+    SpotifyService.saveTracks(trackIds.toVector).addTimeLog("Tracks saved")
 
   private def toUri(entityType: EntityType, entityId: String) = entityType match
     case EntityType.Album    => s"spotify:album:$entityId"
