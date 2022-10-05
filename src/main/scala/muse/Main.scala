@@ -39,7 +39,8 @@ object Main extends ZIOAppDefault {
       AppConfig.layer,
       DatabaseService.layer,
       UserSessions.layer,
-      RequestSession.fiberRefLayer,
+      RequestSession.userSessionLayer,
+      RequestSession.spotifySessionLayer,
       QuillContext.dataSourceLayer
     )
     .tapErrorCause(e => ZIO.logErrorCause(s"Failed to start server ${e.toString}", e))

@@ -173,7 +173,7 @@ type Mutations {
 
 type PlaybackContext {
   uri: String!
-  metadata: [KVStringString!]!
+  metadata: [KVStringString!]
   externalUrls: [KVStringString!]!
   href: String!
   type: String!

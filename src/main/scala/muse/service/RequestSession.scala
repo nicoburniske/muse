@@ -2,6 +2,7 @@ package muse.service
 
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
+import muse.service.spotify.SpotifyService
 import zio.{FiberRef, IO, Tag, UIO, ULayer, ZIO, ZLayer}
 
 trait RequestSession[T] {
@@ -10,17 +11,23 @@ trait RequestSession[T] {
 }
 
 object RequestSession {
-  val fiberRefLayer: ULayer[RequestSession[UserSession]] = ZLayer.scoped {
-    FiberRef.make[Option[UserSession]](None).map { ref =>
-      new RequestSession {
-        def get: IO[Unauthorized, UserSession] =
-          ref.get.flatMap {
-            case Some(v) => ZIO.succeed(v)
-            case None    => ZIO.fail(Unauthorized.empty)
-          }
+  val userSessionLayer: ULayer[RequestSession[UserSession]] = ZLayer.scoped {
+    FiberRef.make[Option[UserSession]](None).map(createSession)
+  }
 
-        def set(session: Option[UserSession]): UIO[Unit] = ref.set(session)
-      }
+  val spotifySessionLayer: ULayer[RequestSession[SpotifyService]] = ZLayer.scoped {
+    FiberRef.make[Option[SpotifyService]](None).map(createSession)
+  }
+
+  private def createSession[R: Tag](ref: FiberRef[Option[R]]) = {
+    new RequestSession[R] {
+      def get: IO[Unauthorized, R] =
+        ref.get.flatMap {
+          case Some(v) => ZIO.succeed(v)
+          case None    => ZIO.fail(Unauthorized("Missing Websocket Auth"))
+        }
+
+      def set(session: Option[R]): UIO[Unit] = ref.set(session)
     }
   }
 

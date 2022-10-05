@@ -3,6 +3,7 @@ package muse.server.graphql.resolver
 import muse.domain.common.EntityType
 import muse.domain.error.InvalidEntity
 import muse.server.graphql.subgraph.Artist
+import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import muse.utils.Utils.addTimeLog
 import zio.ZIO
@@ -15,13 +16,13 @@ object GetArtist {
 
   def query(artistId: String) = ZQuery.fromRequest(GetArtist(artistId))(ArtistDataSource)
 
-  val ArtistDataSource: DataSource[SpotifyService, GetArtist] =
+  val ArtistDataSource: DataSource[RequestSession[SpotifyService], GetArtist] =
     DataSource.Batched.make("ArtistDataSource") { reqs =>
       reqs.distinct.toList match
         case Nil         => ZIO.succeed(CompletedRequestMap.empty)
         case head :: Nil =>
-          SpotifyService
-            .getArtist(head.id)
+          RequestSession
+            .get[SpotifyService].flatMap(_.getArtist(head.id))
             .fold(
               e => CompletedRequestMap.empty.insert(head)(Left(e)),
               a => CompletedRequestMap.empty.insert(head)(Right(Artist.fromSpotify(a))))
@@ -29,7 +30,9 @@ object GetArtist {
         case _           =>
           ZIO
             .foreachPar(reqs.grouped(MAX_ARTISTS_PER_REQUEST).toVector) { reqs =>
-              SpotifyService.getArtists(reqs.map(_.id)).map(_.map(Artist.fromSpotify)).either.map(reqs -> _)
+              RequestSession
+                .get[SpotifyService].flatMap(_.getArtists(reqs.map(_.id)))
+                .map(_.map(Artist.fromSpotify)).either.map(reqs -> _)
             }
             .map { res =>
               res.foldLeft(CompletedRequestMap.empty) {

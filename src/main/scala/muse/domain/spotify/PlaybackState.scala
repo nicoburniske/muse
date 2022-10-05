@@ -28,7 +28,7 @@ case class PlaybackContext(
     @jsonField("uri")
     uri: String,
     @jsonField("metadata")
-    metadata: Map[String, String],
+    metadata: Option[Map[String, String]],
     @jsonField("external_urls")
     externalUrls: Map[String, String],
     @jsonField("href")

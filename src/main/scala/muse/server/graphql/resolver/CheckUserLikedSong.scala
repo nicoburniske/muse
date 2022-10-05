@@ -6,22 +6,26 @@ import muse.server.graphql.subgraph.User
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import muse.utils.Utils.*
-import zio.ZIO
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
+import zio.{ZEnvironment, ZIO}
 
 case class CheckUserLikedSong(trackId: String) extends Request[Nothing, Boolean]
 
 object CheckUserLikedSong {
-  def query(trackId: String) = ZQuery.fromRequest(CheckUserLikedSong(trackId))(dataSource)
+  def query(trackId: String) =
+    ZQuery.fromRequest(CheckUserLikedSong(trackId))(dataSource)
 
-  val dataSource: DataSource[SpotifyService, CheckUserLikedSong] =
+  val dataSource: DataSource[RequestSession[SpotifyService], CheckUserLikedSong] =
     DataSource.Batched.make("CheckUserLikedSong") { req =>
       if (req.isEmpty) {
         ZIO.succeed(CompletedRequestMap.empty)
       } else {
         ZIO
           .foreachPar(req.distinct.map(_.trackId).toVector.grouped(50).toVector) { trackIds =>
-            SpotifyService.checkUserSavedTracks(trackIds).either.map(trackIds -> _)
+            RequestSession
+              .get[SpotifyService]
+              .flatMap(_.checkUserSavedTracks(trackIds))
+              .either.map(trackIds -> _)
           }.map {
             _.foldLeft(CompletedRequestMap.empty) {
               case (map, (requests, result)) =>

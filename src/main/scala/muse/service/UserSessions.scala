@@ -2,7 +2,9 @@ package muse.service
 
 import muse.domain.session.UserSession
 import muse.domain.spotify.AuthCodeFlowData
+import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.utils.Utils
+import sttp.client3.SttpBackend
 import zio.*
 import zio.json.*
 import zio.stream.{ZPipeline, ZStream}
@@ -16,6 +18,7 @@ import java.time.temporal.ChronoUnit
 trait UserSessions {
   def addUserSession(userId: String, authData: AuthCodeFlowData): UIO[String]
   def getUserSession(sessionId: String): UIO[Option[UserSession]]
+  def getSpotifyService(sessionId: String): UIO[Option[(UserSession, SpotifyService)]]
   def deleteUserSession(sessionId: String): UIO[Unit]
   def deleteUserSessionByUserId(userId: String): UIO[Unit]
   def updateUserSession(sessionId: String)(f: UserSession => UserSession): UIO[Option[UserSession]]
@@ -32,14 +35,18 @@ trait UserSessions {
 }
 
 object UserSessions {
-  val layer: ZLayer[Scope, Throwable, UserSessionsLive] = ZLayer.scoped {
-    ZIO.acquireRelease(
-      Ref
-        .Synchronized
-        .make(Map.empty)
-        .map(UserSessionsLive.apply(_))
-        // Load sessions from file. When scope closes, save the sessions to file.
-        .tap(_.loadSessions))(cleanup)
+  val layer = ZLayer.scoped {
+    for {
+      sttp <- ZIO.service[SttpBackend[Task, Any]]
+      auth <- ZIO.service[SpotifyAuthService]
+      res  <- ZIO.acquireRelease(
+                Ref
+                  .Synchronized
+                  .make(Map.empty)
+                  .map(UserSessionsLive.apply(_, auth, sttp))
+                  // Load sessions from file. When scope closes, save the sessions to file.
+                  .tap(_.loadSessions))(cleanup)
+    } yield res
   }
 
   def cleanup(sessions: UserSessions) =
@@ -49,6 +56,9 @@ object UserSessions {
 
   def addUserSession(userId: String, authData: AuthCodeFlowData) =
     ZIO.serviceWithZIO[UserSessions](_.addUserSession(userId, authData))
+
+  def getSpotifyService(sessionId: String) =
+    ZIO.serviceWithZIO[UserSessions](_.getSpotifyService(sessionId))
 
   def getUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
 
@@ -61,7 +71,12 @@ object UserSessions {
     ZIO.serviceWithZIO[UserSessions](_.deleteUserSessionByUserId(userId))
 }
 
-final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSession]]) extends UserSessions {
+final case class UserSessionsLive(
+    sessionsR: Ref.Synchronized[Map[String, UserSession]],
+    spotifyAuth: SpotifyAuthService,
+    sttp: SttpBackend[Task, Any])
+    extends UserSessions {
+  val layer = ZLayer.succeed(sttp) ++ ZLayer.succeed(spotifyAuth)
 
   override def addUserSession(userId: String, authData: AuthCodeFlowData) = for {
     expiration <- Utils.getExpirationInstant(authData.expiresIn)
@@ -119,4 +134,24 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
     _        <- ZIO.logInfo(s"Successfully saved $count sessions.")
   } yield ()
 
+  override def getSpotifyService(sessionId: String) = (for {
+    maybeUser      <- getUserSession(sessionId)
+    session        <- ZIO.fromOption(maybeUser).orElseFail(new Exception(s"Session $sessionId not found."))
+    updatedSession <-
+      if (session.expiration.isAfter(Instant.now()))
+        ZIO.logInfo(s"Session Retrieved: ${session.conciseString}").as(session)
+      else
+        for {
+          authData      <- SpotifyAuthService
+                             // TODO: Add retry for this.
+                             .requestNewAccessToken(session.refreshToken)
+          newExpiration <- Utils.getExpirationInstant(authData.expiresIn)
+          newSession    <- updateUserSession(session.sessionCookie) {
+                             _.copy(accessToken = authData.accessToken, expiration = newExpiration)
+                           }
+          // These 'get' calls should be a-ok.
+          _             <- ZIO.logInfo(s"Session Updated ${newSession.get.conciseString}")
+        } yield newSession.get
+    spotify        <- SpotifyService.live(updatedSession.accessToken)
+  } yield session -> spotify).option.provideLayer(layer)
 }

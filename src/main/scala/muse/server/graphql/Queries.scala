@@ -29,14 +29,14 @@ final case class SearchArgs(
 final case class Queries(
     user: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, User],
     review: ReviewsArgs => ZQuery[DatabaseService, Throwable, Option[Review]],
-    search: SearchArgs => ZQuery[SpotifyService, Throwable, SearchResult],
-    availableDevices: ZIO[SpotifyService, Throwable, List[PlaybackDevice]])
+    search: SearchArgs => ZQuery[RequestSession[SpotifyService], Throwable, SearchResult],
+    availableDevices: ZIO[RequestSession[SpotifyService], Throwable, List[PlaybackDevice]])
 
 object Queries {
   val live = Queries(
     args => GetUser.query(args.id),
     args => GetReview.query(args.id),
     args => GetSearch.query(args.query, args.types, args.pagination.getOrElse(Default.Search)),
-    SpotifyService.getAvailableDevices.map(_.toList)
+    RequestSession.get[SpotifyService].flatMap(_.getAvailableDevices.map(_.toList))
   )
 }

@@ -2,6 +2,7 @@ package muse.server.graphql.subgraph
 
 import muse.server.graphql.resolver.GetUserReviews
 import muse.server.graphql.subgraph
+import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
@@ -9,7 +10,7 @@ import zio.query.ZQuery
 final case class User(
     id: String,
     reviews: ZQuery[DatabaseService, Throwable, List[Review]],
-    spotifyProfile: ZQuery[SpotifyService, Throwable, SpotifyProfile]
+    spotifyProfile: ZQuery[RequestSession[SpotifyService], Throwable, SpotifyProfile]
 )
 
 object User {

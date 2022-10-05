@@ -16,13 +16,12 @@ import zio.{IO, Task, UIO, ZIO}
 import java.sql.SQLException
 import java.util.UUID
 
-type MutationEnv = RequestSession[UserSession] & DatabaseService & SpotifyService
-
 // TODO: add un-sharing.
 // TODO: add checking for what constitutes a valid comment. What does rating represent?
 // TODO: What actually should return boolean? Deletion?
 // TODO: Consider adding ZQuery for batched operations to DB.
 
+type MutationEnv   = RequestSession[UserSession] & DatabaseService & RequestSession[SpotifyService]
 type MutationError = Throwable | MuseError
 
 final case class Mutations(
@@ -104,7 +103,7 @@ object Mutations {
   } yield result
 
   def startPlayback(playback: StartPlayback) =
-    val getBody       = (playback.positionOffset, playback.entityOffset) match
+    val getBody = (playback.positionOffset, playback.entityOffset) match
       case (Some(_), Some(_))                                                                   =>
         ZIO.fail(BadRequest(Some("Playback can only use one kind of offset (Position, Entity).")))
       case (None, Some(EntityOffset(Context(outerType, outerId), Context(innerType, innerId)))) =>
@@ -116,20 +115,29 @@ object Mutations {
           StartPlaybackBody(Some(toUri(eType, id)), playback.uris, Some(SpotifyPostionOffset(position)), playback.positionMs))
       case (None, None)                                                                         =>
         ZIO.succeed(StartPlaybackBody(None, playback.uris, None, playback.positionMs))
-    val startPlayback = getBody.flatMap(SpotifyService.startPlayback(None, _))
+
+    val startPlayback = for {
+      body     <- getBody
+      playback <- RequestSession.get[SpotifyService].flatMap(_.startPlayback(None, body))
+    } yield playback
+
     playback
-      .deviceId.fold(startPlayback) { deviceId =>
-        SpotifyService
-          .transferPlayback(deviceId).foldZIO(
+      .deviceId
+      .fold(startPlayback) { deviceId =>
+        RequestSession
+          .get[SpotifyService].flatMap(_.transferPlayback(deviceId)).foldZIO(
             _ => ZIO.logInfo("Failed to transfer playback, starting playback on any device") *> startPlayback,
             _ =>
-              ZIO.logInfo("Succeeded transferring playback") *>
-                getBody.flatMap(SpotifyService.startPlayback(Some(deviceId), _))
+              for {
+                _        <- ZIO.logInfo("Succeeded transferring playback")
+                body     <- getBody
+                playback <- RequestSession.get[SpotifyService].flatMap(_.startPlayback(Some(deviceId), body))
+              } yield playback
           )
       }.addTimeLog("Playback started")
 
   def saveTracks(trackIds: List[String]) =
-    SpotifyService.saveTracks(trackIds.toVector).addTimeLog("Tracks saved")
+    RequestSession.get[SpotifyService].flatMap(_.saveTracks(trackIds.toVector)).addTimeLog("Tracks saved")
 
   private def toUri(entityType: EntityType, entityId: String) = entityType match
     case EntityType.Album    => s"spotify:album:$entityId"
@@ -137,8 +145,10 @@ object Mutations {
     case EntityType.Track    => s"spotify:track:$entityId"
     case EntityType.Playlist => s"spotify:playlist:$entityId"
 
-  private def validateEntity(entityId: String, entityType: EntityType): ZIO[SpotifyService, Throwable | InvalidEntity, Unit] =
-    SpotifyService.isValidEntity(entityId, entityType).flatMap {
+  private def validateEntity(
+      entityId: String,
+      entityType: EntityType): ZIO[RequestSession[SpotifyService], Throwable | InvalidEntity, Unit] =
+    RequestSession.get[SpotifyService].flatMap(_.isValidEntity(entityId, entityType)).flatMap {
       case true  => ZIO.unit
       case false => ZIO.fail(InvalidEntity(entityId, entityType))
     }

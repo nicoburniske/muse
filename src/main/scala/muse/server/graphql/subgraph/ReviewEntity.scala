@@ -4,6 +4,7 @@ import caliban.schema.Annotations.GQLInterface
 import muse.domain.spotify
 import muse.server.graphql.resolver.{CheckUserLikedSong, GetAlbum, GetAlbumTracks, GetArtist, GetArtistAlbums, GetArtistTopTracks, GetPlaylistTracks}
 import muse.server.graphql.subgraph
+import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
@@ -29,8 +30,8 @@ case class Artist(
     override val uri: String,
     popularity: Int,
     // TODO: pagination.
-    albums: ZQuery[SpotifyService, Throwable, List[Album]],
-    topTracks: ZQuery[SpotifyService, Throwable, List[Track]]
+    albums: ZQuery[RequestSession[SpotifyService], Throwable, List[Album]],
+    topTracks: ZQuery[RequestSession[SpotifyService], Throwable, List[Track]]
 ) extends ReviewEntity
 
 object Artist {
@@ -63,8 +64,8 @@ case class Album(
     popularity: Option[Int],
     releaseDate: String,
     override val uri: String,
-    artists: ZQuery[SpotifyService, Throwable, List[Artist]],
-    tracks: ZQuery[SpotifyService, Throwable, List[Track]]
+    artists: ZQuery[RequestSession[SpotifyService], Throwable, List[Artist]],
+    tracks: ZQuery[RequestSession[SpotifyService], Throwable, List[Track]]
 ) extends ReviewEntity
 
 object Album {
@@ -88,8 +89,8 @@ object Album {
 }
 
 case class Track(
-    album: ZQuery[SpotifyService, Throwable, Album],
-    artists: ZQuery[SpotifyService, Throwable, List[Artist]],
+    album: ZQuery[RequestSession[SpotifyService], Throwable, Album],
+    artists: ZQuery[RequestSession[SpotifyService], Throwable, List[Artist]],
     discNumber: Int,
     durationMs: Int,
     explicit: Boolean,
@@ -103,7 +104,7 @@ case class Track(
     trackNumber: Int,
     isLocal: Boolean,
     uri: String,
-    isLiked: ZQuery[SpotifyService, Throwable, Boolean]
+    isLiked: ZQuery[RequestSession[SpotifyService], Throwable, Boolean]
 ) extends ReviewEntity
 
 object Track {
@@ -141,7 +142,7 @@ case class Playlist(
     owner: User,
     primaryColor: Option[String],
     public: Option[Boolean],
-    tracks: ZQuery[SpotifyService, Throwable, List[PlaylistTrack]]
+    tracks: ZQuery[RequestSession[SpotifyService], Throwable, List[PlaylistTrack]]
 ) extends ReviewEntity
 
 object Playlist {

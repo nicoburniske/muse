@@ -28,7 +28,7 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  type Env = RequestSession[UserSession] & DatabaseService & SpotifyService
+  type Env = RequestSession[UserSession] & DatabaseService & RequestSession[SpotifyService]
 
   given userSchema: Schema[Env, User] = Schema.gen
 
@@ -56,9 +56,8 @@ object MuseGraphQL {
 //        case throwable: Throwable => ExecutionError(throwable.getMessage, innerThrowable = Some(throwable))
 //    )
 
-  val api =
-    GraphQL.graphQL[Env, Queries, Mutations, Subscriptions](
-      RootResolver(Queries.live, Mutations.live, Subscriptions.live)) @@ printErrors @@ apolloTracing
+  val api = GraphQL.graphQL[Env, Queries, Mutations, Subscriptions](
+    RootResolver(Queries.live, Mutations.live, Subscriptions.live)) @@ printErrors @@ apolloTracing
 
   val interpreter = api.interpreter.map(errorHandler(_))
 

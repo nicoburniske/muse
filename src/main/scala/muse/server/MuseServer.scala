@@ -32,15 +32,16 @@ object MuseServer {
 
   val config: CorsConfig = CorsConfig(allowedOrigins = _ => true)
 
-  def createProtectedEndpoints = endpointsGraphQL.map { graphqlEndpoints =>
-    MuseMiddleware.checkAuthAddSession(Auth.logoutEndpoint ++ graphqlEndpoints) @@
-      (MuseMiddleware.requestLoggingTrace ++ cors(config))
+  def createProtectedEndpoints = endpointsGraphQL.map {
+    case (rest, websocket) =>
+      (MuseMiddleware.checkAuthAddSession(Auth.logoutEndpoint ++ rest) ++ websocket) @@
+        (MuseMiddleware.requestLoggingTrace ++ cors(config))
   }
 
   val endpointsGraphQL = for {
     interpreter <- MuseGraphQL.interpreter
   } yield Http.collectHttp[Request] { case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter) }
-//    -> Http.collectHttp[Request] { case r -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
+    -> Http.collectHttp[Request] { case r -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
 
   val writeSchemaToFile = for {
     serverConfig <- ZIO.service[ServerConfig]

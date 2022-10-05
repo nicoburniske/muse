@@ -25,7 +25,7 @@ final case class Review(
     comments: ZQuery[DatabaseService, Throwable, List[Comment]],
     entityId: String,
     entityType: EntityType,
-    entity: ZQuery[SpotifyService, Nothing, ReviewEntity],
+    entity: ZQuery[RequestSession[SpotifyService], Nothing, ReviewEntity],
     // TODO: this can be forbidden.
     collaborators: ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Collaborator]]
 )
