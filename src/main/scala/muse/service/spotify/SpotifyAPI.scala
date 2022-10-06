@@ -5,7 +5,7 @@ import muse.domain.spotify.*
 import muse.utils.MonadError
 import sttp.client3.*
 import sttp.client3.ziojson.*
-import sttp.model.{Method, ResponseMetadata, Uri}
+import sttp.model.{Method, ResponseMetadata, StatusCode, Uri}
 import zio.Task
 import zio.json.*
 
@@ -84,6 +84,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     getAllPaging(request, MAX_PER_REQUEST)
   }
 
+  // Seems like sometimes the inner tracks can be null?
   def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): F[Paging[PlaylistTrack]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/playlists/$playlistId/tracks?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
@@ -132,7 +133,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
 
   def getAvailableDevices: F[Vector[PlaybackDevice]] =
     val uri = uri"${SpotifyAPI.API_BASE}/me/player/devices"
-    execute[PlaybackDevices](uri, Method.GET).map(_.devices)
+    executeMaybeNoContent[PlaybackDevices](uri, Method.GET).map(_.fold(Vector.empty)(_.devices))
 
   def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody): F[Boolean] = {
     val uri  = uri"${SpotifyAPI.API_BASE}/me/player/play?device_id=$device"
@@ -151,10 +152,30 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     executeAndIgnoreResponse(uri, Method.PUT).as(true)
   }
 
-  def getPlaybackState: F[PlaybackState] = {
+  def getPlaybackState: F[Option[PlaybackState]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/me/player"
-    execute[PlaybackState](uri, Method.GET)
+    executeMaybeNoContent[PlaybackState](uri, Method.GET)
   }
+
+  private def executeMaybeNoContent[T: JsonDecoder](uri: Uri, method: Method): F[Option[T]] =
+    basicRequest
+      .auth.bearer(accessToken)
+      .response(asString)
+      .method(method, uri)
+      .send(backend).flatMap { response =>
+        // TODO: build out json
+        (response.body, response.code) match
+          case (Right(""), StatusCode.NoContent) =>
+            None.pure
+          case (Right(body), s) if s.isSuccess   =>
+            body.fromJson[T] match
+              case Left(value)  => SpotifyError.JsonError(value, body, uri.toString).raiseError
+              case Right(value) => Some(value).pure
+          case (Left(error: String), _)          =>
+            error.fromJson[ErrorResponse] match
+              case Left(value)  => SpotifyError.JsonError(value, error, uri.toString).raiseError
+              case Right(value) => SpotifyError.HttpError(value, uri, Method.GET).raiseError
+      }
 
   def getAllPaging[T: JsonDecoder](request: Int => F[Paging[T]], pageSize: Int = 50): F[Vector[T]] = {
     def go(acc: Vector[T], offset: Int): F[Vector[T]] =

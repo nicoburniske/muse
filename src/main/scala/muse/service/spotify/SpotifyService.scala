@@ -37,7 +37,7 @@ trait SpotifyService {
   def getAvailableDevices: Task[Vector[PlaybackDevice]]
   def transferPlayback(deviceId: String): Task[Boolean]
   def saveTracks(trackIds: Vector[String]): Task[Boolean]
-  def currentPlaybackState: Task[PlaybackState]
+  def currentPlaybackState: Task[Option[PlaybackState]]
 }
 
 object SpotifyService {
@@ -196,5 +196,5 @@ case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
   def getAvailableDevices                  = s.getAvailableDevices
   def transferPlayback(deviceId: String)   = s.transferPlayback(deviceId)
   def saveTracks(trackIds: Vector[String]) = s.saveTracks(trackIds)
-  def currentPlaybackState: Task[PlaybackState] = s.getPlaybackState
+  def currentPlaybackState = s.getPlaybackState
 }

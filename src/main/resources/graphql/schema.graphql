@@ -260,7 +260,7 @@ type SpotifyProfile {
 }
 
 type Subscriptions {
-  nowPlaying: PlaybackState
+  nowPlaying(tickInterval: Int!): PlaybackState
   availableDevices: [PlaybackDevice!]
 }
 
