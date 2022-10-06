@@ -165,15 +165,16 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       .send(backend).flatMap { response =>
         // TODO: build out json
         (response.body, response.code) match
-          case (Right(""), StatusCode.NoContent) =>
+          // Should only be Status.NoContent, but there are times when 200 + Empty body are used.
+          case (Right(""), statusCode) if statusCode.isSuccess   =>
             None.pure
-          case (Right(body), s) if s.isSuccess   =>
+          case (Right(body), statusCode) if statusCode.isSuccess =>
             body.fromJson[T] match
               case Left(value)  =>
                 SpotifyError.JsonError(value, body, uri.toString).raiseError
               case Right(value) =>
                 Some(value).pure
-          case (Left(error: String), _)          =>
+          case (Left(error: String), _)                          =>
             error.fromJson[ErrorResponse] match
               case Left(value)  =>
                 SpotifyError.JsonError(value, error, uri.toString).raiseError
