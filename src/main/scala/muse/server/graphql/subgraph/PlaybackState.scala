@@ -9,7 +9,7 @@ case class PlaybackState(
     timestamp: Long,
     context: PlaybackContext,
     progressMs: Long,
-    item: Track,
+    item: Option[Track],
     currentlyPlayingType: String,
     isPlaying: Boolean
 )
@@ -23,7 +23,7 @@ object PlaybackState {
       playbackState.timestamp,
       playbackState.context,
       playbackState.progressMs,
-      Track.fromSpotify(playbackState.item, None),
+      playbackState.item.fold(None)(t => Some(Track.fromSpotify(t, None))),
       playbackState.currentlyPlayingType,
       playbackState.isPlaying
     )

@@ -196,5 +196,5 @@ case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
   def getAvailableDevices                  = s.getAvailableDevices
   def transferPlayback(deviceId: String)   = s.transferPlayback(deviceId)
   def saveTracks(trackIds: Vector[String]) = s.saveTracks(trackIds)
-  def currentPlaybackState = s.getPlaybackState
+  def currentPlaybackState                 = s.getPlaybackState
 }

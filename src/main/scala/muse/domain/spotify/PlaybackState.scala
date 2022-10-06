@@ -13,11 +13,13 @@ case class PlaybackState(
     context: PlaybackContext,
     @jsonField("progress_ms")
     progressMs: Long,
-    item: Track,
+    // This can be null sometimes?
+    item: Option[Track],
     @jsonField("currently_playing_type")
     currentlyPlayingType: String,
     @jsonField("is_playing")
     isPlaying: Boolean
+    // TODO: incorporate actions?
 )
 
 object PlaybackState:

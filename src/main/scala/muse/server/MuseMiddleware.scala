@@ -101,12 +101,7 @@ object MuseMiddleware {
                   case _                              => None
               }.orElseFail(Unauthorized("Missing Auth: Unable to decode payload"))
               .flatMap(auth => UserSessions.getSpotifyService(auth)).someOrFail(Unauthorized("Invalid Auth"))
-              .flatMap {
-                case (user, spot) =>
-                  zio.Console.printLine(s"USER???! $user") *>
-                    authSession.set(Some(user)) *>
-                    spotSession.set(Some(spot))
-              })
+              .flatMap { case (user, spot) => authSession.set(Some(user)) *> spotSession.set(Some(spot)) })
 
           type Env = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]
           val transformService = WebSocketHooks.message(new StreamTransformer[Env, Throwable] {
@@ -115,7 +110,7 @@ object MuseMiddleware {
             ): ZStream[R1, E1, GraphQLWSOutput] =
               for {
                 currentSession           <- ZStream.fromZIO(authSession.get)
-                // Update global session and refresh
+                // Update global session and refresh.
                 spotAndUpdatedSession    <- ZStream
                                               .fromZIO(UserSessions.getSpotifyService(currentSession.sessionCookie))
                                               .someOrFail(Unauthorized("Failed to refresh?"))

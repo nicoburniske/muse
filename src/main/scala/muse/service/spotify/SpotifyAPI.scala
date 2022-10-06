@@ -169,12 +169,16 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
             None.pure
           case (Right(body), s) if s.isSuccess   =>
             body.fromJson[T] match
-              case Left(value)  => SpotifyError.JsonError(value, body, uri.toString).raiseError
-              case Right(value) => Some(value).pure
+              case Left(value)  =>
+                SpotifyError.JsonError(value, body, uri.toString).raiseError
+              case Right(value) =>
+                Some(value).pure
           case (Left(error: String), _)          =>
             error.fromJson[ErrorResponse] match
-              case Left(value)  => SpotifyError.JsonError(value, error, uri.toString).raiseError
-              case Right(value) => SpotifyError.HttpError(value, uri, Method.GET).raiseError
+              case Left(value)  =>
+                SpotifyError.JsonError(value, error, uri.toString).raiseError
+              case Right(value) =>
+                SpotifyError.HttpError(value, uri, Method.GET).raiseError
       }
 
   def getAllPaging[T: JsonDecoder](request: Int => F[Paging[T]], pageSize: Int = 50): F[Vector[T]] = {

@@ -196,7 +196,7 @@ type PlaybackState {
   timestamp: Long!
   context: PlaybackContext!
   progressMs: Long!
-  item: Track!
+  item: Track
   currentlyPlayingType: String!
   isPlaying: Boolean!
 }
