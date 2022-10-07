@@ -1,16 +1,18 @@
 package muse.server.graphql
 
-import muse.domain.spotify.{PlaybackDevice, Track}
+import muse.domain.session.UserSession
+import muse.domain.spotify.{PlaybackDevice, Track, PlaybackState as SpotPlaybackState}
 import muse.server.graphql.subgraph.PlaybackState
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
+import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils.*
 import zio.*
-import zio.stream.ZStream
+import zio.stream.{ZPipeline, ZStream}
 
+type Sessions = UserSessions & RequestSession[SpotifyService] & RequestSession[UserSession]
 final case class Subscriptions(
-    nowPlaying: NowPlayingArgs => ZStream[RequestSession[SpotifyService], Throwable, PlaybackState],
-    availableDevices: ZStream[RequestSession[SpotifyService], Throwable, List[PlaybackDevice]]
+    nowPlaying: NowPlayingArgs => ZStream[Sessions, Throwable, PlaybackState],
+    availableDevices: ZStream[Sessions, Throwable, List[PlaybackDevice]]
 )
 
 case class NowPlayingArgs(tickInterval: Int)
@@ -22,17 +24,26 @@ object Subscriptions {
     val tick = if (tickInterval < 1) 1 else tickInterval
     ZStream
       .tick(tick.seconds)
-      .mapZIO(_ => RequestSession.get[SpotifyService])
-      .mapZIO(_.currentPlaybackState.addTimeLog("Retrieved current playback"))
-      .filter(_.isDefined)
-      .map(_.get)
+      .via(refreshSession)
+      .mapZIO(_.currentPlaybackState)
+      .via(flattenOption[SpotPlaybackState])
+      // Only send updates for new playback states.
+      .mapAccum(Option.empty[SpotPlaybackState]) {
+        case (None, curr)                             =>
+          Some(curr) -> Some(curr)
+        case (old @ Some(prev), curr) if prev == curr =>
+          old -> None
+        case (_, curr)                                =>
+          Some(curr) -> Some(curr)
+      }
+      .via(flattenOption[SpotPlaybackState])
       .map(PlaybackState(_))
       .tapErrorCause(cause => ZIO.logErrorCause(s"Error while getting playback state: $cause", cause))
 
   lazy val availableDevices =
     ZStream
       .tick(5.seconds)
-      .mapZIO(_ => RequestSession.get[SpotifyService])
+      .via(refreshSession)
       .mapZIO(_.getAvailableDevices)
       .map(_.toList)
       // If devices are the same don't send update.
@@ -43,4 +54,17 @@ object Subscriptions {
           newDevices -> newDevices
       }.filter(_.nonEmpty)
       .tap(newDevices => ZIO.logInfo(s"Found new devices: $newDevices"))
+
+  def refreshSession = ZPipeline.mapZIO(_ =>
+    (for {
+      user           <- RequestSession.get[UserSession]
+      newSessions    <- ZIO.serviceWithZIO[UserSessions](_.getSpotifyService(user.sessionId)).map(_.get)
+      (user, spotify) = newSessions
+      _              <- RequestSession.set[UserSession](Some(user))
+      _              <- RequestSession.set[SpotifyService](Some(spotify))
+    } yield spotify).addTimeLog("Refreshed session."))
+
+  def flattenOption[T] =
+    ZPipeline.filter[Option[T]](_.isDefined) >>>
+      ZPipeline.map[Option[T], T](_.get)
 }

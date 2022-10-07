@@ -115,10 +115,10 @@ final case class UserSessionsLive(
     result     <- sessionsR.updateAndGetZIO { sessionsInMem =>
                     sessionStream.runFold(sessionsInMem)((sessions, s: UserSession) =>
                       sessions
-                        .get(s.sessionCookie)
+                        .get(s.sessionId)
                         // If is already a session loaded in memory for a given session cookie
                         // ignore the session from file.
-                        .fold(sessions + (s.sessionCookie -> s))(_ => sessions))
+                        .fold(sessions + (s.sessionId -> s))(_ => sessions))
                   }
     _          <- ZIO.logInfo(s"Successfully loaded ${result.size} session(s).")
   } yield result.values.toList
@@ -146,7 +146,7 @@ final case class UserSessionsLive(
                              // TODO: Add retry for this.
                              .requestNewAccessToken(session.refreshToken)
           newExpiration <- Utils.getExpirationInstant(authData.expiresIn)
-          newSession    <- updateUserSession(session.sessionCookie) {
+          newSession    <- updateUserSession(session.sessionId) {
                              _.copy(accessToken = authData.accessToken, expiration = newExpiration)
                            }
           // These 'get' calls should be a-ok.

@@ -62,8 +62,8 @@ object Auth {
       case Method.POST -> !! / "logout" =>
         for {
           session <- RequestSession.get[UserSession]
-          _       <- UserSessions.deleteUserSession(session.sessionCookie)
-          _       <- ZIO.logInfo(s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
+          _       <- UserSessions.deleteUserSession(session.sessionId)
+          _       <- ZIO.logInfo(s"Successfully logged out user ${session.id} with cookie: ${session.sessionId.take(10)}")
         } yield Response.ok
     }
 

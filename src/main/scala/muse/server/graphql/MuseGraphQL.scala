@@ -15,9 +15,9 @@ import muse.domain.spotify
 import muse.domain.spotify.AlbumType
 import muse.domain.table.ReviewComment
 import muse.server.graphql.subgraph.{Album, Artist, Comment, PlaybackState, Playlist, PlaylistTrack, Review, ReviewEntity, SearchResult, Track, User}
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyError, SpotifyService}
+import muse.service.{RequestSession, UserSessions}
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.*
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
@@ -28,7 +28,7 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  type Env = RequestSession[UserSession] & DatabaseService & RequestSession[SpotifyService]
+  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions
 
   given userSchema: Schema[Env, User] = Schema.gen
 

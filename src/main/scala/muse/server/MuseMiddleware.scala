@@ -112,7 +112,7 @@ object MuseMiddleware {
                 currentSession           <- ZStream.fromZIO(authSession.get)
                 // Update global session and refresh.
                 spotAndUpdatedSession    <- ZStream
-                                              .fromZIO(UserSessions.getSpotifyService(currentSession.sessionCookie))
+                                              .fromZIO(UserSessions.getSpotifyService(currentSession.sessionId))
                                               .someOrFail(Unauthorized("Failed to refresh?"))
                 (updatedSession, spotify) = spotAndUpdatedSession
                 _                        <- ZStream.fromZIO(authSession.set(Some(updatedSession)))
