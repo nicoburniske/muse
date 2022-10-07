@@ -2,7 +2,8 @@ package muse.server.graphql
 
 import muse.domain.session.UserSession
 import muse.domain.spotify.{PlaybackDevice, Track, PlaybackState as SpotPlaybackState}
-import muse.server.graphql.subgraph.PlaybackState
+import muse.server.graphql.resolver.GetPlaylistTracks
+import muse.server.graphql.subgraph.{PlaybackState, PlaylistTrack}
 import muse.service.spotify.SpotifyService
 import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils.*
@@ -12,13 +13,18 @@ import zio.stream.{ZPipeline, ZStream}
 type Sessions = UserSessions & RequestSession[SpotifyService] & RequestSession[UserSession]
 final case class Subscriptions(
     nowPlaying: NowPlayingArgs => ZStream[Sessions, Throwable, PlaybackState],
-    availableDevices: ZStream[Sessions, Throwable, List[PlaybackDevice]]
+    availableDevices: ZStream[Sessions, Throwable, List[PlaybackDevice]],
+    playlistTracks: Input[GetPlaylistTracks] => ZStream[Sessions, Throwable, PlaylistTrack]
 )
 
 case class NowPlayingArgs(tickInterval: Int)
 
 object Subscriptions {
-  val live: Subscriptions = Subscriptions(a => playbackState(a.tickInterval), availableDevices)
+  val live: Subscriptions = Subscriptions(
+    a => playbackState(a.tickInterval),
+    availableDevices,
+    i => GetPlaylistTracks.stream(i.input.playlistId, i.input.numTracks)
+  )
 
   def playbackState(tickInterval: Int) =
     val tick = if (tickInterval < 1) 1 else tickInterval
@@ -52,7 +58,8 @@ object Subscriptions {
           devices    -> List.empty
         else
           newDevices -> newDevices
-      }.filter(_.nonEmpty)
+      }
+      .filter(_.nonEmpty)
       .tap(newDevices => ZIO.logInfo(s"Found new devices: $newDevices"))
 
   def refreshSession = ZPipeline.mapZIO(_ =>
