@@ -1,5 +1,6 @@
 package muse.server.graphql
 
+import muse.domain.event.{CreatedComment, ReviewUpdate}
 import muse.domain.session.UserSession
 import muse.domain.spotify.{PlaybackDevice, Track, PlaybackState as SpotPlaybackState}
 import muse.server.graphql.resolver.GetPlaylistTracks
@@ -10,20 +11,25 @@ import muse.utils.Utils.*
 import zio.*
 import zio.stream.{ZPipeline, ZStream}
 
+import java.util.UUID
+
 type Sessions = UserSessions & RequestSession[SpotifyService] & RequestSession[UserSession]
 final case class Subscriptions(
     nowPlaying: NowPlayingArgs => ZStream[Sessions, Throwable, PlaybackState],
     availableDevices: ZStream[Sessions, Throwable, List[PlaybackDevice]],
-    playlistTracks: Input[GetPlaylistTracks] => ZStream[Sessions, Throwable, PlaylistTrack]
+    playlistTracks: Input[GetPlaylistTracks] => ZStream[Sessions, Throwable, PlaylistTrack],
+    reviewUpdates: ReviewUpdatesArgs => ZStream[Sessions & Hub[ReviewUpdate] & Scope, Throwable, ReviewUpdate]
 )
 
 case class NowPlayingArgs(tickInterval: Int)
+case class ReviewUpdatesArgs(reviewId: UUID)
 
 object Subscriptions {
   val live: Subscriptions = Subscriptions(
     a => playbackState(a.tickInterval),
     availableDevices,
-    i => GetPlaylistTracks.stream(i.input.playlistId, i.input.numTracks)
+    i => GetPlaylistTracks.stream(i.input.playlistId, i.input.numTracks),
+    i => reviewUpdates(i.reviewId)
   )
 
   def playbackState(tickInterval: Int) =
@@ -62,6 +68,13 @@ object Subscriptions {
       .filter(_.nonEmpty)
       .tap(newDevices => ZIO.logInfo(s"Found new devices: $newDevices"))
 
+  // TODO: likely need to refresh token.
+  def reviewUpdates(reviewId: UUID) = for {
+    queue  <- ZStream.fromZIO(ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.subscribe))
+    update <- ZStream.fromQueue(queue).filter(_.reviewId == reviewId)
+  } yield update
+
+  // Should this happen in a forked fiber somewhere?
   def refreshSession = ZPipeline.mapZIO(_ =>
     (for {
       user           <- RequestSession.get[UserSession]

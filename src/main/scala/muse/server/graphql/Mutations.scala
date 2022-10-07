@@ -2,6 +2,7 @@ package muse.server.graphql
 
 import muse.domain.common.EntityType
 import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
+import muse.domain.event.{CreatedComment, DeletedComment, ReviewUpdate, UpdatedComment}
 import muse.domain.mutate.{Context, CreateComment, CreateReview, DeleteComment, DeleteReview, EntityOffset, PositionOffset, ShareReview, StartPlayback, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify.{ErrorReason, ErrorResponse, StartPlaybackBody, UriOffset, PositionOffset as SpotifyPostionOffset}
@@ -11,7 +12,7 @@ import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyError, SpotifyService}
 import muse.utils.Utils.*
 import sttp.model.{Method, Uri}
-import zio.{IO, Task, UIO, ZIO}
+import zio.{Hub, IO, Task, UIO, ZIO}
 
 import java.sql.SQLException
 import java.util.UUID
@@ -21,14 +22,14 @@ import java.util.UUID
 // TODO: What actually should return boolean? Deletion?
 // TODO: Consider adding ZQuery for batched operations to DB.
 
-type MutationEnv   = RequestSession[UserSession] & DatabaseService & RequestSession[SpotifyService]
+type MutationEnv   = RequestSession[UserSession] & DatabaseService & RequestSession[SpotifyService] & Hub[ReviewUpdate]
 type MutationError = Throwable | MuseError
 
 final case class Mutations(
     createReview: Input[CreateReview] => ZIO[MutationEnv, MutationError, Review],
     createComment: Input[CreateComment] => ZIO[MutationEnv, MutationError, Comment],
-    updateReview: Input[UpdateReview] => ZIO[MutationEnv, MutationError, Boolean],
-    updateComment: Input[UpdateComment] => ZIO[MutationEnv, MutationError, Boolean],
+    updateReview: Input[UpdateReview] => ZIO[MutationEnv, MutationError, Review],
+    updateComment: Input[UpdateComment] => ZIO[MutationEnv, MutationError, Comment],
     deleteReview: Input[DeleteReview] => ZIO[MutationEnv, MutationError, Boolean],
     deleteComment: Input[DeleteComment] => ZIO[MutationEnv, MutationError, Boolean],
     shareReview: Input[ShareReview] => ZIO[MutationEnv, MutationError, Boolean],
@@ -54,40 +55,46 @@ object Mutations {
 
   type Mutation[A] = ZIO[MutationEnv, MutationError, A]
 
-  def createReview(create: CreateReview): Mutation[Review] = for {
+  def createReview(create: CreateReview) = for {
     user <- RequestSession.get[UserSession]
     _    <- validateEntity(create.entityId, create.entityType)
     r    <- DatabaseService.createReview(user.id, create)
   } yield Review.fromTable(r)
 
-  def createComment(create: CreateComment): Mutation[Comment] = for {
-    user <- RequestSession.get[UserSession]
-    _    <- ZIO
-              .fail(BadRequest(Some("Comment must have a body or rating")))
-              .unless(create.comment.exists(_.nonEmpty) || create.rating.isDefined)
-    _    <- validateEntity(create.entityId, create.entityType) <&> validateCommentPermissions(user.id, create.reviewId)
-    c    <- DatabaseService.createReviewComment(user.id, create)
-  } yield Comment.fromTable(c)
+  def createComment(create: CreateComment) = for {
+    user      <- RequestSession.get[UserSession]
+    _         <- ZIO
+                   .fail(BadRequest(Some("Comment must have a body or rating")))
+                   .unless(create.comment.exists(_.nonEmpty) || create.rating.isDefined)
+    _         <- validateEntity(create.entityId, create.entityType) <&> validateCommentPermissions(user.id, create.reviewId)
+    comment   <- DatabaseService.createReviewComment(user.id, create)
+    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(CreatedComment(comment)))
+    _         <- ZIO.logError("Failed to publish comment creation").unless(published)
+  } yield Comment.fromTable(comment)
 
-  def updateReview(update: UpdateReview): Mutation[Boolean] = for {
+  def updateReview(update: UpdateReview) = for {
     user   <- RequestSession.get[UserSession]
     _      <- validateReviewPermissions(user.id, update.reviewId)
     result <- DatabaseService.updateReview(update)
-  } yield result
+  } yield Review.fromTable(result)
 
-  def updateComment(update: UpdateComment): Mutation[Boolean] = for {
-    user   <- RequestSession.get[UserSession]
-    _      <- ZIO
-                .fail(BadRequest(Some("Comment must have a body or rating")))
-                .unless(update.comment.exists(_.nonEmpty) || update.rating.isDefined)
-    _      <- validateCommentEditingPermissions(user.id, update.reviewId, update.commentId)
-    result <- DatabaseService.updateComment(update)
-  } yield result
+  def updateComment(update: UpdateComment) = for {
+    user      <- RequestSession.get[UserSession]
+    _         <- ZIO
+                   .fail(BadRequest(Some("Comment must have a body or rating")))
+                   .unless(update.comment.exists(_.nonEmpty) || update.rating.isDefined)
+    _         <- validateCommentEditingPermissions(user.id, update.reviewId, update.commentId)
+    result    <- DatabaseService.updateComment(update)
+    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(result)))
+    _         <- ZIO.logError("Failed to publish comment update").unless(published)
+  } yield Comment.fromTable(result)
 
   def deleteComment(d: DeleteComment): Mutation[Boolean] = for {
-    user   <- RequestSession.get[UserSession]
-    _      <- validateCommentEditingPermissions(user.id, d.reviewId, d.commentId)
-    result <- DatabaseService.deleteComment(d)
+    user      <- RequestSession.get[UserSession]
+    _         <- validateCommentEditingPermissions(user.id, d.reviewId, d.commentId)
+    result    <- DatabaseService.deleteComment(d)
+    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(DeletedComment(d.reviewId, d.commentId)))
+    _         <- ZIO.logError("Failed to publish comment deletion").unless(published)
   } yield result
 
   def deleteReview(d: DeleteReview): Mutation[Boolean] = for {

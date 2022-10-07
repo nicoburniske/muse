@@ -40,8 +40,8 @@ trait DatabaseService {
   /**
    * Update!
    */
-  def updateReview(review: UpdateReview): IO[SQLException, Boolean]
-  def updateComment(comment: UpdateComment): IO[SQLException, Boolean]
+  def updateReview(review: UpdateReview): IO[SQLException, Review]
+  def updateComment(comment: UpdateComment): IO[SQLException, ReviewComment]
   def shareReview(share: ShareReview): IO[SQLException, Boolean]
 
   /**
@@ -59,8 +59,6 @@ trait DatabaseService {
   def canViewReview(userId: String, reviewId: UUID): IO[SQLException, Boolean]
   def canModifyReview(userId: String, reviewId: UUID): IO[SQLException, Boolean]
   def canModifyComment(userId: String, reviewId: UUID, commentId: Int): IO[SQLException, Boolean]
-
-  // TODO: sharing methods.
 
 }
 
@@ -286,20 +284,22 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .update(
         _.reviewName -> lift(r.name),
         _.isPublic   -> lift(r.isPublic)
-      )
+      ).returning(r => r)
   }.provide(layer)
-    .map(_ > 0)
 
-  override def updateComment(c: UpdateComment) = run {
-    comments
-      .filter(_.id == lift(c.commentId))
-      .filter(_.reviewId == lift(c.reviewId))
-      .update(
-        _.comment -> lift(c.comment),
-        _.rating  -> lift(c.rating)
-      )
+  //TODO: need to update timestamps.
+  override def updateComment(c: UpdateComment) = ZIO.succeed(Instant.now()).flatMap{ now =>
+    run {
+      comments
+        .filter(_.id == lift(c.commentId))
+        .filter(_.reviewId == lift(c.reviewId))
+        .update(
+          _.comment -> lift(c.comment),
+          _.rating  -> lift(c.rating),
+          _.updatedAt -> lift(now)
+        ).returning(r => r)
+    }
   }.provide(layer)
-    .map(_ > 0)
 
   override def shareReview(share: ShareReview) = run {
     reviewAccess.insert(

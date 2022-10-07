@@ -12,7 +12,7 @@ import muse.server.graphql.MuseGraphQL
 import muse.server.{Auth, MuseMiddleware, MuseServer}
 import muse.service.persist.{DatabaseService, QuillContext}
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
-import muse.service.{RequestSession, UserSessions}
+import muse.service.{RequestSession, ReviewUpdates, UserSessions}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zhttp.*
@@ -39,6 +39,7 @@ object Main extends ZIOAppDefault {
       AppConfig.layer,
       DatabaseService.layer,
       UserSessions.layer,
+      ReviewUpdates.hub,
       RequestSession.userSessionLayer,
       RequestSession.spotifySessionLayer,
       QuillContext.dataSourceLayer
