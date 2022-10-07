@@ -9,6 +9,8 @@ scalar Instant
 
 scalar Long
 
+union ReviewUpdate = CreatedComment | DeletedComment | UpdatedComment
+
 enum AccessLevel {
   Collaborator
   Viewer
@@ -54,6 +56,11 @@ input DeleteReviewInput {
 input EntityOffsetInput {
   outer: ContextInput!
   inner: ContextInput!
+}
+
+input GetPlaylistTracksInput {
+  playlistId: String!
+  numTracks: Int!
 }
 
 input PaginationInput {
@@ -151,6 +158,15 @@ type Comment {
   entity: ReviewEntity
 }
 
+type CreatedComment {
+  comment: Comment!
+}
+
+type DeletedComment {
+  reviewId: ID!
+  commentId: Int!
+}
+
 "A key-value pair of String and String"
 type KVStringString {
   "Key"
@@ -162,8 +178,8 @@ type KVStringString {
 type Mutations {
   createReview(input: CreateReviewInput!): Review
   createComment(input: CreateCommentInput!): Comment
-  updateReview(input: UpdateReviewInput!): Boolean
-  updateComment(input: UpdateCommentInput!): Boolean
+  updateReview(input: UpdateReviewInput!): Review
+  updateComment(input: UpdateCommentInput!): Comment
   deleteReview(input: DeleteReviewInput!): Boolean
   deleteComment(input: DeleteCommentInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
@@ -262,6 +278,8 @@ type SpotifyProfile {
 type Subscriptions {
   nowPlaying(tickInterval: Int!): PlaybackState
   availableDevices: [PlaybackDevice!]
+  playlistTracks(input: GetPlaylistTracksInput!): PlaylistTrack
+  reviewUpdates(reviewId: ID!): ReviewUpdate
 }
 
 type Track implements ReviewEntity {
@@ -281,6 +299,10 @@ type Track implements ReviewEntity {
   isLocal: Boolean!
   uri: String!
   isLiked: Boolean
+}
+
+type UpdatedComment {
+  comment: Comment!
 }
 
 type User {

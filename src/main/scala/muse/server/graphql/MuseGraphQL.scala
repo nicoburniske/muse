@@ -29,7 +29,7 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & Hub[ReviewUpdate]
+  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & Hub[ReviewUpdate] & Scope
 
   given userSchema: Schema[Env, User] = Schema.gen
 

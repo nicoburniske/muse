@@ -67,10 +67,11 @@ object Mutations {
                    .fail(BadRequest(Some("Comment must have a body or rating")))
                    .unless(create.comment.exists(_.nonEmpty) || create.rating.isDefined)
     _         <- validateEntity(create.entityId, create.entityType) <&> validateCommentPermissions(user.id, create.reviewId)
-    comment   <- DatabaseService.createReviewComment(user.id, create)
+    result    <- DatabaseService.createReviewComment(user.id, create)
+    comment    = Comment.fromTable(result)
     published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(CreatedComment(comment)))
     _         <- ZIO.logError("Failed to publish comment creation").unless(published)
-  } yield Comment.fromTable(comment)
+  } yield comment
 
   def updateReview(update: UpdateReview) = for {
     user   <- RequestSession.get[UserSession]
@@ -85,9 +86,10 @@ object Mutations {
                    .unless(update.comment.exists(_.nonEmpty) || update.rating.isDefined)
     _         <- validateCommentEditingPermissions(user.id, update.reviewId, update.commentId)
     result    <- DatabaseService.updateComment(update)
-    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(result)))
+    comment    = Comment.fromTable(result)
+    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
     _         <- ZIO.logError("Failed to publish comment update").unless(published)
-  } yield Comment.fromTable(result)
+  } yield comment
 
   def deleteComment(d: DeleteComment): Mutation[Boolean] = for {
     user      <- RequestSession.get[UserSession]
