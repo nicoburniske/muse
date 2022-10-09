@@ -130,8 +130,11 @@ final case class UserSessionsLive(
                   .map(_.toJson)
                   .map(s => s + '\n')
     count    <- stream.runCount
-    _        <- Utils.writeToFile(SESSIONS_FILE, stream)
-    _        <- ZIO.logInfo(s"Successfully saved $count sessions.")
+    _        <- Utils
+                  .writeToFile(SESSIONS_FILE, stream)
+                  .fold(
+                    e => ZIO.logErrorCause(s"Failed to save sessions $e", Cause.fail(e)),
+                    _ => ZIO.logInfo(s"Successfully saved $count sessions."))
   } yield ()
 
   override def getSpotifyService(sessionId: String) = (for {
@@ -139,7 +142,7 @@ final case class UserSessionsLive(
     session        <- ZIO.fromOption(maybeUser).orElseFail(new Exception(s"Session $sessionId not found."))
     updatedSession <-
       if (session.expiration.isAfter(Instant.now()))
-        ZIO.logInfo(s"Session Retrieved: ${session.conciseString}").as(session)
+        ZIO.succeed(session)
       else
         for {
           authData      <- SpotifyAuthService

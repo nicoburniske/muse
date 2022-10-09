@@ -38,7 +38,7 @@ object Subscriptions {
       .tick(tick.seconds)
       .via(refreshSession)
       .mapZIO(_.currentPlaybackState)
-      .via(flattenOption[SpotPlaybackState])
+      .via(flattenOption)
       // Only send updates for new playback states.
       .mapAccum(Option.empty[SpotPlaybackState]) {
         case (None, curr)                             =>
@@ -48,7 +48,7 @@ object Subscriptions {
         case (_, curr)                                =>
           Some(curr) -> Some(curr)
       }
-      .via(flattenOption[SpotPlaybackState])
+      .via(flattenOption)
       .map(PlaybackState(_))
       .tapErrorCause(cause => ZIO.logErrorCause(s"Error while getting playback state: $cause", cause))
 
@@ -76,13 +76,13 @@ object Subscriptions {
 
   // Should this happen in a forked fiber somewhere?
   def refreshSession = ZPipeline.mapZIO(_ =>
-    (for {
+    for {
       user           <- RequestSession.get[UserSession]
       newSessions    <- ZIO.serviceWithZIO[UserSessions](_.getSpotifyService(user.sessionId)).map(_.get)
       (user, spotify) = newSessions
       _              <- RequestSession.set[UserSession](Some(user))
       _              <- RequestSession.set[SpotifyService](Some(spotify))
-    } yield spotify).addTimeLog("Refreshed session."))
+    } yield spotify)
 
   def flattenOption[T] =
     ZPipeline.filter[Option[T]](_.isDefined) >>>

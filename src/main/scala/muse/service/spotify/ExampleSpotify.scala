@@ -26,6 +26,7 @@ object ExampleSpotify extends ZIOAppDefault {
     _                 <- w.findDuplicates
   } yield ()
 
+  // Find most duplicate song.
   override def run = program.provide(
     AppConfig.layer,
     SpotifyAuthService.layer,
