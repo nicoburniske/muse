@@ -6,7 +6,7 @@ import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.server.MuseMiddleware
 import muse.server.graphql.MuseGraphQL
-import muse.service.persist.DatabaseService
+import muse.service.persist.{DatabaseService, MigrationService}
 import muse.service.spotify.SpotifyService
 import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils
@@ -24,7 +24,7 @@ object MuseServer {
 
   val live = for {
     port               <- ZIO.serviceWith[ServerConfig](_.port)
-    _                  <- writeSchemaToFile
+    _                  <- writeSchemaToFile <&> MigrationService.runMigrations
     protectedEndpoints <- createProtectedEndpoints
     allEndpoints        = Auth.loginEndpoints ++ protectedEndpoints @@ MuseMiddleware.handleErrors
     _                  <- service.Server.start(port, allEndpoints).forever
@@ -43,7 +43,7 @@ object MuseServer {
   } yield Http.collectHttp[Request] { case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter) }
     -> Http.collectHttp[Request] { case r -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
 
-  val writeSchemaToFile = for {
+  lazy val writeSchemaToFile = for {
     serverConfig <- ZIO.service[ServerConfig]
     _            <- Utils.writeToFile(serverConfig.schemaFile, MuseGraphQL.api.render)
   } yield ()

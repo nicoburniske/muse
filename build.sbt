@@ -9,6 +9,7 @@ val zioConfig    = "3.0.1"
 val zhttp        = "2.0.0-RC10"
 val protoQuill   = "4.0.0"
 val postgresql   = "42.3.6"
+val flyway       = "8.5.12"
 val sttp         = "3.7.0"
 val slf4jVersion = "2.0.1"
 
@@ -46,19 +47,19 @@ lazy val root = (project in file(".")).settings(
     "com.softwaremill.sttp.client3" %% "core"                          % sttp,
     "com.softwaremill.sttp.client3" %% "async-http-client-backend-zio" % sttp,
     "com.softwaremill.sttp.client3" %% "zio-json"                      % sttp,
-// Quill JDBC ZIO.
+    // Quill JDBC ZIO.
     "io.getquill"                   %% "quill-jdbc-zio"                % protoQuill,
     "org.postgresql"                 % "postgresql"                    % postgresql,
-    // Logging.
+    "org.flywaydb"                   % "flyway-core"                   % flyway,
     "dev.zio"                       %% "zio-logging-slf4j"             % zio,
     "org.slf4j"                      % "slf4j-api"                     % slf4jVersion,
     "ch.qos.logback"                 % "logback-classic"               % "1.4.1",
-//    "org.slf4j"                      % "slf4j-simple"                  % slf4jVersion,
+
     // Graphql.
-    "com.github.ghostdogpr"         %% "caliban"                       % "2.0.1",
-    "com.github.ghostdogpr"         %% "caliban-zio-http"              % "2.0.1",
+    "com.github.ghostdogpr" %% "caliban"          % "2.0.1",
+    "com.github.ghostdogpr" %% "caliban-zio-http" % "2.0.1",
     // Test Libraries.
-    "dev.zio"                       %% "zio-test"                      % zio % Test
+    "dev.zio"               %% "zio-test"         % zio % Test
   ),
   scalacOptions ++= Seq(
     "-Xmax-inlines:45"

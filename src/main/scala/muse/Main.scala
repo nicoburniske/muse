@@ -10,7 +10,7 @@ import muse.domain.session.UserSession
 import muse.domain.table.AppUser
 import muse.server.graphql.MuseGraphQL
 import muse.server.{Auth, MuseMiddleware, MuseServer}
-import muse.service.persist.{DatabaseService, QuillContext}
+import muse.service.persist.{DatabaseService, MigrationService, QuillContext}
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.service.{RequestSession, ReviewUpdates, UserSessions}
 import muse.utils.Utils
@@ -38,6 +38,7 @@ object Main extends ZIOAppDefault {
       SpotifyAuthService.layer,
       AppConfig.layer,
       DatabaseService.layer,
+      MigrationService.layer,
       UserSessions.layer,
       ReviewUpdates.hub,
       RequestSession.userSessionLayer,

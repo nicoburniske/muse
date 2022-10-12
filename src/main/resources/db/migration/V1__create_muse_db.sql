@@ -1,5 +1,4 @@
-CREATE
-EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE SCHEMA muse;
 
@@ -65,6 +64,6 @@ CREATE TABLE muse.review_comment
         FOREIGN KEY (parent_comment_id)
             REFERENCES muse.review_comment (id),
     CONSTRAINT checkContent check (
-        comment IS NOT NULL OR rating IS NOT NULL
+            comment IS NOT NULL OR rating IS NOT NULL
         )
 );
