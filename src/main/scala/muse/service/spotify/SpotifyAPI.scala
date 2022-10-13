@@ -4,18 +4,14 @@ import muse.domain.common.EntityType
 import muse.domain.spotify.*
 import muse.utils.MonadError
 import sttp.client3.*
-import sttp.model.{Method, ResponseMetadata, Uri}
+import sttp.client3.ziojson.*
+import sttp.model.{Method, ResponseMetadata, StatusCode, Uri}
 import zio.Task
 import zio.json.*
 
-final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: String)(
-    using m: MonadError[F, Throwable]) {
+final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: String)(using m: MonadError[F, Throwable]) {
 
-  def search(
-      query: String,
-      entityTypes: Set[EntityType],
-      limit: Int = 50,
-      offset: Option[Int] = None): F[SearchResult] = {
+  def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None): F[SearchResult] = {
     val encodedTypes = entityTypes.map(_.toString.toLowerCase).mkString(",")
     val uri          = uri"${SpotifyAPI.API_BASE}/search?q=$query&type=$encodedTypes&limit=$limit&offset=$offset"
     execute(uri, Method.GET)
@@ -38,10 +34,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       case EntityType.Playlist => getPlaylist(entityId).isSuccess
       case EntityType.Track    => getTrack(entityId).isSuccess
 
-  def getPlaylist(
-      playlistId: String,
-      fields: Option[String] = None,
-      market: Option[String] = None): F[UserPlaylist] = {
+  def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None): F[UserPlaylist] = {
     val uri = uri"${SpotifyAPI.API_BASE}/playlists/$playlistId?fields=$fields&market=$market"
     execute(uri, Method.GET)
   }
@@ -91,10 +84,8 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     getAllPaging(request, MAX_PER_REQUEST)
   }
 
-  def getSomePlaylistTracks(
-      playlistId: String,
-      limit: Int,
-      offset: Option[Int] = None): F[Paging[PlaylistTrack]] = {
+  // Seems like sometimes the inner tracks can be null?
+  def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): F[Paging[PlaylistTrack]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/playlists/$playlistId/tracks?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
@@ -105,10 +96,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     getAllPaging(request, MAX_PER_REQUEST)
   }
 
-  def getSomeAlbumTracks(
-      album: String,
-      limit: Option[Int] = None,
-      offset: Option[Int] = None): F[Paging[Track]] = {
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): F[Paging[Track]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/albums/$album/tracks?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
@@ -119,10 +107,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     getAllPaging(request, MAX_PER_REQUEST)
   }
 
-  def getSomeArtistAlbums(
-      artistId: String,
-      limit: Option[Int] = None,
-      offset: Option[Int] = None): F[Paging[Album]] = {
+  def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None): F[Paging[Album]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/artists/$artistId/albums?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
@@ -135,42 +120,109 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
 
   // TODO: this endpoint is not documented properly by spotify. Country is a required parameter.
   def getArtistTopTracks(artistId: String, country: String = "US"): F[Vector[Track]] = {
-    val uri =
-      uri"${SpotifyAPI.API_BASE}/artists/$artistId/top-tracks?country=$country"
+    val uri = uri"${SpotifyAPI.API_BASE}/artists/$artistId/top-tracks?country=$country"
     execute[MultiTrack](uri, Method.GET).map(_.tracks)
   }
 
-  def getAllPaging[T](request: Int => F[Paging[T]], pageSize: Int = 50)(
-      using decoder: JsonDecoder[T]): F[Vector[T]] = {
-    def go(acc: Vector[T], offset: Int): F[Vector[T]] = {
+  // TODO: impose limit on number of tracks.
+  def checkUserSavedTracks(trackIds: Vector[String]): F[Vector[(String, Boolean)]] = {
+    val distinct = trackIds.distinct
+    val uri      = uri"${SpotifyAPI.API_BASE}/me/tracks/contains?ids=${distinct.mkString(",")}"
+    execute[Vector[Boolean]](uri, Method.GET).map(distinct.zip(_))
+  }
+
+  def getAvailableDevices: F[Vector[PlaybackDevice]] =
+    val uri = uri"${SpotifyAPI.API_BASE}/me/player/devices"
+    executeMaybeNoContent[PlaybackDevices](uri, Method.GET).map(_.fold(Vector.empty)(_.devices))
+
+  def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody): F[Boolean] = {
+    val uri  = uri"${SpotifyAPI.API_BASE}/me/player/play?device_id=$device"
+    val body = startPlaybackBody.toJson
+    executeAndIgnoreResponse(uri, Method.PUT, Some(body)).as(true)
+  }
+
+  // device id must be active!
+  def transferPlayback(deviceId: String): F[Boolean] =
+    val uri  = uri"${SpotifyAPI.API_BASE}/me/player"
+    val body = PlaybackDeviceIds(List(deviceId)).toJson
+    executeAndIgnoreResponse(uri, Method.PUT, Some(body)).as(true)
+
+  def saveTracks(trackIds: Vector[String]): F[Boolean] = {
+    val uri = uri"${SpotifyAPI.API_BASE}/me/tracks/ids=${trackIds.distinct.mkString(",")}"
+    executeAndIgnoreResponse(uri, Method.PUT).as(true)
+  }
+
+  def getPlaybackState: F[Option[PlaybackState]] = {
+    val uri = uri"${SpotifyAPI.API_BASE}/me/player"
+    executeMaybeNoContent[PlaybackState](uri, Method.GET)
+  }
+
+  private def executeMaybeNoContent[T: JsonDecoder](uri: Uri, method: Method): F[Option[T]] =
+    basicRequest
+      .auth.bearer(accessToken)
+      .response(asString)
+      .method(method, uri)
+      .send(backend).flatMap { response =>
+        // TODO: build out json
+        (response.body, response.code) match
+          // Should only be Status.NoContent, but there are times when 200 + Empty body are used.
+          case (Right(""), statusCode) if statusCode.isSuccess   =>
+            None.pure
+          case (Right(body), statusCode) if statusCode.isSuccess =>
+            body.fromJson[T] match
+              case Left(value)  =>
+                SpotifyError.JsonError(value, body, uri.toString).raiseError
+              case Right(value) =>
+                Some(value).pure
+          case (Left(error: String), _)                          =>
+            error.fromJson[ErrorResponse] match
+              case Left(value)  =>
+                SpotifyError.JsonError(value, error, uri.toString).raiseError
+              case Right(value) =>
+                SpotifyError.HttpError(value, uri, Method.GET).raiseError
+      }
+
+  def getAllPaging[T: JsonDecoder](request: Int => F[Paging[T]], pageSize: Int = 50): F[Vector[T]] = {
+    def go(acc: Vector[T], offset: Int): F[Vector[T]] =
       request(offset).flatMap { (paging: Paging[T]) =>
-        paging.next match {
+        paging.next match
           case None    => (acc ++ paging.items).pure
           case Some(_) => go(acc ++ paging.items, offset + pageSize)
-        }
       }
-    }
 
     go(Vector.empty, 0)
   }
 
-  def execute[T](uri: Uri, method: Method)(using decoder: JsonDecoder[T]): F[T] = {
-    val base            = basicRequest.copy[Identity, Either[String, String], Any](uri = uri, method = method)
-    val withPermissions = addPermissions(base)
-    val mappedResponse  = withPermissions.response.mapWithMetadata {
-      case (Left(error), metadata) =>
-        Left(SpotifyError.HttpError(error, metadata, uri.toString, uri.params.toString))
-      case (Right(response), _)    =>
-        response.fromJson[T].left.map(SpotifyError.JsonError(_, response))
-    }
-    val finalRequest    = withPermissions.response(mappedResponse)
-    backend.send(finalRequest).map(_.body).flatMap {
-      case Left(error) => error.raiseError
-      case Right(r)    => r.pure
-    }
-  }
+  def executeAndIgnoreResponse(uri: Uri, method: Method, body: Option[String] = None): F[Unit] =
+    body
+      .fold(basicRequest)(basicRequest.body(_))
+      .auth.bearer(accessToken)
+      .method(method, uri)
+      .response(asEither(asJsonAlways[ErrorResponse], ignore))
+      .send(backend)
+      .flatMap { response =>
+        response.body match
+          case Left(Right(error: ErrorResponse))                  =>
+            m.raiseError(SpotifyError.HttpError(error, uri, method))
+          case Left(Left(error @ DeserializationException(_, _))) =>
+            SpotifyError.DeserializationException(error).raiseError
+          case Right(_)                                           => ().pure
+      }
 
-  private def addPermissions[T](request: Request[T, Any]): Request[T, Any] = request.auth.bearer(accessToken)
+  def execute[T: JsonDecoder](uri: Uri, method: Method, body: Option[String] = None): F[T] =
+    body
+      .fold(basicRequest)(basicRequest.body(_))
+      .auth.bearer(accessToken)
+      .response(asJsonEither[ErrorResponse, T])
+      .method(method, uri)
+      .send(backend).flatMap { response =>
+        response.body match
+          case Left(HttpError(body, _))                     =>
+            SpotifyError.HttpError(body, uri, method).raiseError
+          case Left(error @ DeserializationException(_, _)) =>
+            SpotifyError.DeserializationException(error).raiseError
+          case Right(value)                                 => value.pure
+      }
 }
 
 object SpotifyAPI {

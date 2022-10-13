@@ -13,6 +13,9 @@
 - [Spotify API](https://developer.spotify.com/documentation/web-api/) Client written in Tagless Final
   with [sttp client](https://github.com/softwaremill/sttp)
     - [See Source](https://github.com/nicoburniske/muse/tree/main/src/main/scala/muse/service/spotify/SpotifyAPI.scala)
+- GraphQL Subscriptions enable Real time review updates using ZStream
+   - User current playback state
+   - Review updates (created/deleted/updated comments)
 
 ## Getting Started
 
@@ -50,7 +53,5 @@
 
 
 ## TODO
-
-- GraphQL Review Subscriptions
 - Readme Introduction
 - Extract Spotify API to own module 

@@ -6,72 +6,80 @@ import muse.service.UserSessions
 import zhttp.http.{HeaderValues, Headers, HttpData, Method, Path, Response, Scheme, URL}
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.json.*
-import zio.{Task, ZIO}
+import zio.{Task, ZIO, ZLayer}
+
+trait SpotifyAuthService {
+  def getClientCredentials: Task[ClientCredentialsFlowData]
+  def getAuthCode(code: String): Task[AuthCodeFlowData]
+  def requestNewAccessToken(refreshToken: String): Task[RefreshAuthData]
+}
 
 object SpotifyAuthService {
-  type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory & UserSessions
+  val layer = ZLayer.fromZIO(for {
+    config         <- ZIO.service[SpotifyConfig]
+    eventLoopGroup <- ZIO.service[EventLoopGroup]
+    channelFactory <- ZIO.service[ChannelFactory]
+  } yield SpotifyAuthRepo(config, eventLoopGroup, channelFactory))
 
-  val ENDPOINT = URL(
+  def getClientCredentials = ZIO.serviceWithZIO[SpotifyAuthService](_.getClientCredentials)
+
+  def getAuthCode(code: String) = ZIO.serviceWithZIO[SpotifyAuthService](_.getAuthCode(code))
+
+  def requestNewAccessToken(refreshToken: String) =
+    ZIO.serviceWithZIO[SpotifyAuthService](_.requestNewAccessToken(refreshToken))
+
+}
+
+case class SpotifyAuthRepo(config: SpotifyConfig, eventLoopGroup: EventLoopGroup, channelFactory: ChannelFactory)
+    extends SpotifyAuthService {
+
+  val TOKEN_ENDPOINT = URL(
     Path.decode("/api/token"),
     URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
   )
 
-  def getClientCredentials = for {
-    c <- ZIO.service[SpotifyConfig]
-    _ <- ZIO.debug(s"Spotify Config: $c")
-    body = Map("grant_type" -> "client_credentials")
-    response <- executePost(c, body)
-    body <- response.bodyAsString
-    authData <- deserializeBodyOrFail[ClientCredentialsFlowData](body)
-  } yield authData
+  val layer = ZLayer.succeed(eventLoopGroup) ++ ZLayer.succeed(channelFactory)
 
-  // Authorization code flow.
-  def getAuthCode(authCode: String): ZIO[AuthEnv, Throwable, AuthCodeFlowData] =
-    for {
-      response <- requestAccessToken(authCode)
-      body <- response.bodyAsString
-      authData <- deserializeBodyOrFail[AuthCodeFlowData](body)
-    } yield authData
+  override def getClientCredentials =
+    executePost(Map("grant_type" -> "client_credentials"))
+      .flatMap(_.bodyAsString)
+      .flatMap(deserializeBodyOrFail[ClientCredentialsFlowData])
+      .provideLayer(layer)
 
-  def requestNewAccessToken(refreshToken: String): ZIO[AuthEnv, Throwable, RefreshAuthData] =
-    for {
-      response <- refreshAccessToken(refreshToken)
-      body <- response.bodyAsString
-      authData <- deserializeBodyOrFail[RefreshAuthData](body)
-    } yield authData
+  override def getAuthCode(code: String) =
+    executePost(
+      Map(
+        "grant_type"   -> "authorization_code",
+        "code"         -> code,
+        "redirect_uri" -> config.redirectURI
+      ))
+      .flatMap(_.bodyAsString)
+      .flatMap(deserializeBodyOrFail[AuthCodeFlowData])
+      .provideLayer(layer)
 
-  private def deserializeBodyOrFail[T](body: String)(using decoder: JsonDecoder[T]) =
+  override def requestNewAccessToken(refreshToken: String) =
+    executePost(
+      Map(
+        "grant_type"    -> "refresh_token",
+        "refresh_token" -> refreshToken,
+        "redirect_uri"  -> config.redirectURI
+      ))
+      .flatMap(_.bodyAsString)
+      .flatMap(deserializeBodyOrFail[RefreshAuthData])
+      .provideLayer(layer)
+
+  private def deserializeBodyOrFail[T: JsonDecoder](body: String) =
     body
       .fromJson[T]
       .fold(
-        e => ZIO.fail(SpotifyError.JsonError(e, body)),
+        e => ZIO.fail(SpotifyError.JsonError(e, body, TOKEN_ENDPOINT.toString)),
         ZIO.succeed(_)
       )
 
-  def requestAccessToken(code: String): ZIO[AuthEnv, Throwable, Response] =
-    ZIO.service[SpotifyConfig].flatMap { c =>
-      val body = Map(
-        "grant_type" -> "authorization_code",
-        "code" -> code,
-        "redirect_uri" -> c.redirectURI
-      )
-      executePost(c, body)
-    }
-
-  def refreshAccessToken(refreshToken: String) =
-    ZIO.service[SpotifyConfig].flatMap { c =>
-      val body = Map(
-        "grant_type"    -> "refresh_token",
-        "refresh_token" -> refreshToken,
-        "redirect_uri"  -> c.redirectURI
-      )
-      executePost(c, body)
-    }
-
-  private def executePost(c: SpotifyConfig, body: Map[String, String]) = {
-    val headers = Headers.basicAuthorizationHeader(c.clientID, c.clientSecret) ++
+  private def executePost(body: Map[String, String]) = {
+    val headers = Headers.basicAuthorizationHeader(config.clientID, config.clientSecret) ++
       Headers.contentType(HeaderValues.applicationXWWWFormUrlencoded)
-    Client.request(ENDPOINT.encode, Method.POST, headers, HttpData.fromString(encodeFormBody(body)))
+    Client.request(TOKEN_ENDPOINT.encode, Method.POST, headers, HttpData.fromString(encodeFormBody(body)))
   }
 
   // TODO: add to ZIO-HTTP

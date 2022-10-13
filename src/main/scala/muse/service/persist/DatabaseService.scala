@@ -3,25 +3,17 @@ package muse.service.persist
 import io.getquill.*
 import io.getquill.context.ZioJdbc.*
 import muse.domain.common.EntityType
-import muse.domain.mutate.{
-  CreateComment,
-  CreateReview,
-  DeleteComment,
-  DeleteReview,
-  ShareReview,
-  UpdateComment,
-  UpdateReview
-}
+import muse.domain.mutate.{CreateComment, CreateReview, DeleteComment, DeleteReview, ShareReview, UpdateComment, UpdateReview}
 import muse.domain.table.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
 import zio.ZLayer.*
-import zio.{IO, TaskLayer, ZIO, ZLayer}
+import zio.{IO, Schedule, TaskLayer, ZIO, ZLayer, durationInt}
 
 import java.sql.{SQLException, Timestamp, Types}
 import java.time.Instant
 import java.util.UUID
 import javax.sql.DataSource
 
-trait DatabaseOps {
+trait DatabaseService {
 
   /**
    * Create!
@@ -43,12 +35,13 @@ trait DatabaseOps {
   def getMultiReviewComments(reviewIds: List[UUID]): IO[SQLException, List[ReviewComment]]
   def getReviews(reviewIds: List[UUID]): IO[SQLException, List[Review]]
   def getReview(reviewId: UUID): IO[SQLException, Option[Review]]
+  def getUsersWithAccess(reviewId: UUID): IO[SQLException, List[ReviewAccess]]
 
   /**
    * Update!
    */
-  def updateReview(review: UpdateReview): IO[SQLException, Boolean]
-  def updateComment(comment: UpdateComment): IO[SQLException, Boolean]
+  def updateReview(review: UpdateReview): IO[SQLException, Review]
+  def updateComment(comment: UpdateComment): IO[SQLException, ReviewComment]
   def shareReview(share: ShareReview): IO[SQLException, Boolean]
 
   /**
@@ -67,68 +60,100 @@ trait DatabaseOps {
   def canModifyReview(userId: String, reviewId: UUID): IO[SQLException, Boolean]
   def canModifyComment(userId: String, reviewId: UUID, commentId: Int): IO[SQLException, Boolean]
 
-  // TODO: sharing methods.
 }
 
-object DatabaseOps {
-  val live: ZLayer[DataSource, Nothing, DatabaseOps] = ZLayer(for {
-    ds <- ZIO.service[DataSource]
-  } yield DataServiceLive(ds))
+object DatabaseService {
+  val layer = ZLayer.fromFunction(DatabaseServiceLive.apply(_))
 
-  def createUser(userId: String) = ZIO.serviceWithZIO[DatabaseOps](_.createUser(userId))
+  def createUser(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.createUser(userId))
 
   def createReview(userId: String, review: CreateReview) =
-    ZIO.serviceWithZIO[DatabaseOps](_.createReview(userId, review))
+    ZIO.serviceWithZIO[DatabaseService](_.createReview(userId, review))
 
   def createReviewComment(userId: String, c: CreateComment) =
-    ZIO.serviceWithZIO[DatabaseOps](_.createReviewComment(userId, c))
+    ZIO.serviceWithZIO[DatabaseService](_.createReviewComment(userId, c))
 
-  def getUserById(userId: String) = ZIO.serviceWithZIO[DatabaseOps](_.getUserById(userId))
+  def getUserById(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getUserById(userId))
 
-  def getReview(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseOps](_.getReview(reviewId))
+  def getReview(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReview(reviewId))
 
-  def getUsers = ZIO.serviceWithZIO[DatabaseOps](_.getUsers)
+  def getUsers = ZIO.serviceWithZIO[DatabaseService](_.getUsers)
 
-  def getUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseOps](_.getUserReviews(userId))
+  def getUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getUserReviews(userId))
 
-  def getAllUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseOps](_.getAllUserReviews(userId))
+  def getAllUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getAllUserReviews(userId))
 
-  def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseOps](_.getReviewComments(reviewId))
+  def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewComments(reviewId))
 
   def getAllReviewComments(reviewIds: List[UUID]) =
-    ZIO.serviceWithZIO[DatabaseOps](_.getMultiReviewComments(reviewIds))
+    ZIO.serviceWithZIO[DatabaseService](_.getMultiReviewComments(reviewIds))
+
+  def getUsersWithAccess(reviewId: UUID) =
+    ZIO.serviceWithZIO[DatabaseService](_.getUsersWithAccess(reviewId))
 
   def updateReview(review: UpdateReview) =
-    ZIO.serviceWithZIO[DatabaseOps](_.updateReview(review))
+    ZIO.serviceWithZIO[DatabaseService](_.updateReview(review))
 
   def updateComment(comment: UpdateComment) =
-    ZIO.serviceWithZIO[DatabaseOps](_.updateComment(comment))
+    ZIO.serviceWithZIO[DatabaseService](_.updateComment(comment))
 
   def shareReview(share: ShareReview) =
-    ZIO.serviceWithZIO[DatabaseOps](_.shareReview(share))
+    ZIO.serviceWithZIO[DatabaseService](_.shareReview(share))
 
   def deleteReview(d: DeleteReview) =
-    ZIO.serviceWithZIO[DatabaseOps](_.deleteReview(d))
+    ZIO.serviceWithZIO[DatabaseService](_.deleteReview(d))
 
   def deleteComment(d: DeleteComment) =
-    ZIO.serviceWithZIO[DatabaseOps](_.deleteComment(d))
+    ZIO.serviceWithZIO[DatabaseService](_.deleteComment(d))
 
   def canViewReview(userId: String, reviewId: UUID) =
-    ZIO.serviceWithZIO[DatabaseOps](_.canViewReview(userId, reviewId))
+    ZIO.serviceWithZIO[DatabaseService](_.canViewReview(userId, reviewId))
 
   def canModifyReview(userId: String, reviewId: UUID) =
-    ZIO.serviceWithZIO[DatabaseOps](_.canModifyReview(userId, reviewId))
+    ZIO.serviceWithZIO[DatabaseService](_.canModifyReview(userId, reviewId))
 
   def canModifyComment(userId: String, reviewId: UUID, commentId: Int) =
-    ZIO.serviceWithZIO[DatabaseOps](_.canModifyComment(userId, reviewId, commentId))
+    ZIO.serviceWithZIO[DatabaseService](_.canModifyComment(userId, reviewId, commentId))
 
   def canMakeComment(userId: String, reviewId: UUID) =
-    ZIO.serviceWithZIO[DatabaseOps](_.canMakeComment(userId, reviewId))
+    ZIO.serviceWithZIO[DatabaseService](_.canMakeComment(userId, reviewId))
+
+  /**
+   * If username already exists, update existing row's auth information. Otherwise create user.
+   *
+   * @param userId
+   *   current user request
+   * @return
+   *   true if new User was created, false if current user was updated.
+   */
+  def createOrUpdateUser(userId: String) =
+    getUserById(userId).map(_.isDefined).flatMap {
+      case true  => ZIO.succeed(false)
+      case false => createUser(userId).as(true)
+    }
+
+  /**
+   * TODO: FIX BELOW?
+   */
+  enum ReviewOptions:
+    case UserOwnedReviewsPublic, UserOwnedReviewsPrivate, UserOwnedReviewsAll, UserAccessReviews
+
+  def userReviewsOptions(userId: String, options: ReviewOptions) = options match
+    case ReviewOptions.UserOwnedReviewsPublic  =>
+      DatabaseService.getUserReviews(userId).map(_.filter(_.isPublic))
+    case ReviewOptions.UserOwnedReviewsPrivate =>
+      DatabaseService.getUserReviews(userId).map(_.filterNot(_.isPublic))
+    case ReviewOptions.UserOwnedReviewsAll     =>
+      DatabaseService.getUserReviews(userId)
+    case ReviewOptions.UserAccessReviews       =>
+      DatabaseService.getAllUserReviews(userId)
+
 }
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
-  // TODO: move this somewhere else
-  val dataSourceLayer: TaskLayer[DataSource] = DataSourceLayer.fromPrefix("database")
+  // Exponential backoff retry strategy for connecting to Postgres DB.
+  val schedule        = Schedule.exponential(1.second) && Schedule.recurs(10)
+  val dataSourceLayer = DataSourceLayer.fromPrefix("database").retry(schedule)
 
   given instantDecoder: Decoder[Instant] = decoder((index, row, session) => row.getTimestamp(index).toInstant)
 
@@ -148,7 +173,7 @@ object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, Low
     encoder(Types.INTEGER, (index, value, row) => row.setInt(index, value.ordinal))
 }
 
-final case class DataServiceLive(d: DataSource) extends DatabaseOps {
+final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   import QuillContext.{*, given}
 
@@ -204,6 +229,10 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
     reviews.filter(c => liftQuery(reviewIds.toSet).contains(c.id))
   }.provideLayer(layer)
 
+  override def getUsersWithAccess(reviewId: UUID) = run {
+    reviewAccess.filter(_.reviewId == lift(reviewId))
+  }.provideLayer(layer)
+
   /**
    * Create!
    */
@@ -243,17 +272,7 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
       .returningGenerated(c => (c.id, c.createdAt, c.updatedAt))
   }.provide(layer).map {
     case (id, created, updated) =>
-      ReviewComment(
-        id,
-        c.reviewId,
-        created,
-        updated,
-        c.parentCommentId,
-        userId,
-        c.comment,
-        c.rating,
-        c.entityType,
-        c.entityId)
+      ReviewComment(id, c.reviewId, created, updated, c.parentCommentId, userId, c.comment, c.rating, c.entityType, c.entityId)
   }
 
   /**
@@ -265,20 +284,22 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
       .update(
         _.reviewName -> lift(r.name),
         _.isPublic   -> lift(r.isPublic)
-      )
+      ).returning(r => r)
   }.provide(layer)
-    .map(_ > 0)
 
-  override def updateComment(c: UpdateComment) = run {
-    comments
-      .filter(_.id == lift(c.commentId))
-      .filter(_.reviewId == lift(c.reviewId))
-      .update(
-        _.comment -> lift(c.comment),
-        _.rating  -> lift(c.rating)
-      )
+  //TODO: need to update timestamps.
+  override def updateComment(c: UpdateComment) = ZIO.succeed(Instant.now()).flatMap{ now =>
+    run {
+      comments
+        .filter(_.id == lift(c.commentId))
+        .filter(_.reviewId == lift(c.reviewId))
+        .update(
+          _.comment -> lift(c.comment),
+          _.rating  -> lift(c.rating),
+          _.updatedAt -> lift(now)
+        ).returning(r => r)
+    }
   }.provide(layer)
-    .map(_ > 0)
 
   override def shareReview(share: ShareReview) = run {
     reviewAccess.insert(
@@ -335,13 +356,13 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
     run(isReviewPublic(reviewId))
       .map(_.headOption)
       .flatMap {
-        case Some(true) => ZIO.succeed(true)
+        case Some(true)  => ZIO.succeed(true)
         case Some(false) =>
           run {
             allReviewUsersWithViewAccess(lift(reviewId))
               .filter(_ == lift(userId))
           }.map(_.nonEmpty)
-        case _ =>
+        case _           =>
           // TODO include logic for NotFoundException?
           throw new RuntimeException("")
       }
@@ -356,8 +377,8 @@ final case class DataServiceLive(d: DataSource) extends DatabaseOps {
       .filter(_.id == lift(commentId))
       .filter(_.reviewId == lift(reviewId))
       .map(_.commenter)
-      .contains(lift(userId))
   }.provide(layer)
+    .map(_.contains(userId))
 
   override def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean] = run {
     allUsersWithWriteAccess(lift(reviewId)).filter(_ == lift(userId))

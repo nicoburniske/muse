@@ -2,7 +2,9 @@ package muse.service
 
 import muse.domain.session.UserSession
 import muse.domain.spotify.AuthCodeFlowData
+import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.utils.Utils
+import sttp.client3.SttpBackend
 import zio.*
 import zio.json.*
 import zio.stream.{ZPipeline, ZStream}
@@ -16,6 +18,7 @@ import java.time.temporal.ChronoUnit
 trait UserSessions {
   def addUserSession(userId: String, authData: AuthCodeFlowData): UIO[String]
   def getUserSession(sessionId: String): UIO[Option[UserSession]]
+  def getSpotifyService(sessionId: String): UIO[Option[(UserSession, SpotifyService)]]
   def deleteUserSession(sessionId: String): UIO[Unit]
   def deleteUserSessionByUserId(userId: String): UIO[Unit]
   def updateUserSession(sessionId: String)(f: UserSession => UserSession): UIO[Option[UserSession]]
@@ -32,19 +35,30 @@ trait UserSessions {
 }
 
 object UserSessions {
-  val live = ZLayer.scoped {
-    ZIO.acquireRelease(
-      Ref
-        .Synchronized
-        .make(Map.empty)
-        .map(UserSessionsLive.apply(_))
-        // Load sessions from file. When scope closes, save the sessions to file.
-        .tap(_.loadSessions))(_.saveSessions
-      .catchAll(e => ZIO.logErrorCause(s"Failed to save sessions ${e.toString}", Cause.fail(e))))
+  val layer = ZLayer.scoped {
+    for {
+      sttp <- ZIO.service[SttpBackend[Task, Any]]
+      auth <- ZIO.service[SpotifyAuthService]
+      res  <- ZIO.acquireRelease(
+                Ref
+                  .Synchronized
+                  .make(Map.empty)
+                  .map(UserSessionsLive.apply(_, auth, sttp))
+                  // Load sessions from file. When scope closes, save the sessions to file.
+                  .tap(_.loadSessions))(cleanup)
+    } yield res
   }
+
+  def cleanup(sessions: UserSessions) =
+    sessions
+      .saveSessions
+      .catchAll(e => ZIO.logErrorCause(s"Failed to save sessions ${e.toString}", Cause.fail(e)))
 
   def addUserSession(userId: String, authData: AuthCodeFlowData) =
     ZIO.serviceWithZIO[UserSessions](_.addUserSession(userId, authData))
+
+  def getSpotifyService(sessionId: String) =
+    ZIO.serviceWithZIO[UserSessions](_.getSpotifyService(sessionId))
 
   def getUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
 
@@ -57,11 +71,13 @@ object UserSessions {
     ZIO.serviceWithZIO[UserSessions](_.deleteUserSessionByUserId(userId))
 }
 
-// TODO: should this ref be synchronized?
-final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSession]])
+final case class UserSessionsLive(
+    sessionsR: Ref.Synchronized[Map[String, UserSession]],
+    spotifyAuth: SpotifyAuthService,
+    sttp: SttpBackend[Task, Any])
     extends UserSessions {
+  val layer = ZLayer.succeed(sttp) ++ ZLayer.succeed(spotifyAuth)
 
-  // TODO: confirm this works for multiple sessions.
   override def addUserSession(userId: String, authData: AuthCodeFlowData) = for {
     expiration <- Utils.getExpirationInstant(authData.expiresIn)
     guid       <- Random.nextUUID
@@ -70,20 +86,20 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
     _          <- sessionsR.update(_ + (newSession -> session))
   } yield newSession
 
-  override def getUserSession(sessionId: String) = sessionsR.get.map(_.get(sessionId))
+  override def getUserSession(sessionId: String) = sessionsR.get.map { sessions => sessions.get(sessionId) }
 
   override def deleteUserSession(sessionId: String) = sessionsR.update(_.removed(sessionId))
 
   override def deleteUserSessionByUserId(userId: String) =
     sessionsR.update(_.filterNot(_._2.id == userId))
 
-  override def updateUserSession(sessionId: String)(f: UserSession => UserSession) = sessionsR
-    .updateAndGet { sessions =>
-      sessions.get(sessionId).fold(sessions) { current => sessions.updated(sessionId, f(current)) }
-    }
-    .map(_.get(sessionId))
+  override def updateUserSession(sessionId: String)(f: UserSession => UserSession) =
+    sessionsR
+      .updateAndGet { sessions => sessions.get(sessionId).fold(sessions) { current => sessions.updated(sessionId, f(current)) } }
+      .map(_.get(sessionId))
 
-  val SESSIONS_FILE = "src/main/resources/userSessions.json"
+  // TODO: use config.
+  val SESSIONS_FILE = "src/main/resources/UserSessions.json"
 
   def loadSessions: ZIO[Scope, Throwable, List[UserSession]] = for {
     partitioned                 <- Utils
@@ -99,10 +115,10 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
     result     <- sessionsR.updateAndGetZIO { sessionsInMem =>
                     sessionStream.runFold(sessionsInMem)((sessions, s: UserSession) =>
                       sessions
-                        .get(s.sessionCookie)
+                        .get(s.sessionId)
                         // If is already a session loaded in memory for a given session cookie
                         // ignore the session from file.
-                        .fold(sessions + (s.sessionCookie -> s))(_ => sessions))
+                        .fold(sessions + (s.sessionId -> s))(_ => sessions))
                   }
     _          <- ZIO.logInfo(s"Successfully loaded ${result.size} session(s).")
   } yield result.values.toList
@@ -114,8 +130,31 @@ final case class UserSessionsLive(sessionsR: Ref.Synchronized[Map[String, UserSe
                   .map(_.toJson)
                   .map(s => s + '\n')
     count    <- stream.runCount
-    _        <- Utils.writeToFile(SESSIONS_FILE, stream)
-    _        <- ZIO.logInfo(s"Successfully saved $count sessions.")
+    _        <- Utils
+                  .writeToFile(SESSIONS_FILE, stream)
+                  .fold(
+                    e => ZIO.logErrorCause(s"Failed to save sessions $e", Cause.fail(e)),
+                    _ => ZIO.logInfo(s"Successfully saved $count sessions."))
   } yield ()
 
+  override def getSpotifyService(sessionId: String) = (for {
+    maybeUser      <- getUserSession(sessionId)
+    session        <- ZIO.fromOption(maybeUser).orElseFail(new Exception(s"Session $sessionId not found."))
+    updatedSession <-
+      if (session.expiration.isAfter(Instant.now()))
+        ZIO.succeed(session)
+      else
+        for {
+          authData      <- SpotifyAuthService
+                             // TODO: Add retry for this.
+                             .requestNewAccessToken(session.refreshToken)
+          newExpiration <- Utils.getExpirationInstant(authData.expiresIn)
+          newSession    <- updateUserSession(session.sessionId) {
+                             _.copy(accessToken = authData.accessToken, expiration = newExpiration)
+                           }
+          // These 'get' calls should be a-ok.
+          _             <- ZIO.logInfo(s"Session Updated ${newSession.get.conciseString}")
+        } yield newSession.get
+    spotify        <- SpotifyService.live(updatedSession.accessToken)
+  } yield session -> spotify).option.provideLayer(layer)
 }

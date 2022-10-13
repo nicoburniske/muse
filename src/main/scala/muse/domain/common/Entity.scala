@@ -1,3 +1,3 @@
 package muse.domain.common
 
-trait Entity(id: String, entityType: EntityType) {}
+trait Entity(id: String, entityType: EntityType)

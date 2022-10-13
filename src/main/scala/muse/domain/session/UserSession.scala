@@ -1,12 +1,12 @@
 package muse.domain.session
 
 import muse.domain.session.UserSession.instantString
+import zio.json.{DeriveJsonCodec, JsonCodec}
 
-import zio.json.{JsonCodec, DeriveJsonCodec}
 import java.time.{Instant, ZoneId}
 
 /**
- * @param sessionCookie
+ * @param sessionId
  *   the user's session cookie
  * @param id
  *   the user's spotify id
@@ -18,15 +18,15 @@ import java.time.{Instant, ZoneId}
  *   the spotify refresh token
  */
 final case class UserSession(
-    sessionCookie: String,
+    sessionId: String,
     id: String,
     expiration: Instant,
     accessToken: String,
     refreshToken: String
 ) {
   val conciseString =
-    s"UserID: $id, Session Cookie: ${sessionCookie.take(10)}, Expiration: ${instantString(
-      expiration)}, Access: ${accessToken.take(10)}, Refresh: ${refreshToken.take(10)}"
+    s"UserID: $id, Session Cookie: ${sessionId.take(10)}, Expiration: ${instantString(expiration)}, Access: ${accessToken
+      .take(10)}, Refresh: ${refreshToken.take(10)}"
 }
 
 object UserSession {

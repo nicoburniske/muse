@@ -1,23 +1,28 @@
 package muse.server
 
-import muse.config.SpotifyConfig
+import muse.config.{ServerConfig, SpotifyConfig}
 import muse.domain.session.UserSession
 import muse.domain.spotify.AuthCodeFlowData
 import muse.domain.table.AppUser
-import muse.server.MuseMiddleware.Auth
-import muse.service.spotify.SpotifyAuthService
-import muse.service.{RequestProcessor, UserSessions}
+import muse.service.persist.DatabaseService
+import muse.service.spotify.{SpotifyAuthService, SpotifyService}
+import muse.service.{RequestSession, UserSessions}
 import sttp.client3.SttpBackend
 import zhttp.http.*
 import zhttp.http.Middleware.csrfGenerate
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.json.*
-import zio.{Cause, Layer, Random, Ref, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
 
 object Auth {
-  val scopes = List().mkString(" ")
-
-  type AuthEnv = SpotifyConfig & EventLoopGroup & ChannelFactory & UserSessions
+  val scopes = List(
+    "user-library-read",
+    "playlist-read-private",
+    "playlist-read-collaborative",
+    "user-modify-playback-state",
+    "user-read-playback-state",
+    "user-read-currently-playing"
+  ).mkString(" ")
 
   val loginEndpoints = Http
     .collectZIO[Request] {
@@ -30,37 +35,37 @@ object Auth {
           .get("code")
           .flatMap(_.headOption)
           .fold {
-            ZIO.succeed(
-              Response(
-                status = Status.BadRequest,
-                data = HttpData.fromString("Missing 'code' query parameter")))
+            ZIO.succeed(Response(status = Status.BadRequest, data = HttpData.fromString("Missing 'code' query parameter")))
           } { code =>
             for {
-              authData <- SpotifyAuthService.getAuthCode(code)
-              spotifyUser <- RequestProcessor.handleUserLogin(authData)
+              authData    <- SpotifyAuthService.getAuthCode(code)
+              spotifyUser <- handleUserLogin(authData)
+              frontendURL <- ZIO.serviceWith[ServerConfig](_.frontendUrl)
               session     <- UserSessions.addUserSession(spotifyUser.id, authData)
               _           <- ZIO.logInfo(session)
             } yield {
-              // TODO: yield redirect to actual site
               // TODO: add domain to cookie.
-              val cookie = Cookie(COOKIE_KEY, session, isSecure = true, isHttpOnly = true)
-              Response.redirect("http://localhost:3000").addCookie(cookie)
+              val cookie = Cookie(
+                COOKIE_KEY,
+                session,
+                isSecure = true,
+                // NOTE: This is so that websockets can be used.
+                isHttpOnly = false)
+              Response.redirect(frontendURL).addCookie(cookie)
             }
           }
     }
-    .tapErrorZIO { case e: Throwable => ZIO.logErrorCause("Server Error", Cause.fail(e)) }
-    .catchAll(error => Http.error(HttpError.InternalServerError(cause = Some(error))))
 
   // @@ csrfGenerate() // TODO: get this working?
-  val logoutEndpoint = MuseMiddleware.UserSessionAuth(Http.collectZIO[Request] {
-    case Method.POST -> !! / "logout" =>
-      for {
-        session <- MuseMiddleware.Auth.currentUser[UserSession]
-        _       <- UserSessions.deleteUserSession(session.sessionCookie)
-        _       <- ZIO.logInfo(
-                     s"Successfully logged out user ${session.id} with cookie: ${session.sessionCookie.take(10)}")
-      } yield Response.ok
-  })
+  val logoutEndpoint = Http
+    .collectZIO[Request] {
+      case Method.POST -> !! / "logout" =>
+        for {
+          session <- RequestSession.get[UserSession]
+          _       <- UserSessions.deleteUserSession(session.sessionId)
+          _       <- ZIO.logInfo(s"Successfully logged out user ${session.id} with cookie: ${session.sessionId.take(10)}")
+        } yield Response.ok
+    }
 
   val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {
     c     <- ZIO.service[SpotifyConfig]
@@ -76,4 +81,22 @@ object Auth {
       "state"         -> List(state.toString.take(15))
     )
   )
+
+  /**
+   * Handles a user login. TODO: add retry schedule.
+   *
+   * @param auth
+   *   current user auth data from spotify
+   * @return
+   *   true if new User was created, false if current user was updated.
+   */
+  def handleUserLogin(auth: AuthCodeFlowData) =
+    for {
+      spotify  <- SpotifyService.live(auth.accessToken)
+      userInfo <- spotify.getCurrentUserProfile.retry(Schedule.recurs(2))
+      id        = userInfo.id
+      res      <- DatabaseService.createOrUpdateUser(id)
+      resText   = if (res) "Created" else "Updated"
+      _        <- ZIO.logInfo(s"Successfully logged in $id. $resText account")
+    } yield userInfo
 }

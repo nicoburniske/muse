@@ -2,6 +2,7 @@ package muse.server.graphql.subgraph
 
 import muse.domain.spotify
 import muse.server.graphql.resolver.GetSpotifyProfile
+import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
@@ -11,8 +12,8 @@ final case class SpotifyProfile(
     href: String,
     uri: String,
     externalUrls: Map[String, String],
-    images: ZQuery[SpotifyService, Throwable, List[String]],
-    numFollowers: ZQuery[SpotifyService, Throwable, Int])
+    images: ZQuery[RequestSession[SpotifyService], Throwable, List[String]],
+    numFollowers: ZQuery[RequestSession[SpotifyService], Throwable, Int])
 
 object SpotifyProfile {
   def fromSpotify(u: spotify.User): SpotifyProfile = {

@@ -8,27 +8,17 @@ import caliban.wrappers.ApolloTracing.apolloTracing
 import caliban.wrappers.Wrappers.printErrors
 import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
-import muse.domain.error.{Forbidden, InvalidEntity, InvalidUser, Unauthorized}
+import muse.domain.error.{Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
+import muse.domain.event.ReviewUpdate
 import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify
 import muse.domain.spotify.AlbumType
 import muse.domain.table.ReviewComment
-import muse.server.MuseMiddleware.Auth
-import muse.server.graphql.subgraph.{
-  Album,
-  Artist,
-  Comment,
-  Playlist,
-  PlaylistTrack,
-  Review,
-  ReviewEntity,
-  SearchResult,
-  Track,
-  User
-}
-import muse.service.persist.DatabaseOps
-import muse.service.spotify.SpotifyService
+import muse.server.graphql.subgraph.{Album, Artist, Comment, PlaybackState, Playlist, PlaylistTrack, Review, ReviewEntity, SearchResult, Track, User}
+import muse.service.persist.DatabaseService
+import muse.service.spotify.{SpotifyError, SpotifyService}
+import muse.service.{RequestSession, UserSessions}
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.*
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
@@ -39,90 +29,70 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  given userSchema: Schema[DatabaseOps & SpotifyService, User] = Schema.gen
+  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & Hub[ReviewUpdate] & Scope
 
-  given reviewSchema: Schema[DatabaseOps & SpotifyService, Review] = Schema.gen
+  given userSchema: Schema[Env, User] = Schema.gen
 
-  given commentsSchema: Schema[DatabaseOps & SpotifyService, Comment] = Schema.gen
+  given reviewSchema: Schema[Env, Review] = Schema.gen
 
-  given entitySchema: Schema[DatabaseOps & SpotifyService, ReviewEntity] = Schema.gen
+  given commentsSchema: Schema[Env, Comment] = Schema.gen
 
-  given playlistSchema: Schema[DatabaseOps & SpotifyService, Playlist] = Schema.gen
+  given entitySchema: Schema[Env, ReviewEntity] = Schema.gen
 
-  given playlistTrackSchema: Schema[DatabaseOps & SpotifyService, PlaylistTrack] = Schema.gen
+  given playlistSchema: Schema[Env, Playlist] = Schema.gen
 
-  given albumSchema: Schema[SpotifyService, Album] = Schema.gen
+  given playlistTrackSchema: Schema[Env, PlaylistTrack] = Schema.gen
 
-  given artistSchema: Schema[SpotifyService, Artist] = Schema.gen
+  given albumSchema: Schema[Env, Album] = Schema.gen
 
-  given trackSchema: Schema[SpotifyService, Track] = Schema.gen
+  given artistSchema: Schema[Env, Artist] = Schema.gen
 
-  given createReview: Schema[Auth[UserSession] & DatabaseOps, CreateReview] = Schema.gen
+  given trackSchema: Schema[Env, Track] = Schema.gen
 
-  given createComment: Schema[Auth[UserSession] & DatabaseOps, CreateComment] = Schema.gen
+  // TODO: give this another shot?
+//  given errorSchema[A](using Schema[Any, A]): Schema[Any, IO[Throwable | MuseError, A]] =
+//    Schema.customErrorEffectSchema((e: Throwable | MuseError) =>
+//      e.match
+//        case museError: MuseError => ExecutionError(museError.message, innerThrowable = Some(MuseThrowable(museError)))
+//        case throwable: Throwable => ExecutionError(throwable.getMessage, innerThrowable = Some(throwable))
+//    )
 
-  given updateReview: Schema[Auth[UserSession] & DatabaseOps, UpdateReview] = Schema.gen
-
-  given updateComment: Schema[Auth[UserSession] & DatabaseOps, UpdateComment] = Schema.gen
-
-  given searchSchema: Schema[DatabaseOps & SpotifyService, SearchResult] = Schema.gen
-
-  given userArgs: Schema[Nothing, UserArgs] = Schema.gen
-
-  type Env = Auth[UserSession] & DatabaseOps & SpotifyService
-
-  val api =
-    GraphQL.graphQL[Env, Queries, Mutations, Unit](
-      RootResolver(Queries.live, Mutations.live)) @@ printErrors @@ apolloTracing
+  val api = GraphQL.graphQL[Env, Queries, Mutations, Subscriptions](
+    RootResolver(Queries.live, Mutations.live, Subscriptions.live)) @@ printErrors @@ apolloTracing
 
   val interpreter = api.interpreter.map(errorHandler(_))
 
   // TODO: Consider handling Spotify 404 error.
-  // TODO: Incorporate Custom Error Super type.
   private def errorHandler[R](
       interpreter: GraphQLInterpreter[R, CalibanError]
   ): GraphQLInterpreter[R, CalibanError] = interpreter.mapError {
-    case err @ ExecutionError(_, _, _, Some(u: Unauthorized), _)  =>
+    case err @ ExecutionError(_, _, _, Some(m: MuseError), _)    =>
       err.copy(extensions = Some(
         ObjectValue(
           List(
-            "errorCode" -> StringValue("UNAUTHORIZED"),
-            "message"   -> StringValue(u.getMessage)
+            "errorCode" -> StringValue(m.code),
+            "message"   -> StringValue(m.message)
           ))))
-    case err @ ExecutionError(_, _, _, Some(n: Forbidden), _)     =>
+    case err @ ExecutionError(_, _, _, Some(e: SpotifyError), _) =>
       err.copy(extensions = Some(
         ObjectValue(
           List(
-            "errorCode" -> StringValue("FORBIDDEN"),
-            "message"   -> StringValue(n.getMessage)
+            "errorCode" -> StringValue("SERVER_ERROR_SPOTIFY"),
+            "message"   -> StringValue(e.getMessage)
           ))))
-    case err @ ExecutionError(_, _, _, Some(n: InvalidEntity), _) =>
-      err.copy(extensions = Some(
-        ObjectValue(
-          List(
-            "errorCode" -> StringValue("INVALID_ENTITY"),
-            "message"   -> StringValue(n.getMessage)
-          ))))
-    case err @ ExecutionError(_, _, _, Some(n: InvalidUser), _)   =>
-      err.copy(extensions = Some(
-        ObjectValue(
-          List(
-            "errorCode" -> StringValue("INVALID_USER"),
-            "message"   -> StringValue(n.getMessage)
-          ))))
-    case err @ ExecutionError(_, _, _, Some(e: Throwable), _)     =>
+    case err @ ExecutionError(_, _, _, Some(e: Throwable), _)    =>
       err.copy(extensions = Some(
         ObjectValue(
           List(
             "errorCode" -> StringValue("SERVER_ERROR"),
-            "errorType" -> StringValue(e.getClass.toString),
+            "errorType" -> StringValue(e.getClass.getSimpleName),
             "message"   -> StringValue(e.getMessage)
           ))))
-    case err: ExecutionError                                      =>
+    case err: ExecutionError                                     =>
       err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("EXECUTION_ERROR")))))
-    case err: ValidationError                                     =>
+    case err: ValidationError                                    =>
       err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("VALIDATION_ERROR")))))
-    case err: ParsingError                                        =>
+    case err: ParsingError                                       =>
       err.copy(extensions = Some(ObjectValue(List("errorCode" -> StringValue("PARSING_ERROR")))))
   }
 }

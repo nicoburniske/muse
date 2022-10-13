@@ -1,5 +1,4 @@
-CREATE
-EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE SCHEMA muse;
 
@@ -29,7 +28,7 @@ CREATE TABLE muse.review_access
 (
     review_id     UUID        NOT NULL,
     user_id       VARCHAR(30) NOT NULL,
-    review_access INT         NOT NULL,
+    access_level  INT         NOT NULL,
     CONSTRAINT reviewID
         FOREIGN KEY (review_id) REFERENCES muse.review (id) ON DELETE CASCADE,
     CONSTRAINT userID
@@ -43,7 +42,8 @@ CREATE TABLE muse.review_comment
     id                INT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     created_at        TIMESTAMP DEFAULT current_timestamp,
     updated_at        TIMESTAMP DEFAULT current_timestamp,
-    parent_comment_id INT         NOT NULL,
+    -- If null then root comment
+    parent_comment_id INT         NULL,
     review_id         UUID        NOT NULL,
     commenter         VARCHAR(30) NOT NULL,
     comment           VARCHAR(1000),
@@ -64,6 +64,6 @@ CREATE TABLE muse.review_comment
         FOREIGN KEY (parent_comment_id)
             REFERENCES muse.review_comment (id),
     CONSTRAINT checkContent check (
-        comment IS NOT NULL OR rating IS NOT NULL
+            comment IS NOT NULL OR rating IS NOT NULL
         )
 );

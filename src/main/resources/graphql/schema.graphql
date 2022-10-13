@@ -1,10 +1,15 @@
 schema {
   query: Queries
   mutation: Mutations
+  subscription: Subscriptions
 }
 
 "An instantaneous point on the time-line represented by a standard date time string"
 scalar Instant
+
+scalar Long
+
+union ReviewUpdate = CreatedComment | DeletedComment | UpdatedComment
 
 enum AccessLevel {
   Collaborator
@@ -16,6 +21,11 @@ enum EntityType {
   Artist
   Playlist
   Track
+}
+
+input ContextInput {
+  entityType: EntityType!
+  entityId: String!
 }
 
 input CreateCommentInput {
@@ -43,15 +53,39 @@ input DeleteReviewInput {
   id: ID!
 }
 
+input EntityOffsetInput {
+  outer: ContextInput!
+  inner: ContextInput!
+}
+
+input GetPlaylistTracksInput {
+  playlistId: String!
+  numTracks: Int!
+}
+
 input PaginationInput {
   first: Int!
   from: Int! = 0
+}
+
+input PositionOffsetInput {
+  context: ContextInput!
+  position: Int!
 }
 
 input ShareReviewInput {
   reviewId: ID!
   userId: String!
   access: AccessLevel!
+}
+
+input StartPlaybackInput {
+  "If device id is specified, playback will be transferred to that device. Otherwise, playback will be executed on user's active device."
+  deviceId: String
+  uris: [String!]
+  positionOffset: PositionOffsetInput
+  entityOffset: EntityOffsetInput
+  positionMs: Int
 }
 
 input UpdateCommentInput {
@@ -69,6 +103,7 @@ input UpdateReviewInput {
 
 interface ReviewEntity {
   name: String!
+  uri: String!
   id: String!
   externalUrls: [KVStringString!]!
 }
@@ -84,6 +119,7 @@ type Album implements ReviewEntity {
   name: String!
   popularity: Int
   releaseDate: String!
+  uri: String!
   artists: [Artist!]
   tracks: [Track!]
 }
@@ -96,9 +132,15 @@ type Artist implements ReviewEntity {
   id: String!
   images: [String!]!
   name: String!
+  uri: String!
   popularity: Int!
   albums: [Album!]
   topTracks: [Track!]
+}
+
+type Collaborator {
+  user: User!
+  accessLevel: AccessLevel!
 }
 
 type Comment {
@@ -116,6 +158,15 @@ type Comment {
   entity: ReviewEntity
 }
 
+type CreatedComment {
+  comment: Comment!
+}
+
+type DeletedComment {
+  reviewId: ID!
+  commentId: Int!
+}
+
 "A key-value pair of String and String"
 type KVStringString {
   "Key"
@@ -127,11 +178,43 @@ type KVStringString {
 type Mutations {
   createReview(input: CreateReviewInput!): Review
   createComment(input: CreateCommentInput!): Comment
-  updateReview(input: UpdateReviewInput!): Boolean
-  updateComment(input: UpdateCommentInput!): Boolean
+  updateReview(input: UpdateReviewInput!): Review
+  updateComment(input: UpdateCommentInput!): Comment
   deleteReview(input: DeleteReviewInput!): Boolean
   deleteComment(input: DeleteCommentInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
+  startPlayback(input: StartPlaybackInput!): Boolean
+  saveTracks(input: [String!]!): Boolean
+}
+
+type PlaybackContext {
+  uri: String!
+  metadata: [KVStringString!]
+  externalUrls: [KVStringString!]!
+  href: String!
+  type: String!
+}
+
+type PlaybackDevice {
+  id: String!
+  isActive: Boolean!
+  isPrivateSession: Boolean!
+  isRestricted: Boolean!
+  name: String!
+  type: String!
+  volumePercent: Int!
+}
+
+type PlaybackState {
+  device: PlaybackDevice!
+  shuffleState: Boolean!
+  repeatState: String!
+  timestamp: Long!
+  context: PlaybackContext!
+  progressMs: Long!
+  item: Track
+  currentlyPlayingType: String!
+  isPlaying: Boolean!
 }
 
 type Playlist implements ReviewEntity {
@@ -141,6 +224,7 @@ type Playlist implements ReviewEntity {
   id: String!
   images: [String!]!
   name: String!
+  uri: String!
   owner: User!
   primaryColor: String
   public: Boolean
@@ -158,6 +242,7 @@ type Queries {
   user(id: String): User
   review(id: ID!): Review
   search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, from: 0}): SearchResult
+  availableDevices: [PlaybackDevice!]
 }
 
 type Review {
@@ -170,6 +255,7 @@ type Review {
   entityId: String!
   entityType: EntityType!
   entity: ReviewEntity!
+  collaborators: [Collaborator!]
 }
 
 type SearchResult {
@@ -189,6 +275,13 @@ type SpotifyProfile {
   numFollowers: Int
 }
 
+type Subscriptions {
+  nowPlaying(tickInterval: Int!): PlaybackState
+  availableDevices: [PlaybackDevice!]
+  playlistTracks(input: GetPlaylistTracksInput!): PlaylistTrack
+  reviewUpdates(reviewId: ID!): ReviewUpdate
+}
+
 type Track implements ReviewEntity {
   album: Album
   artists: [Artist!]
@@ -205,6 +298,11 @@ type Track implements ReviewEntity {
   trackNumber: Int!
   isLocal: Boolean!
   uri: String!
+  isLiked: Boolean
+}
+
+type UpdatedComment {
+  comment: Comment!
 }
 
 type User {
