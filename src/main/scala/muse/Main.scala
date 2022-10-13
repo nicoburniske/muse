@@ -24,7 +24,7 @@ import zio.Duration.*
 import zio.config.typesafe.TypesafeConfig
 import zio.logging.*
 import zio.logging.backend.SLF4J
-import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer}
+import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, durationInt}
 
 object Main extends ZIOAppDefault {
   override def run = MuseServer
@@ -45,7 +45,7 @@ object Main extends ZIOAppDefault {
       RequestSession.spotifySessionLayer,
       QuillContext.dataSourceLayer
     )
-    .tapErrorCause(e => ZIO.logErrorCause(s"Failed to start server ${e.toString}", e))
+    .tapErrorCause(e => ZIO.logErrorCause(s"yeet. Failed to start server ${e.toString}", e))
     .exitCode
 
   val eventLoopGroupLayer = for {
