@@ -6,10 +6,7 @@ import zio.{Cause, Task, ZIO, ZLayer}
 import javax.sql.DataSource
 
 trait MigrationService {
-  def clean: Task[Unit]
   def runMigrations: Task[Unit]
-//  def runBaseline: Task[Unit]
-//  def repairMigrations: Task[Unit]
 }
 
 object MigrationService {
@@ -19,8 +16,8 @@ object MigrationService {
 }
 
 case class MigrationServiceLive(datasource: DataSource) extends MigrationService {
-  override def clean         = ???
   override def runMigrations = for {
+    _      <- ZIO.logInfo("Starting Flyway Migrations")
     flyway <- ZIO
                 .attempt {
                   Flyway

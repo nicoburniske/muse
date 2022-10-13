@@ -24,7 +24,7 @@ object MuseServer {
 
   val live = for {
     port               <- ZIO.serviceWith[ServerConfig](_.port)
-    _                  <- writeSchemaToFile <&> MigrationService.runMigrations
+    _                  <- MigrationService.runMigrations
     protectedEndpoints <- createProtectedEndpoints
     allEndpoints        = Auth.loginEndpoints ++ protectedEndpoints @@ MuseMiddleware.handleErrors
     _                  <- service.Server.start(port, allEndpoints).forever

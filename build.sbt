@@ -1,5 +1,3 @@
-import NativePackagerHelper._
-
 ThisBuild / version      := "0.1.0"
 ThisBuild / organization := "io.nicoburniske"
 ThisBuild / name         := "muse"
@@ -34,7 +32,10 @@ lazy val root = (project in file("."))
   .enablePlugins(JavaAppPackaging, DockerPlugin)
   .settings(
     name                             := "muse",
+    assembly / assemblyJarName       := "muse.jar",
     Compile / mainClass              := Some(mainMethod),
+    reStart / mainClass              := Some(mainMethod),
+    assembly / mainClass             := Some(mainMethod),
     Compile / discoveredMainClasses  := Seq(),
     libraryDependencies ++= Seq(
       "dev.zio"                       %% "zio"                           % zio,
