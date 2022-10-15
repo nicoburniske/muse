@@ -18,7 +18,7 @@ import java.time.temporal.ChronoUnit
 trait UserSessions {
   def addUserSession(userId: String, authData: AuthCodeFlowData): UIO[String]
   def getUserSession(sessionId: String): UIO[Option[UserSession]]
-  def getSpotifyService(sessionId: String): UIO[Option[(UserSession, SpotifyService)]]
+  def updateAndGetSessions(sessionId: String): UIO[Option[(UserSession, SpotifyService)]]
   def deleteUserSession(sessionId: String): UIO[Unit]
   def deleteUserSessionByUserId(userId: String): UIO[Unit]
   def updateUserSession(sessionId: String)(f: UserSession => UserSession): UIO[Option[UserSession]]
@@ -57,8 +57,8 @@ object UserSessions {
   def addUserSession(userId: String, authData: AuthCodeFlowData) =
     ZIO.serviceWithZIO[UserSessions](_.addUserSession(userId, authData))
 
-  def getSpotifyService(sessionId: String) =
-    ZIO.serviceWithZIO[UserSessions](_.getSpotifyService(sessionId))
+  def updateAndGetSessions(sessionId: String) =
+    ZIO.serviceWithZIO[UserSessions](_.updateAndGetSessions(sessionId))
 
   def getUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
 
@@ -137,7 +137,7 @@ final case class UserSessionsLive(
                     _ => ZIO.logInfo(s"Successfully saved $count sessions."))
   } yield ()
 
-  override def getSpotifyService(sessionId: String) = (for {
+  override def updateAndGetSessions(sessionId: String) = (for {
     maybeUser      <- getUserSession(sessionId)
     session        <- ZIO.fromOption(maybeUser).orElseFail(new Exception(s"Session $sessionId not found."))
     updatedSession <-

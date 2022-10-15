@@ -32,11 +32,12 @@ object Subscriptions {
     i => reviewUpdates(i.reviewId)
   )
 
+  //noinspection InfallibleEffectRecoveryInspection
   def playbackState(tickInterval: Int) =
     val tick = if (tickInterval < 1) 1 else tickInterval
     ZStream
       .tick(tick.seconds)
-      .via(refreshSession)
+      .via(getSpotify)
       .mapZIO(_.currentPlaybackState)
       .via(flattenOption)
       // Only send updates for new playback states.
@@ -55,7 +56,7 @@ object Subscriptions {
   lazy val availableDevices =
     ZStream
       .tick(5.seconds)
-      .via(refreshSession)
+      .via(getSpotify)
       .mapZIO(_.getAvailableDevices)
       .map(_.toList)
       // If devices are the same don't send update.
@@ -68,23 +69,14 @@ object Subscriptions {
       .filter(_.nonEmpty)
       .tap(newDevices => ZIO.logInfo(s"Found new devices: $newDevices"))
 
-  // TODO: likely need to refresh token.
   def reviewUpdates(reviewId: UUID) = for {
     queue  <- ZStream.fromZIO(ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.subscribe))
     update <- ZStream.fromQueue(queue).filter(_.reviewId == reviewId)
   } yield update
 
-  // Should this happen in a forked fiber somewhere?
-  def refreshSession = ZPipeline.mapZIO(_ =>
-    for {
-      user           <- RequestSession.get[UserSession]
-      newSessions    <- ZIO.serviceWithZIO[UserSessions](_.getSpotifyService(user.sessionId)).map(_.get)
-      (user, spotify) = newSessions
-      _              <- RequestSession.set[UserSession](Some(user))
-      _              <- RequestSession.set[SpotifyService](Some(spotify))
-    } yield spotify)
+  private def getSpotify = ZPipeline.mapZIO(_ => ZIO.serviceWithZIO[RequestSession[SpotifyService]](_.get))
 
-  def flattenOption[T] =
+  private def flattenOption[T] =
     ZPipeline.filter[Option[T]](_.isDefined) >>>
       ZPipeline.map[Option[T], T](_.get)
 }

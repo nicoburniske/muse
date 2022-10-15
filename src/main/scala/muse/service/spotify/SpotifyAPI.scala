@@ -193,6 +193,8 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     go(Vector.empty, 0)
   }
 
+  // TODO: Integrate Error 429 into this properly.
+  // TODO: Add ref and clock here. need to enforce timeout.
   def executeAndIgnoreResponse(uri: Uri, method: Method, body: Option[String] = None): F[Unit] =
     body
       .fold(basicRequest)(basicRequest.body(_))
@@ -216,12 +218,14 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       .response(asJsonEither[ErrorResponse, T])
       .method(method, uri)
       .send(backend).flatMap { response =>
-        response.body match
-          case Left(HttpError(body, _))                     =>
+        response.code -> response.body match
+          case (StatusCode.TooManyRequests, _)                   =>
+            SpotifyError.TooManyRequests(uri, method, None).raiseError
+          case (_, Left(HttpError(body, _)))                     =>
             SpotifyError.HttpError(body, uri, method).raiseError
-          case Left(error @ DeserializationException(_, _)) =>
+          case (_, Left(error @ DeserializationException(_, _))) =>
             SpotifyError.DeserializationException(error).raiseError
-          case Right(value)                                 => value.pure
+          case (_, Right(value))                                 => value.pure
       }
 }
 

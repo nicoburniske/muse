@@ -32,7 +32,7 @@ object MuseMiddleware {
         } { auth =>
           for {
             sessionAndSpotify <- UserSessions
-                                   .getSpotifyService(auth)
+                                   .updateAndGetSessions(auth)
                                    .someOrElseZIO(ZIO.fail(Unauthorized("Invalid Auth")))
             (session, spotify) = sessionAndSpotify
             _                 <- RequestSession.set[UserSession](Some(session))
@@ -89,7 +89,7 @@ object MuseMiddleware {
           val authSession = createSession[UserSession](wsRef)
           val spotSession = createSession[SpotifyService](spotRef)
 
-          val connectionInit = WebSocketHooks.init[R, Throwable](payload =>
+          val connectionInit = WebSocketHooks.init { payload =>
             ZIO
               .fromOption {
                 payload match
@@ -100,33 +100,32 @@ object MuseMiddleware {
                     }
                   case _                              => None
               }.orElseFail(Unauthorized("Missing Auth: Unable to decode payload"))
-              .flatMap(auth => UserSessions.getSpotifyService(auth)).someOrFail(Unauthorized("Invalid Auth"))
-              .flatMap { case (user, spot) => authSession.set(Some(user)) *> spotSession.set(Some(spot)) })
+              .flatMap(auth => UserSessions.updateAndGetSessions(auth)).someOrFail(Unauthorized("Invalid Auth"))
+              .flatMap { case (user, spot) => authSession.set(Some(user)) <&> spotSession.set(Some(spot)) }
+          }
+
+          // Forked fiber for refreshing Spotify Auth as it expires.
+          val keepAuthUpdated = WebSocketHooks.afterInit {
+            keepSessionUpdated
+              .updateService[RequestSession[UserSession]](_ => authSession)
+              .updateService[RequestSession[SpotifyService]](_ => spotSession)
+              .forkScoped
+          }
 
           type Env = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]
+          // Ensure that each message has latest sessions in environment.
           val transformService = WebSocketHooks.message(new StreamTransformer[Env, Throwable] {
             def transform[R1 <: Env, E1 >: Throwable](
                 stream: ZStream[R1, E1, GraphQLWSOutput]
             ): ZStream[R1, E1, GraphQLWSOutput] =
-              for {
-                currentSession           <- ZStream.fromZIO(authSession.get)
-                // Update global session and refresh.
-                spotAndUpdatedSession    <- ZStream
-                                              .fromZIO(UserSessions.getSpotifyService(currentSession.sessionId))
-                                              .someOrFail(Unauthorized("Failed to refresh?"))
-                (updatedSession, spotify) = spotAndUpdatedSession
-                _                        <- ZStream.fromZIO(authSession.set(Some(updatedSession)))
-                _                        <- ZStream.fromZIO(spotSession.set(Some(spotify)))
-                result                   <- stream
-                                              .updateService[RequestSession[UserSession]](_ => authSession)
-                                              .updateService[RequestSession[SpotifyService]](_ => spotSession)
-
-              } yield result
+              stream
+                .updateService[RequestSession[UserSession]](_ => authSession)
+                .updateService[RequestSession[SpotifyService]](_ => spotSession)
           })
 
           ZHttpAdapter.makeWebSocketService(
             interpreter,
-            webSocketHooks = connectionInit ++ transformService
+            webSocketHooks = connectionInit ++ keepAuthUpdated ++ transformService
           )
       }
   }
@@ -142,4 +141,27 @@ object MuseMiddleware {
       def set(session: Option[R]): UIO[Unit] = ref.set(session)
     }
   }
+
+  type R = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]
+  private def keepSessionUpdated: ZIO[R, Throwable, Unit] = for {
+    authSession <- ZIO.serviceWithZIO[RequestSession[UserSession]](_.get)
+    current     <- Clock.instant
+    delay        = Duration.fromInterval(current, authSession.expiration) + 5.second
+    // We want to sleep past expiration, then refresh.
+    _           <- ZIO.logInfo(s"Sleeping for ${delay.toSeconds} before refreshing")
+    _           <- ZIO.sleep(delay)
+    _           <- ZIO.logInfo("Attempting to refresh session")
+    _           <- refreshSession
+    _           <- keepSessionUpdated
+  } yield ()
+
+  private def refreshSession = for {
+    user                  <- RequestSession.get[UserSession].map(_.sessionId)
+    newSessions           <- UserSessions
+                               .updateAndGetSessions(user)
+                               .someOrFail(Unauthorized("Invalid Auth. Unable to refresh session"))
+    both @ (user, spotify) = newSessions
+    _                     <- RequestSession.set[UserSession](Some(user)) <&>
+                               RequestSession.set[SpotifyService](Some(spotify))
+  } yield both
 }

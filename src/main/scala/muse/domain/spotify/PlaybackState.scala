@@ -10,7 +10,7 @@ case class PlaybackState(
     @jsonField("repeat_state")
     repeatState: String,
     timestamp: Long,
-    context: PlaybackContext,
+    context: Option[PlaybackContext],
     @jsonField("progress_ms")
     progressMs: Long,
     // This can be null sometimes?

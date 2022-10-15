@@ -7,7 +7,7 @@ case class PlaybackState(
     shuffleState: Boolean,
     repeatState: String,
     timestamp: Long,
-    context: PlaybackContext,
+    context: Option[PlaybackContext],
     progressMs: Long,
     item: Option[Track],
     currentlyPlayingType: String,

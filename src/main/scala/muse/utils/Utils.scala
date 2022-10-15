@@ -26,7 +26,7 @@ object Utils {
    *   The instant when something has expired
    */
   def getExpirationInstant(expiresIn: Int, padding: Int = DEFAULT_EXPIRATION_PADDING) =
-    ZIO.succeed(Instant.now().plus(expiresIn - padding, ChronoUnit.SECONDS))
+    Clock.instant.map(_.plus(expiresIn - padding, ChronoUnit.SECONDS))
 
   extension [R, E, A](z: ZIO[R, E, A]) {
     def addTimeLog(message: String) = z.timed.flatMap {

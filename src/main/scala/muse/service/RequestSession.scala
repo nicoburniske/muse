@@ -24,7 +24,7 @@ object RequestSession {
       def get: IO[Unauthorized, R] =
         ref.get.flatMap {
           case Some(v) => ZIO.succeed(v)
-          case None    => ZIO.fail(Unauthorized("Missing Websocket Auth"))
+          case None    => ZIO.fail(Unauthorized("Missing Auth"))
         }
 
       def set(session: Option[R]): UIO[Unit] = ref.set(session)

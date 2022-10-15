@@ -210,7 +210,7 @@ type PlaybackState {
   shuffleState: Boolean!
   repeatState: String!
   timestamp: Long!
-  context: PlaybackContext!
+  context: PlaybackContext
   progressMs: Long!
   item: Track
   currentlyPlayingType: String!
