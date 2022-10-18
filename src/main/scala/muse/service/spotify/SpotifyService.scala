@@ -38,6 +38,7 @@ trait SpotifyService {
   def transferPlayback(deviceId: String): Task[Boolean]
   def saveTracks(trackIds: Vector[String]): Task[Boolean]
   def currentPlaybackState: Task[Option[PlaybackState]]
+  def seekPlayback(deviceId: Option[String], positionMs: Int): Task[Boolean]
 }
 
 object SpotifyService {
@@ -128,6 +129,9 @@ object SpotifyService {
 
   def currentPlaybackState =
     ZIO.serviceWithZIO[SpotifyService](_.currentPlaybackState)
+
+  def seekPlayback(deviceId: Option[String], positionMs: Int) =
+    ZIO.serviceWithZIO[SpotifyService](_.seekPlayback(deviceId, positionMs))
 }
 
 case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
@@ -193,8 +197,9 @@ case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
   def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody) =
     s.startPlayback(device, startPlaybackBody)
 
-  def getAvailableDevices                  = s.getAvailableDevices
-  def transferPlayback(deviceId: String)   = s.transferPlayback(deviceId)
-  def saveTracks(trackIds: Vector[String]) = s.saveTracks(trackIds)
-  def currentPlaybackState                 = s.getPlaybackState
+  def getAvailableDevices                                     = s.getAvailableDevices
+  def transferPlayback(deviceId: String)                      = s.transferPlayback(deviceId)
+  def seekPlayback(deviceId: Option[String], positionMs: Int) = s.seekPlayback(deviceId, positionMs)
+  def saveTracks(trackIds: Vector[String])                    = s.saveTracks(trackIds)
+  def currentPlaybackState                                    = s.getPlaybackState
 }

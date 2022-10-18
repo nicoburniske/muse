@@ -32,7 +32,7 @@ object Subscriptions {
     i => reviewUpdates(i.reviewId)
   )
 
-  //noinspection InfallibleEffectRecoveryInspection
+  // noinspection InfallibleEffectRecoveryInspection
   def playbackState(tickInterval: Int) =
     val tick = if (tickInterval < 1) 1 else tickInterval
     ZStream
@@ -67,12 +67,14 @@ object Subscriptions {
           newDevices -> newDevices
       }
       .filter(_.nonEmpty)
-      .tap(newDevices => ZIO.logInfo(s"Found new devices: $newDevices"))
 
   def reviewUpdates(reviewId: UUID) = for {
     queue  <- ZStream.fromZIO(ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.subscribe))
     update <- ZStream.fromQueue(queue).filter(_.reviewId == reviewId)
   } yield update
+  // TODO: Add user session references to see who is viewing review live.
+//    .ensuring(
+//    )
 
   private def getSpotify = ZPipeline.mapZIO(_ => ZIO.serviceWithZIO[RequestSession[SpotifyService]](_.get))
 

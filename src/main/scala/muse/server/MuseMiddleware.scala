@@ -109,7 +109,7 @@ object MuseMiddleware {
             keepSessionUpdated
               .updateService[RequestSession[UserSession]](_ => authSession)
               .updateService[RequestSession[SpotifyService]](_ => spotSession)
-              .forkScoped
+              .fork
           }
 
           type Env = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]

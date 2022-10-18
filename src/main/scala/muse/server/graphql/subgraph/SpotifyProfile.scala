@@ -8,7 +8,7 @@ import zio.query.ZQuery
 
 final case class SpotifyProfile(
     id: String,
-    displayName: Option[String],
+    displayName: ZQuery[RequestSession[SpotifyService], Throwable, Option[String]],
     href: String,
     uri: String,
     externalUrls: Map[String, String],
@@ -24,7 +24,7 @@ object SpotifyProfile {
       u.followers.fold(GetSpotifyProfile.query(u.id).flatMap(_.numFollowers))(f => ZQuery.succeed(f.total))
     SpotifyProfile(
       u.id,
-      u.displayName,
+      u.displayName.fold(ZQuery.succeed(None))(name => ZQuery.succeed(Some(name))),
       u.href,
       u.uri,
       u.externalUrls,
@@ -39,10 +39,11 @@ object SpotifyProfile {
       href: String,
       uri: String,
       externalUrls: Map[String, String]): SpotifyProfile =
-    val profile = GetSpotifyProfile.query(id)
+    val profile     = GetSpotifyProfile.query(id)
+    val nameOrFetch = displayName.fold(GetSpotifyProfile.query(id).flatMap(_.displayName))(n => ZQuery.succeed(Some(n)))
     SpotifyProfile.apply(
       id,
-      displayName,
+      nameOrFetch,
       href,
       uri,
       externalUrls,

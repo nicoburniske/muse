@@ -3,7 +3,7 @@ package muse.server.graphql
 import muse.domain.common.EntityType
 import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
 import muse.domain.event.{CreatedComment, DeletedComment, ReviewUpdate, UpdatedComment}
-import muse.domain.mutate.{Context, CreateComment, CreateReview, DeleteComment, DeleteReview, EntityOffset, PositionOffset, ShareReview, StartPlayback, UpdateComment, UpdateReview}
+import muse.domain.mutate.{Context, CreateComment, CreateReview, DeleteComment, DeleteReview, EntityOffset, PositionOffset, SeekPlayback, ShareReview, StartPlayback, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify.{ErrorReason, ErrorResponse, StartPlaybackBody, UriOffset, PositionOffset as SpotifyPostionOffset}
 import muse.server.graphql.subgraph.{Comment, Review}
@@ -34,6 +34,7 @@ final case class Mutations(
     deleteComment: Input[DeleteComment] => ZIO[MutationEnv, MutationError, Boolean],
     shareReview: Input[ShareReview] => ZIO[MutationEnv, MutationError, Boolean],
     startPlayback: Input[StartPlayback] => ZIO[MutationEnv, MutationError, Boolean],
+    seekPlayback: Input[SeekPlayback] => ZIO[MutationEnv, MutationError, Boolean],
     saveTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean]
 )
 
@@ -50,6 +51,7 @@ object Mutations {
     i => deleteComment(i.input),
     i => shareReview(i.input),
     i => startPlayback(i.input),
+    i => seekPlayback(i.input),
     i => saveTracks(i.input)
   )
 
@@ -65,7 +67,7 @@ object Mutations {
     user      <- RequestSession.get[UserSession]
     _         <- ZIO
                    .fail(BadRequest(Some("Comment must have a body or rating")))
-                   .unless(create.comment.exists(_.nonEmpty) || create.rating.isDefined)
+                   .when(create.comment.exists(_.isEmpty) && create.rating.isEmpty)
     _         <- validateEntity(create.entityId, create.entityType) <&> validateCommentPermissions(user.id, create.reviewId)
     result    <- DatabaseService.createReviewComment(user.id, create)
     comment    = Comment.fromTable(result)
@@ -83,7 +85,7 @@ object Mutations {
     user      <- RequestSession.get[UserSession]
     _         <- ZIO
                    .fail(BadRequest(Some("Comment must have a body or rating")))
-                   .unless(update.comment.exists(_.nonEmpty) || update.rating.isDefined)
+                   .when(update.comment.exists(_.isEmpty) && update.rating.isEmpty)
     _         <- validateCommentEditingPermissions(user.id, update.reviewId, update.commentId)
     result    <- DatabaseService.updateComment(update)
     comment    = Comment.fromTable(result)
@@ -106,8 +108,9 @@ object Mutations {
   } yield result
 
   def shareReview(s: ShareReview): ZIO[MutationEnv, MutationError | InvalidUser, Boolean] = for {
-    user   <- RequestSession.get[UserSession]
-    _      <- validateReviewPermissions(user.id, s.reviewId) <&> validateUser(s.userId)
+    userId <- RequestSession.get[UserSession].map(_.id)
+    _      <- ZIO.fail(InvalidUser("You cannot share a review you own with yourself")).when(userId == s.userId)
+    _      <- validateReviewPermissions(userId, s.reviewId) <&> validateUser(s.userId)
     result <- DatabaseService.shareReview(s)
   } yield result
 
@@ -144,6 +147,13 @@ object Mutations {
               } yield playback
           )
       }.addTimeLog("Playback started")
+
+  def seekPlayback(playback: SeekPlayback) = for {
+    _       <- ZIO.fail(BadRequest(Some("Playback offset cannot be negative"))).when(playback.positionMs < 0)
+    _       <- ZIO.logInfo(s"Seeking playback to ${playback.positionMs}ms")
+    spotify <- RequestSession.get[SpotifyService]
+    res     <- spotify.seekPlayback(playback.deviceId, playback.positionMs)
+  } yield res
 
   def saveTracks(trackIds: List[String]) =
     RequestSession.get[SpotifyService].flatMap(_.saveTracks(trackIds.toVector)).addTimeLog("Tracks saved")

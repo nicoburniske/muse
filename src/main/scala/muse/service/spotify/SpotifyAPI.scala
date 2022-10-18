@@ -147,6 +147,10 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val body = PlaybackDeviceIds(List(deviceId)).toJson
     executeAndIgnoreResponse(uri, Method.PUT, Some(body)).as(true)
 
+  def seekPlayback(deviceId: Option[String], positionMs: Int): F[Boolean] =
+    val uri = uri"${SpotifyAPI.API_BASE}/me/player/seek?device_id=$deviceId&position_ms=$positionMs"
+    executeAndIgnoreResponse(uri, Method.PUT).as(true)
+
   def saveTracks(trackIds: Vector[String]): F[Boolean] = {
     val uri = uri"${SpotifyAPI.API_BASE}/me/tracks/ids=${trackIds.distinct.mkString(",")}"
     executeAndIgnoreResponse(uri, Method.PUT).as(true)

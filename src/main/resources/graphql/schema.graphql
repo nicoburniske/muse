@@ -73,6 +73,11 @@ input PositionOffsetInput {
   position: Int!
 }
 
+input SeekPlaybackInput {
+  deviceId: String
+  positionMs: Int!
+}
+
 input ShareReviewInput {
   reviewId: ID!
   userId: String!
@@ -184,6 +189,7 @@ type Mutations {
   deleteComment(input: DeleteCommentInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
   startPlayback(input: StartPlaybackInput!): Boolean
+  seekPlayback(input: SeekPlaybackInput!): Boolean
   saveTracks(input: [String!]!): Boolean
 }
 
