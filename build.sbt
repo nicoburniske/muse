@@ -83,8 +83,11 @@ lazy val root = (project in file("."))
   ).settings(dockerSettings: _*)
 
 lazy val dockerSettings = Seq(
-  Docker / packageName := "muse",
-  dockerRepository     := Some("ghcr.io/nicoburniske"),
+  Docker / packageName := "muse_server",
+  dockerRepository     := Some("nicoburniske"),
+  // TODO: figure this out?
+//  dockerUsername := sys.props.get("docker.username"),
+//    dockerRepository := sys.props.get("docker.registry")
   dockerUpdateLatest   := false,
   // TODO: Can this be read from config?
   dockerExposedPorts   := Seq(8883),

@@ -21,10 +21,8 @@ import zio.{Tag, Task, ZIO}
 val COOKIE_KEY = "XSESSION"
 
 object MuseServer {
-
   val live = for {
     port               <- ZIO.serviceWith[ServerConfig](_.port)
-    _                  <- writeSchemaToFile
     _                  <- MigrationService.runMigrations
     protectedEndpoints <- createProtectedEndpoints
     allEndpoints        = Auth.loginEndpoints ++ protectedEndpoints @@ MuseMiddleware.handleErrors
@@ -44,6 +42,7 @@ object MuseServer {
   } yield Http.collectHttp[Request] { case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter) }
     -> Http.collectHttp[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
 
+  // TODO: Expose this?
   lazy val writeSchemaToFile = for {
     serverConfig <- ZIO.service[ServerConfig]
     _            <- Utils.writeToFile(serverConfig.schemaFile, MuseGraphQL.api.render)
