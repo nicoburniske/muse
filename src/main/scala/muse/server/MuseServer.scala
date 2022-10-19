@@ -1,6 +1,7 @@
 package muse.server
 
 import caliban.*
+import io.netty.handler.codec.http.HttpHeaderNames
 import muse.config.{ServerConfig, SpotifyConfig}
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
@@ -25,7 +26,7 @@ object MuseServer {
     port               <- ZIO.serviceWith[ServerConfig](_.port)
     _                  <- MigrationService.runMigrations
     protectedEndpoints <- createProtectedEndpoints
-    allEndpoints        = Auth.loginEndpoints ++ protectedEndpoints @@ MuseMiddleware.handleErrors
+    allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ (MuseMiddleware.handleErrors ++ cors(config))
     _                  <- service.Server.start(port, allEndpoints).forever
   } yield ()
 
@@ -34,7 +35,7 @@ object MuseServer {
   def createProtectedEndpoints = endpointsGraphQL.map {
     case (rest, websocket) =>
       (MuseMiddleware.checkAuthAddSession(Auth.logoutEndpoint ++ rest) ++ websocket) @@
-        (MuseMiddleware.requestLoggingTrace ++ cors(config))
+        (MuseMiddleware.requestLoggingTrace )
   }
 
   val endpointsGraphQL = for {

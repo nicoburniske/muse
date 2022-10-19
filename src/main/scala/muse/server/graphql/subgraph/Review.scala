@@ -36,7 +36,7 @@ object Review {
   def fromTable(r: table.Review) = {
     val collaborators = for {
       reviewAccess <- GetCollaborators.query(r.id)
-      user         <- ZQuery.fromZIO(RequestSession.get[UserSession]).map(_.id)
+      user         <- ZQuery.fromZIO(RequestSession.get[UserSession]).map(_.userId)
       _            <- if (r.creatorId == user || reviewAccess.exists(_.userId == user)) ZQuery.unit
                       else ZQuery.fail(Forbidden("You are not allowed to view this review"))
       subQueries    = reviewAccess.map { reviewAccess =>

@@ -20,6 +20,6 @@ object GetUser {
 
   def currentUser: ZQuery[RequestSession[UserSession] & DatabaseService, Unauthorized, User] = for {
     userSession <- ZQuery.fromZIO(RequestSession.get[UserSession])
-    user        <- queryByUserId(userSession.id)
+    user        <- queryByUserId(userSession.userId)
   } yield user
 }

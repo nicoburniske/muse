@@ -60,7 +60,7 @@ object Mutations {
   def createReview(create: CreateReview) = for {
     user <- RequestSession.get[UserSession]
     _    <- validateEntity(create.entityId, create.entityType)
-    r    <- DatabaseService.createReview(user.id, create)
+    r    <- DatabaseService.createReview(user.userId, create)
   } yield Review.fromTable(r)
 
   def createComment(create: CreateComment) = for {
@@ -68,8 +68,8 @@ object Mutations {
     _         <- ZIO
                    .fail(BadRequest(Some("Comment must have a body or rating")))
                    .when(create.comment.exists(_.isEmpty) && create.rating.isEmpty)
-    _         <- validateEntity(create.entityId, create.entityType) <&> validateCommentPermissions(user.id, create.reviewId)
-    result    <- DatabaseService.createReviewComment(user.id, create)
+    _         <- validateEntity(create.entityId, create.entityType) <&> validateCommentPermissions(user.userId, create.reviewId)
+    result    <- DatabaseService.createReviewComment(user.userId, create)
     comment    = Comment.fromTable(result)
     published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(CreatedComment(comment)))
     _         <- ZIO.logError("Failed to publish comment creation").unless(published)
@@ -77,7 +77,7 @@ object Mutations {
 
   def updateReview(update: UpdateReview) = for {
     user   <- RequestSession.get[UserSession]
-    _      <- validateReviewPermissions(user.id, update.reviewId)
+    _      <- validateReviewPermissions(user.userId, update.reviewId)
     result <- DatabaseService.updateReview(update)
   } yield Review.fromTable(result)
 
@@ -86,7 +86,7 @@ object Mutations {
     _         <- ZIO
                    .fail(BadRequest(Some("Comment must have a body or rating")))
                    .when(update.comment.exists(_.isEmpty) && update.rating.isEmpty)
-    _         <- validateCommentEditingPermissions(user.id, update.reviewId, update.commentId)
+    _         <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
     result    <- DatabaseService.updateComment(update)
     comment    = Comment.fromTable(result)
     published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
@@ -95,7 +95,7 @@ object Mutations {
 
   def deleteComment(d: DeleteComment): Mutation[Boolean] = for {
     user      <- RequestSession.get[UserSession]
-    _         <- validateCommentEditingPermissions(user.id, d.reviewId, d.commentId)
+    _         <- validateCommentEditingPermissions(user.userId, d.reviewId, d.commentId)
     result    <- DatabaseService.deleteComment(d)
     published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(DeletedComment(d.reviewId, d.commentId)))
     _         <- ZIO.logError("Failed to publish comment deletion").unless(published)
@@ -103,12 +103,12 @@ object Mutations {
 
   def deleteReview(d: DeleteReview): Mutation[Boolean] = for {
     user   <- RequestSession.get[UserSession]
-    _      <- validateReviewPermissions(user.id, d.id)
+    _      <- validateReviewPermissions(user.userId, d.id)
     result <- DatabaseService.deleteReview(d)
   } yield result
 
   def shareReview(s: ShareReview): ZIO[MutationEnv, MutationError | InvalidUser, Boolean] = for {
-    userId <- RequestSession.get[UserSession].map(_.id)
+    userId <- RequestSession.get[UserSession].map(_.userId)
     _      <- ZIO.fail(InvalidUser("You cannot share a review you own with yourself")).when(userId == s.userId)
     _      <- validateReviewPermissions(userId, s.reviewId) <&> validateUser(s.userId)
     result <- DatabaseService.shareReview(s)

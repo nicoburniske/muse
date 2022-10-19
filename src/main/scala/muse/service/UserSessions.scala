@@ -30,7 +30,7 @@ trait UserSessions {
   def saveSessions: ZIO[Scope, IOException, Unit]
 
   final def getAccessToken(sessionId: String)  = getUserSession(sessionId).map(_.map(_.accessToken))
-  final def getUserId(sessionId: String)       = getUserSession(sessionId).map(_.map(_.id))
+  final def getUserId(sessionId: String)       = getUserSession(sessionId).map(_.map(_.userId))
   final def getRefreshToken(sessionId: String) = getUserSession(sessionId).map(_.map(_.refreshToken))
 }
 
@@ -91,7 +91,7 @@ final case class UserSessionsLive(
   override def deleteUserSession(sessionId: String) = sessionsR.update(_.removed(sessionId))
 
   override def deleteUserSessionByUserId(userId: String) =
-    sessionsR.update(_.filterNot(_._2.id == userId))
+    sessionsR.update(_.filterNot(_._2.userId == userId))
 
   override def updateUserSession(sessionId: String)(f: UserSession => UserSession) =
     sessionsR

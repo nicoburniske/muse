@@ -49,8 +49,10 @@ object Auth {
                 COOKIE_KEY,
                 session,
                 isSecure = true,
-                // NOTE: This is so that websockets can be used.
-                isHttpOnly = false)
+                isHttpOnly = true,
+                // Cross domain cookie until we are hosting on same domain.
+                sameSite = Some(Cookie.SameSite.None)
+              )
               Response.redirect(frontendURL).addCookie(cookie)
             }
           }
@@ -63,8 +65,12 @@ object Auth {
         for {
           session <- RequestSession.get[UserSession]
           _       <- UserSessions.deleteUserSession(session.sessionId)
-          _       <- ZIO.logInfo(s"Successfully logged out user ${session.id} with cookie: ${session.sessionId.take(10)}")
+          _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId} with cookie: ${session.sessionId.take(10)}")
         } yield Response.ok
+      case Method.GET -> !! / "session" =>
+        for {
+          session <- RequestSession.get[UserSession]
+        } yield Response.text(session.sessionId)
     }
 
   val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {

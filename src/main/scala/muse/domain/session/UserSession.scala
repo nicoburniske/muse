@@ -8,7 +8,7 @@ import java.time.{Instant, ZoneId}
 /**
  * @param sessionId
  *   the user's session cookie
- * @param id
+ * @param userId
  *   the user's spotify id
  * @param expiration
  *   the expiration of the access token
@@ -19,13 +19,13 @@ import java.time.{Instant, ZoneId}
  */
 final case class UserSession(
     sessionId: String,
-    id: String,
+    userId: String,
     expiration: Instant,
     accessToken: String,
     refreshToken: String
 ) {
   val conciseString =
-    s"UserID: $id, Session Cookie: ${sessionId.take(10)}, Expiration: ${instantString(expiration)}, Access: ${accessToken
+    s"UserID: $userId, Session Cookie: ${sessionId.take(10)}, Expiration: ${instantString(expiration)}, Access: ${accessToken
       .take(10)}, Refresh: ${refreshToken.take(10)}"
 }
 
