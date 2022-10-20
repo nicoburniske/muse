@@ -9,7 +9,7 @@ case class Context(entityType: EntityType, entityId: String)
 case class PositionOffset(context: Context, position: Int)
 case class EntityOffset(outer: Context, inner: Context)
 
-case class StartPlayback(
+case class PlaybackContext(
     @GQLDescription(
       "If device id is specified, playback will be transferred to that device. Otherwise, playback will be executed on user's active device.")
     deviceId: Option[String],

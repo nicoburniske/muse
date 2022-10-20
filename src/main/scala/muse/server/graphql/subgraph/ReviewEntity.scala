@@ -2,7 +2,15 @@ package muse.server.graphql.subgraph
 
 import caliban.schema.Annotations.GQLInterface
 import muse.domain.spotify
-import muse.server.graphql.resolver.{CheckUserLikedSong, GetAlbum, GetAlbumTracks, GetArtist, GetArtistAlbums, GetArtistTopTracks, GetPlaylistTracks}
+import muse.server.graphql.resolver.{
+  CheckUserLikedSong,
+  GetAlbum,
+  GetAlbumTracks,
+  GetArtist,
+  GetArtistAlbums,
+  GetArtistTopTracks,
+  GetPlaylistTracks
+}
 import muse.server.graphql.subgraph
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
@@ -19,33 +27,51 @@ sealed trait ReviewEntity {
   def uri: String
 }
 
+type SpotQuery[T] = ZQuery[RequestSession[SpotifyService], Throwable, T]
+
 case class Artist(
     externalUrls: Map[String, String],
-    numFollowers: Int,
-    genres: List[String],
+    numFollowers: SpotQuery[Int],
+    genres: SpotQuery[List[String]],
     href: String,
     override val id: String,
-    images: List[String],
+    images: SpotQuery[List[String]],
     override val name: String,
     override val uri: String,
-    popularity: Int,
+    popularity: SpotQuery[Int],
     // TODO: pagination.
-    albums: ZQuery[RequestSession[SpotifyService], Throwable, List[Album]],
-    topTracks: ZQuery[RequestSession[SpotifyService], Throwable, List[Track]]
+    albums: SpotQuery[List[Album]],
+    topTracks: SpotQuery[List[Track]]
 ) extends ReviewEntity
 
 object Artist {
-  def fromSpotify(a: spotify.Artist) = {
+  def fromPlaybackState(a: spotify.Artist) = {
+    val artist = GetArtist.query(a.id)
     Artist(
       a.externalUrls,
-      a.followers.get.total,
-      a.genres.getOrElse(Nil),
+      artist.flatMap(_.numFollowers),
+      artist.flatMap(_.genres),
       a.href,
       a.id,
-      a.images.fold(Nil)(_.map(_.url)),
+      artist.flatMap(_.images),
       a.name,
       a.uri,
-      a.popularity.get,
+      artist.flatMap(_.popularity),
+      GetArtistAlbums.query(a.id),
+      GetArtistTopTracks.query(a.id)
+    )
+  }
+  def fromSpotify(a: spotify.Artist)       = {
+    Artist(
+      a.externalUrls,
+      ZQuery.succeed(a.followers.get.total),
+      ZQuery.succeed(a.genres.getOrElse(Nil)),
+      a.href,
+      a.id,
+      ZQuery.succeed(a.images.fold(Nil)(_.map(_.url))),
+      a.name,
+      a.uri,
+      ZQuery.succeed(a.popularity.get),
       GetArtistAlbums.query(a.id),
       GetArtistTopTracks.query(a.id)
     )
@@ -108,6 +134,30 @@ case class Track(
 ) extends ReviewEntity
 
 object Track {
+  def fromPlaybackState(t: spotify.Track)                           = {
+    val artists = Some(t.artists)
+      .filter(_.nonEmpty)
+      .fold(ZQuery.foreachPar(t.artists.map(_.id))(GetArtist.query))(artists =>
+        ZQuery.succeed(artists.map(Artist.fromPlaybackState)))
+    Track(
+      ZQuery.succeed(Album.fromSpotify(t.album.get)),
+      artists,
+      t.discNumber,
+      t.durationMs,
+      t.explicit,
+      t.externalUrls,
+      t.href,
+      t.id,
+      t.isPlayable,
+      t.name,
+      t.popularity,
+      t.previewUrl,
+      t.trackNumber,
+      t.isLocal,
+      t.uri,
+      CheckUserLikedSong.query(t.id)
+    )
+  }
   def fromSpotify(t: spotify.Track, albumId: Option[String] = None) = {
     Track(
       GetAlbum.query(t.album.map(_.id).orElse(albumId).get),

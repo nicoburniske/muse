@@ -68,6 +68,15 @@ input PaginationInput {
   from: Int! = 0
 }
 
+input PlaybackContextInput {
+  "If device id is specified, playback will be transferred to that device. Otherwise, playback will be executed on user's active device."
+  deviceId: String
+  uris: [String!]
+  positionOffset: PositionOffsetInput
+  entityOffset: EntityOffsetInput
+  positionMs: Int
+}
+
 input PositionOffsetInput {
   context: ContextInput!
   position: Int!
@@ -82,15 +91,6 @@ input ShareReviewInput {
   reviewId: ID!
   userId: String!
   access: AccessLevel!
-}
-
-input StartPlaybackInput {
-  "If device id is specified, playback will be transferred to that device. Otherwise, playback will be executed on user's active device."
-  deviceId: String
-  uris: [String!]
-  positionOffset: PositionOffsetInput
-  entityOffset: EntityOffsetInput
-  positionMs: Int
 }
 
 input UpdateCommentInput {
@@ -131,14 +131,14 @@ type Album implements ReviewEntity {
 
 type Artist implements ReviewEntity {
   externalUrls: [KVStringString!]!
-  numFollowers: Int!
-  genres: [String!]!
+  numFollowers: Int
+  genres: [String!]
   href: String!
   id: String!
-  images: [String!]!
+  images: [String!]
   name: String!
   uri: String!
-  popularity: Int!
+  popularity: Int
   albums: [Album!]
   topTracks: [Track!]
 }
@@ -188,8 +188,11 @@ type Mutations {
   deleteReview(input: DeleteReviewInput!): Boolean
   deleteComment(input: DeleteCommentInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
-  startPlayback(input: StartPlaybackInput!): Boolean
+  startPlayback(input: PlaybackContextInput!): Boolean
   seekPlayback(input: SeekPlaybackInput!): Boolean
+  pausePlayback(deviceId: String): Boolean
+  skipToNext(deviceId: String): Boolean
+  skipToPrevious(deviceId: String): Boolean
   saveTracks(input: [String!]!): Boolean
 }
 

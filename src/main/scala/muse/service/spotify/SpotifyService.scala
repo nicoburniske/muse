@@ -33,12 +33,15 @@ trait SpotifyService {
   def getAllArtistAlbums(artistId: String): Task[Vector[Album]]
   def getArtistTopTracks(artistId: String, country: String = "US"): Task[Vector[Track]]
   def checkUserSavedTracks(trackIds: Vector[String]): Task[Vector[(String, Boolean)]]
-  def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody): Task[Boolean]
+  def saveTracks(trackIds: Vector[String]): Task[Boolean]
   def getAvailableDevices: Task[Vector[PlaybackDevice]]
   def transferPlayback(deviceId: String): Task[Boolean]
-  def saveTracks(trackIds: Vector[String]): Task[Boolean]
+  def startPlayback(device: Option[String], startPlaybackBody: Option[StartPlaybackBody]): Task[Boolean]
   def currentPlaybackState: Task[Option[PlaybackState]]
   def seekPlayback(deviceId: Option[String], positionMs: Int): Task[Boolean]
+  def pausePlayback(deviceId: Option[String]): Task[Boolean]
+  def skipToNext(deviceId: Option[String]): Task[Boolean]
+  def skipToPrevious(deviceId: Option[String]): Task[Boolean]
 }
 
 object SpotifyService {
@@ -115,7 +118,7 @@ object SpotifyService {
   def checkUserSavedTracks(trackIds: Vector[String]) =
     ZIO.serviceWithZIO[SpotifyService](_.checkUserSavedTracks(trackIds))
 
-  def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody) =
+  def startPlayback(device: Option[String], startPlaybackBody: Option[StartPlaybackBody]) =
     ZIO.serviceWithZIO[SpotifyService](_.startPlayback(device, startPlaybackBody))
 
   def getAvailableDevices =
@@ -194,7 +197,7 @@ case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
   def checkUserSavedTracks(trackIds: Vector[String]): Task[Vector[(String, Boolean)]] =
     s.checkUserSavedTracks(trackIds)
 
-  def startPlayback(device: Option[String], startPlaybackBody: StartPlaybackBody) =
+  def startPlayback(device: Option[String], startPlaybackBody: Option[StartPlaybackBody]) =
     s.startPlayback(device, startPlaybackBody)
 
   def getAvailableDevices                                     = s.getAvailableDevices
@@ -202,4 +205,7 @@ case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
   def seekPlayback(deviceId: Option[String], positionMs: Int) = s.seekPlayback(deviceId, positionMs)
   def saveTracks(trackIds: Vector[String])                    = s.saveTracks(trackIds)
   def currentPlaybackState                                    = s.getPlaybackState
+  def pausePlayback(deviceId: Option[String])                 = s.pausePlayback(deviceId)
+  def skipToNext(deviceId: Option[String])                    = s.skipToNext(deviceId)
+  def skipToPrevious(deviceId: Option[String])                = s.skipToPrevious(deviceId)
 }

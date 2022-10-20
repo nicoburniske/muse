@@ -25,6 +25,7 @@ object MuseServer {
   val live = for {
     port               <- ZIO.serviceWith[ServerConfig](_.port)
     _                  <- MigrationService.runMigrations
+    _                  <- writeSchemaToFile
     protectedEndpoints <- createProtectedEndpoints
     allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ (MuseMiddleware.handleErrors ++ cors(config))
     _                  <- service.Server.start(port, allEndpoints).forever
@@ -35,7 +36,7 @@ object MuseServer {
   def createProtectedEndpoints = endpointsGraphQL.map {
     case (rest, websocket) =>
       (MuseMiddleware.checkAuthAddSession(Auth.logoutEndpoint ++ rest) ++ websocket) @@
-        (MuseMiddleware.requestLoggingTrace )
+        (MuseMiddleware.requestLoggingTrace)
   }
 
   val endpointsGraphQL = for {
