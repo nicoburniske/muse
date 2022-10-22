@@ -84,7 +84,8 @@ lazy val root = (project in file("."))
 
 lazy val dockerSettings = Seq(
   Docker / packageName := "muse_server",
-  dockerRepository     := Some("nicoburniske"),
+  Docker / maintainer  := "Nico Burniske",
+//  dockerRepository     := Some("nicoburniske"),
   // TODO: figure this out?
 //  dockerUsername := sys.props.get("docker.username"),
 //    dockerRepository := sys.props.get("docker.registry")

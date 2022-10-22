@@ -18,11 +18,11 @@ object AppConfig {
     spotify      <- ZLayer.succeed(appConfigEnv.get.spotify)
     sql          <- ZLayer.succeed(appConfigEnv.get.sqlConfig)
     server       <- ZLayer.succeed(appConfigEnv.get.serverConfig)
-  } yield spotify ++ sql ++ server
+  } yield spotify ++ sql ++ server ++ appConfigEnv
 
   lazy val layer = appConfigLayer >>> flattened
 
-  lazy val appConfigLayer = TypesafeConfig.fromTypesafeConfig(ZIO.attempt(ConfigFactory.load.resolve), appDescriptor).tap(z => ZIO.succeed(println(z.get.sqlConfig.toString)))
+  lazy val appConfigLayer = TypesafeConfig.fromTypesafeConfig(ZIO.attempt(ConfigFactory.load.resolve), appDescriptor)
 
   lazy val appDescriptor: ConfigDescriptor[AppConfig] =
     (nested("spotify")(spotifyDescriptor) zip

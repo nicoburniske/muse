@@ -31,6 +31,8 @@ trait DatabaseService {
   def getUserReviews(userId: String): IO[SQLException, List[Review]]
   // Reviews that the given user has access to.
   def getAllUserReviews(userId: String): IO[SQLException, List[Review]]
+  // Reviews that viewerUser can see of sourceUser.
+  def getUserReviewsExternal(sourceUserId: String, viewerUserId: String): IO[SQLException, List[Review]]
   def getReviewComments(reviewId: UUID): IO[SQLException, List[ReviewComment]]
   def getMultiReviewComments(reviewIds: List[UUID]): IO[SQLException, List[ReviewComment]]
   def getReviews(reviewIds: List[UUID]): IO[SQLException, List[Review]]
@@ -82,6 +84,8 @@ object DatabaseService {
   def getUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getUserReviews(userId))
 
   def getAllUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getAllUserReviews(userId))
+  def getUserReviewsExternal(sourceUserId: String, viewerUserId: String) =
+    ZIO.serviceWithZIO[DatabaseService](_.getUserReviewsExternal(sourceUserId, viewerUserId))
 
   def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewComments(reviewId))
 
@@ -202,6 +206,14 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   override def getAllUserReviews(userId: String) = run {
     userReviews(lift(userId)).union(userSharedReviews(lift(userId)))
+  }.provide(layer)
+
+  override def getUserReviewsExternal(sourceUserId: String, viewerUserId: String) = run {
+    userReviews(lift(sourceUserId))
+      .filter(_.isPublic)
+      .union {
+        userSharedReviews(lift(viewerUserId)).filter(_.creatorId == lift(sourceUserId))
+      }
   }.provide(layer)
 
   override def getUsers = run(users).provide(layer)

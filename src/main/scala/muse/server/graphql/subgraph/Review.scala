@@ -1,7 +1,7 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
-import muse.domain.error.Forbidden
+import muse.domain.error.{Forbidden, Unauthorized}
 import muse.domain.session.UserSession
 import muse.domain.table
 import muse.domain.table.AccessLevel
@@ -19,7 +19,7 @@ import java.util.UUID
 final case class Review(
     id: UUID,
     createdAt: Instant,
-    creator: ZQuery[DatabaseService, Nothing, User],
+    creator: ZQuery[DatabaseService & RequestSession[UserSession], Unauthorized, User],
     reviewName: String,
     isPublic: Boolean,
     comments: ZQuery[DatabaseService, Throwable, List[Comment]],

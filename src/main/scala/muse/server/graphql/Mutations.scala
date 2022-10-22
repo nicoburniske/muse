@@ -53,6 +53,7 @@ final case class Mutations(
     skipToNext: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
     skipToPrevious: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
     saveTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean]
+    // Add un-saving.
 )
 
 final case class Input[T](input: T)

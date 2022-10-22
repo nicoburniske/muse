@@ -12,7 +12,7 @@ import zhttp.http.*
 import zhttp.http.Middleware.csrfGenerate
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.json.*
-import zio.{Cause, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer}
+import zio.{Cause, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer, durationInt}
 
 object Auth {
   val scopes = List(
@@ -27,7 +27,9 @@ object Auth {
   val loginEndpoints = Http
     .collectZIO[Request] {
       case Method.GET -> !! / "login"          =>
-        generateRedirectUrl.map(url => Response.redirect(url.encode, false))
+          generateRedirectUrl
+            .tap(url => ZIO.logInfo(s"Redirecting to ${url.encode}"))
+            .map(url => Response.redirect(url.encode, false))
       case req @ Method.GET -> !! / "callback" =>
         req
           .url
@@ -39,10 +41,11 @@ object Auth {
           } { code =>
             for {
               authData    <- SpotifyAuthService.getAuthCode(code)
+              _           <- ZIO.logInfo("Received auth data for login")
               spotifyUser <- handleUserLogin(authData)
               frontendURL <- ZIO.serviceWith[ServerConfig](_.frontendUrl)
               session     <- UserSessions.addUserSession(spotifyUser.id, authData)
-              _           <- ZIO.logInfo(session)
+              _           <- ZIO.logInfo(s"Successfully added session $session. Redirecting to $frontendURL")
             } yield {
               // TODO: add domain to cookie.
               val cookie = Cookie(
@@ -101,7 +104,13 @@ object Auth {
       spotify  <- SpotifyService.live(auth.accessToken)
       userInfo <- spotify.getCurrentUserProfile.retry(Schedule.recurs(2))
       id        = userInfo.id
-      res      <- DatabaseService.createOrUpdateUser(id)
+      _        <- ZIO.logInfo(s"Retrieved profile data for user $id")
+      res      <- DatabaseService
+                    .createOrUpdateUser(id)
+                    .timeout(10.seconds)
+                    .flatMap(ZIO.fromOption(_))
+                    .orElseFail(new Exception("Failed to create or update user"))
+                    .tapError(_ => ZIO.logError("Failed to process user login."))
       resText   = if (res) "Created" else "Updated"
       _        <- ZIO.logInfo(s"Successfully logged in $id. $resText account")
     } yield userInfo

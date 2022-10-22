@@ -2,7 +2,7 @@ package muse.server
 
 import caliban.*
 import io.netty.handler.codec.http.HttpHeaderNames
-import muse.config.{ServerConfig, SpotifyConfig}
+import muse.config.{AppConfig, ServerConfig, SpotifyConfig}
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.server.MuseMiddleware
@@ -24,8 +24,8 @@ val COOKIE_KEY = "XSESSION"
 object MuseServer {
   val live = for {
     port               <- ZIO.serviceWith[ServerConfig](_.port)
+    _                  <- ZIO.serviceWithZIO[AppConfig](c => ZIO.logInfo(s"Starting server with config $c"))
     _                  <- MigrationService.runMigrations
-    _                  <- writeSchemaToFile
     protectedEndpoints <- createProtectedEndpoints
     allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ (MuseMiddleware.handleErrors ++ cors(config))
     _                  <- service.Server.start(port, allEndpoints).forever

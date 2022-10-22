@@ -1,6 +1,7 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
+import muse.domain.session.UserSession
 import muse.domain.table.ReviewComment
 import muse.server.graphql.resolver.{GetEntity, GetUser}
 import muse.service.RequestSession
@@ -19,7 +20,7 @@ final case class Comment(
     // If none, then it is root comment.
     parentCommentId: Option[Int],
     commenterId: String,
-    commenter: ZQuery[DatabaseService & RequestSession[SpotifyService], Throwable, User],
+    commenter: ZQuery[DatabaseService & RequestSession[SpotifyService] & RequestSession[UserSession], Throwable, User],
     comment: Option[String],
     rating: Option[Int],
     entityId: String,

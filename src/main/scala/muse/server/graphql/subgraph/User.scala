@@ -1,6 +1,7 @@
 package muse.server.graphql.subgraph
 
-import muse.server.graphql.resolver.GetUserReviews
+import muse.domain.session.UserSession
+import muse.server.graphql.resolver.GetUser
 import muse.server.graphql.subgraph
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
@@ -9,7 +10,7 @@ import zio.query.ZQuery
 
 final case class User(
     id: String,
-    reviews: ZQuery[DatabaseService, Throwable, List[Review]],
+    reviews: ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]],
     spotifyProfile: ZQuery[RequestSession[SpotifyService], Throwable, SpotifyProfile]
 )
 
@@ -17,6 +18,6 @@ object User {
   def missingSome(userId: String, displayName: Option[String], href: String, uri: String, externalUrls: Map[String, String]) =
     User(
       userId,
-      GetUserReviews.query(userId),
+      GetUser.queryByUserId(userId).flatMap(_.reviews),
       ZQuery.succeed(SpotifyProfile.missingSome(userId, displayName, href, uri, externalUrls)))
 }
