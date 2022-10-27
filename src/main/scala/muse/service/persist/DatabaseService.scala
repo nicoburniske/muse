@@ -84,6 +84,7 @@ object DatabaseService {
   def getUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getUserReviews(userId))
 
   def getAllUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getAllUserReviews(userId))
+
   def getUserReviewsExternal(sourceUserId: String, viewerUserId: String) =
     ZIO.serviceWithZIO[DatabaseService](_.getUserReviewsExternal(sourceUserId, viewerUserId))
 
@@ -299,28 +300,44 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       ).returning(r => r)
   }.provide(layer)
 
-  //TODO: need to update timestamps.
-  override def updateComment(c: UpdateComment) = ZIO.succeed(Instant.now()).flatMap{ now =>
-    run {
-      comments
-        .filter(_.id == lift(c.commentId))
-        .filter(_.reviewId == lift(c.reviewId))
-        .update(
-          _.comment -> lift(c.comment),
-          _.rating  -> lift(c.rating),
-          _.updatedAt -> lift(now)
-        ).returning(r => r)
-    }
-  }.provide(layer)
+  override def updateComment(c: UpdateComment) = ZIO
+    .succeed(Instant.now()).flatMap { now =>
+      run {
+        comments
+          .filter(_.id == lift(c.commentId))
+          .filter(_.reviewId == lift(c.reviewId))
+          .update(
+            _.comment   -> lift(c.comment),
+            _.rating    -> lift(c.rating),
+            _.updatedAt -> lift(now)
+          ).returning(r => r)
+      }
+    }.provide(layer)
 
-  override def shareReview(share: ShareReview) = run {
-    reviewAccess.insert(
-      _.reviewId    -> lift(share.reviewId),
-      _.userId      -> lift(share.userId),
-      _.accessLevel -> lift(share.access)
+  override def shareReview(share: ShareReview) =
+    (share.accessLevel match
+      // Delete.
+      case None              =>
+        run {
+          reviewAccess
+            .filter(_.reviewId == lift(share.reviewId))
+            .filter(_.userId == lift(share.userId))
+            .delete
+        }
+      // Insert/Update.
+      case Some(accessLevel) =>
+        run {
+          reviewAccess
+            .insert(
+              _.reviewId    -> lift(share.reviewId),
+              _.userId      -> lift(share.userId),
+              _.accessLevel -> lift(accessLevel)
+              // On conflict, update existing entry with new access level.
+            ).onConflictUpdate(_.reviewId, _.userId)((t, e) => t.accessLevel -> e.accessLevel)
+        }
     )
-  }.provide(layer)
-    .map(_ > 0)
+      .provide(layer)
+      .map(_ > 0)
 
   /**
    * Delete!

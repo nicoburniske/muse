@@ -31,11 +31,9 @@ import zio.{Hub, IO, Task, UIO, ZIO}
 import java.sql.SQLException
 import java.util.UUID
 
-// TODO: add un-sharing.
 // TODO: add checking for what constitutes a valid comment. What does rating represent?
 // TODO: What actually should return boolean? Deletion?
 // TODO: Consider adding ZQuery for batched operations to DB.
-
 type MutationEnv   = RequestSession[UserSession] & DatabaseService & RequestSession[SpotifyService] & Hub[ReviewUpdate]
 type MutationError = Throwable | MuseError
 
@@ -148,13 +146,7 @@ object Mutations {
         RequestSession
           .get[SpotifyService].flatMap(_.transferPlayback(deviceId)).foldZIO(
             _ => ZIO.logInfo("Failed to transfer playback, starting playback on any device") *> startPlayback,
-            _ =>
-              for {
-                _               <- ZIO.logInfo("Succeeded transferring playback")
-                playbackContext <- spotifyPlaybackBody(playback)
-                (deviceId, body) = playbackContext
-                playback        <- RequestSession.get[SpotifyService].flatMap(_.startPlayback(deviceId, body))
-              } yield playback
+            _ => ZIO.logInfo("Succeeded transferring playback") *> startPlayback
           )
       }.addTimeLog("Playback started")
 

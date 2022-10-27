@@ -213,6 +213,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
         case Right(value) => value.pure
       }
 
+  // TODO: Is there a case where we can get an HTTP Error with a non-error code? 
   def spotifyResponse[B: JsonDecoder](uri: Uri, method: Method): ResponseAs[Either[SpotifyError, B], Any] =
     asJson[B].mapLeft {
       case HttpError(body, StatusCode.TooManyRequests)                            =>

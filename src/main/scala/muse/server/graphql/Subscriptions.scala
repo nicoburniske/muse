@@ -53,6 +53,7 @@ object Subscriptions {
       .map(PlaybackState(_))
       .tapErrorCause(cause => ZIO.logErrorCause(s"Error while getting playback state: $cause", cause))
 
+  // noinspection InfallibleEffectRecoveryInspection
   lazy val availableDevices =
     ZStream
       .tick(5.seconds)
@@ -67,6 +68,7 @@ object Subscriptions {
           newDevices -> newDevices
       }
       .filter(_.nonEmpty)
+      .tapErrorCause(cause => ZIO.logErrorCause(s"Error while getting availableDevices: $cause", cause))
 
   def reviewUpdates(reviewId: UUID) = for {
     queue  <- ZStream.fromZIO(ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.subscribe))

@@ -27,9 +27,9 @@ object Auth {
   val loginEndpoints = Http
     .collectZIO[Request] {
       case Method.GET -> !! / "login"          =>
-          generateRedirectUrl
-            .tap(url => ZIO.logInfo(s"Redirecting to ${url.encode}"))
-            .map(url => Response.redirect(url.encode, false))
+        generateRedirectUrl
+          .tap(url => ZIO.logInfo(s"Redirecting to ${url.encode}"))
+          .map(url => Response.redirect(url.encode, false))
       case req @ Method.GET -> !! / "callback" =>
         req
           .url
@@ -64,7 +64,7 @@ object Auth {
   // @@ csrfGenerate() // TODO: get this working?
   val logoutEndpoint = Http
     .collectZIO[Request] {
-      case Method.POST -> !! / "logout" =>
+      case Method.POST -> !! / "logout"         =>
         for {
           session <- RequestSession.get[UserSession]
           _       <- UserSessions.deleteUserSession(session.sessionId)

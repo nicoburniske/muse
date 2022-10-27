@@ -27,7 +27,7 @@ trait UserSessions {
    * Persistence.
    */
   def loadSessions: ZIO[Scope, Throwable, List[UserSession]]
-  def saveSessions: ZIO[Scope, IOException, Unit]
+  def saveSessions: IO[IOException, Unit]
 
   final def getAccessToken(sessionId: String)  = getUserSession(sessionId).map(_.map(_.accessToken))
   final def getUserId(sessionId: String)       = getUserSession(sessionId).map(_.map(_.userId))
@@ -44,8 +44,9 @@ object UserSessions {
                   .Synchronized
                   .make(Map.empty)
                   .map(UserSessionsLive.apply(_, auth, sttp))
-                  // Load sessions from file. When scope closes, save the sessions to file.
-                  .tap(_.loadSessions))(cleanup)
+                  // On init, load sessions from file.
+                  // When scope closes, save the sessions to file.
+                  .tap(u => ZIO.scoped(u.loadSessions)))(cleanup)
     } yield res
   }
 
@@ -123,7 +124,7 @@ final case class UserSessionsLive(
     _          <- ZIO.logInfo(s"Successfully loaded ${result.size} session(s).")
   } yield result.values.toList
 
-  override def saveSessions: ZIO[Scope, IOException, Unit] = for {
+  override def saveSessions: IO[IOException, Unit] = for {
     sessions <- sessionsR.get.map(_.values.toList)
     stream    = ZStream
                   .fromIterable(sessions)

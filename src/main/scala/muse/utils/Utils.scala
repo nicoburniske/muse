@@ -112,7 +112,7 @@ object Utils {
    * @return
    *   a program that writes the stream to the given file
    */
-  def writeToFile[R](path: String, stream: ZStream[Any, Nothing, String]): ZIO[R & Scope, IOException, Unit] =
+  def writeToFile[R](path: String, stream: ZStream[Any, Nothing, String]): ZIO[R, IOException, Unit] =
     createFileIfMissing(path) *> ZIO.scoped(
       AsynchronousFileChannel
         .open(

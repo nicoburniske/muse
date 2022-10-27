@@ -11,6 +11,7 @@ case class GetUser(id: String) extends Request[Nothing, User]
 
 object GetUser {
   def query(maybeId: Option[String]) = maybeId match
+    case None => currentUser
     case Some(id) => queryByUserId(id)
 
   def queryByUserId(userId: String) = for {

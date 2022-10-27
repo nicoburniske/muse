@@ -90,7 +90,8 @@ input SeekPlaybackInput {
 input ShareReviewInput {
   reviewId: ID!
   userId: String!
-  access: AccessLevel!
+  "If not specified user will have access revoked.
+  accessLevel: AccessLevel
 }
 
 input UpdateCommentInput {
@@ -257,7 +258,7 @@ type Queries {
 type Review {
   id: ID!
   createdAt: Instant!
-  creator: User!
+  creator: User
   reviewName: String!
   isPublic: Boolean!
   comments: [Comment!]
