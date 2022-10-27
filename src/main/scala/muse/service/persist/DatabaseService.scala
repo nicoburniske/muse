@@ -201,21 +201,21 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   inline def userSharedReviews(inline userId: String) =
     reviewAccess
       .filter(_.userId == userId)
-      .rightJoin(reviews)
+      .leftJoin(reviews)
       .on((access, review) => review.id == access.reviewId)
       .map(_._2)
 
   override def getAllUserReviews(userId: String) = run {
-    userReviews(lift(userId)).union(userSharedReviews(lift(userId)))
+    userReviews(lift(userId)).map(Some(_)) union
+      userSharedReviews(lift(userId))
   }.provide(layer)
+    .map(_.flatten)
 
   override def getUserReviewsExternal(sourceUserId: String, viewerUserId: String) = run {
-    userReviews(lift(sourceUserId))
-      .filter(_.isPublic)
-      .union {
-        userSharedReviews(lift(viewerUserId)).filter(_.creatorId == lift(sourceUserId))
-      }
+    userReviews(lift(sourceUserId)).filter(_.isPublic).map(Some(_)) union
+      userSharedReviews(lift(viewerUserId)).filter(_.exists(_.creatorId == lift(sourceUserId)))
   }.provide(layer)
+    .map(_.flatten)
 
   override def getUsers = run(users).provide(layer)
 
