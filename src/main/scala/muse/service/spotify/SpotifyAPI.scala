@@ -154,6 +154,10 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val uri = uri"${SpotifyAPI.API_BASE}/me/player/previous?device_id=$deviceId"
     executeAndIgnoreResponse(uri, Method.POST).as(true)
 
+  def toggleShuffle(shuffleState: Boolean): F[Boolean] =
+    val uri = uri"${SpotifyAPI.API_BASE}/me/player/shuffle?state=$shuffleState"
+    executeAndIgnoreResponse(uri, Method.PUT).as(true)
+
   def getAllPaging[T: JsonDecoder](request: Int => F[Paging[T]], pageSize: Int = 50): F[Vector[T]] = {
     def go(acc: Vector[T], offset: Int): F[Vector[T]] =
       request(offset).flatMap { (paging: Paging[T]) =>
@@ -213,7 +217,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
         case Right(value) => value.pure
       }
 
-  // TODO: Is there a case where we can get an HTTP Error with a non-error code? 
+  // TODO: Is there a case where we can get an HTTP Error with a non-error code?
   def spotifyResponse[B: JsonDecoder](uri: Uri, method: Method): ResponseAs[Either[SpotifyError, B], Any] =
     asJson[B].mapLeft {
       case HttpError(body, StatusCode.TooManyRequests)                            =>
@@ -221,7 +225,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       case HttpError(errorBody, code) if code.isClientError || code.isServerError =>
         decodeError(uri, method, errorBody, code)
       case de @ DeserializationException(_, _)                                    =>
-        SpotifyError.DeserializationException(de)
+        SpotifyError.DeserializationException(uri, method, de)
     }
 
   private def decodeError(uri: Uri, method: Method, errorBody: String, code: StatusCode) =

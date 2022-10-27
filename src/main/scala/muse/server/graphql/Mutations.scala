@@ -50,6 +50,7 @@ final case class Mutations(
     pausePlayback: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
     skipToNext: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
     skipToPrevious: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
+    toggleShuffle: Input[Boolean] => ZIO[MutationEnv, MutationError, Boolean],
     saveTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean]
     // Add un-saving.
 )
@@ -71,6 +72,7 @@ object Mutations {
     i => pausePlayback(i.deviceId),
     i => skipToNext(i.deviceId),
     i => skipToPrevious(i.deviceId),
+    i => toggleShuffle(i.input),
     i => saveTracks(i.input)
   )
 
@@ -190,6 +192,11 @@ object Mutations {
   def skipToPrevious(deviceId: Option[String]) = for {
     spotify <- RequestSession.get[SpotifyService]
     res     <- spotify.skipToPrevious(deviceId)
+  } yield res
+  
+  def toggleShuffle(shuffleState: Boolean) = for {
+    spotify <- RequestSession.get[SpotifyService]
+    res <- spotify.toggleShuffle(shuffleState)
   } yield res
 
   def saveTracks(trackIds: List[String]) =

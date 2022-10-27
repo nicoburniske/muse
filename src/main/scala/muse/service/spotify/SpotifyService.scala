@@ -42,6 +42,7 @@ trait SpotifyService {
   def pausePlayback(deviceId: Option[String]): Task[Boolean]
   def skipToNext(deviceId: Option[String]): Task[Boolean]
   def skipToPrevious(deviceId: Option[String]): Task[Boolean]
+  def toggleShuffle(shuffleState: Boolean): Task[Boolean]
 }
 
 object SpotifyService {
@@ -208,4 +209,5 @@ case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
   def pausePlayback(deviceId: Option[String])                 = s.pausePlayback(deviceId)
   def skipToNext(deviceId: Option[String])                    = s.skipToNext(deviceId)
   def skipToPrevious(deviceId: Option[String])                = s.skipToPrevious(deviceId)
+  def toggleShuffle(shuffleState: Boolean)                    = s.toggleShuffle(shuffleState)
 }

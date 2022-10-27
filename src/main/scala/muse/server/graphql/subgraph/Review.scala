@@ -25,7 +25,7 @@ final case class Review(
     comments: ZQuery[DatabaseService, Throwable, List[Comment]],
     entityId: String,
     entityType: EntityType,
-    entity: ZQuery[RequestSession[SpotifyService], Nothing, ReviewEntity],
+    entity: ZQuery[RequestSession[SpotifyService], Throwable, ReviewEntity],
     // TODO: this can be forbidden.
     collaborators: ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Collaborator]]
 )
@@ -37,8 +37,10 @@ object Review {
     val collaborators = for {
       reviewAccess <- GetCollaborators.query(r.id)
       user         <- ZQuery.fromZIO(RequestSession.get[UserSession]).map(_.userId)
-      _            <- if (r.creatorId == user || reviewAccess.exists(_.userId == user)) ZQuery.unit
-                      else ZQuery.fail(Forbidden("You are not allowed to view this review"))
+      _            <- ZQuery.fromZIO(
+                        ZIO
+                          .fail(Forbidden("You are not allowed to view this review"))
+                          .when(r.creatorId != user && !reviewAccess.exists(_.userId == user)))
       subQueries    = reviewAccess.map { reviewAccess =>
                         GetUser.queryByUserId(reviewAccess.userId).map(user => Collaborator(user, reviewAccess.accessLevel))
                       }
@@ -55,7 +57,9 @@ object Review {
       r.entityId,
       r.entityType,
       // TODO: ensure this is ok
-      GetEntity.query(r.entityId, r.entityType).orDie,
+      // This can't be 'orDie' because there are cases when people make playlists private.
+      // Or delete things from spotify.
+      GetEntity.query(r.entityId, r.entityType),
       collaborators
     )
   }

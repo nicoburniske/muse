@@ -205,9 +205,11 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .on((access, review) => review.id == access.reviewId)
       .map(_._2)
 
+  inline def allUserReviews(inline userId: String) =
+    userReviews(userId).map(Some(_)) union userSharedReviews(userId)
+
   override def getAllUserReviews(userId: String) = run {
-    userReviews(lift(userId)).map(Some(_)) union
-      userSharedReviews(lift(userId))
+    allUserReviews(lift(userId))
   }.provide(layer)
     .map(_.flatten)
 
@@ -377,25 +379,18 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   inline def allUsersWithWriteAccess(inline reviewId: UUID) =
     reviewCreator(reviewId) union usersWithWriteAccess(reviewId)
 
-  inline def isReviewPublic(inline reviewId: UUID): EntityQuery[Boolean] =
-    reviews.filter(_.id == lift(reviewId)).map(_.isPublic)
-
-  // TODO: can this be more efficient / Single query?
+  // TODO: test this!
   override def canViewReview(userId: String, reviewId: UUID) =
-    run(isReviewPublic(reviewId))
-      .map(_.headOption)
-      .flatMap {
-        case Some(true)  => ZIO.succeed(true)
-        case Some(false) =>
-          run {
-            allReviewUsersWithViewAccess(lift(reviewId))
-              .filter(_ == lift(userId))
-          }.map(_.nonEmpty)
-        case _           =>
-          // TODO include logic for NotFoundException?
-          throw new RuntimeException("")
-      }
-      .provide(layer)
+    run {
+      // Is review public?
+      (reviews.filter(_.isPublic).map(Some(_))
+        union
+          // Or does user have access to it?
+          allUserReviews(lift(userId)))
+        .map(_.map(_.id))
+        .filter(_.exists(_ == lift(reviewId)))
+        .nonEmpty
+    }.provide(layer)
 
   override def canModifyReview(userId: String, reviewId: UUID) = run {
     reviewCreator(lift(reviewId)).contains(lift(userId))
@@ -406,8 +401,8 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .filter(_.id == lift(commentId))
       .filter(_.reviewId == lift(reviewId))
       .map(_.commenter)
+      .contains(lift(userId))
   }.provide(layer)
-    .map(_.contains(userId))
 
   override def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean] = run {
     allUsersWithWriteAccess(lift(reviewId)).filter(_ == lift(userId))
