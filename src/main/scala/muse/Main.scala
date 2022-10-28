@@ -7,7 +7,6 @@ import caliban.Value.StringValue
 import muse.config.{AppConfig, ServerConfig}
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
-import muse.domain.table.AppUser
 import muse.server.graphql.MuseGraphQL
 import muse.server.{Auth, MuseMiddleware, MuseServer}
 import muse.service.persist.{DatabaseService, MigrationService, QuillContext}

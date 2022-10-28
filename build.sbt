@@ -39,6 +39,7 @@ lazy val root = (project in file("."))
     Compile / discoveredMainClasses  := Seq(),
     libraryDependencies ++= Seq(
       "dev.zio"                       %% "zio"                           % zio,
+      "dev.zio"                       %% "zio-cache"                     % "0.2.0",
       "dev.zio"                       %% "zio-json"                      % zioJson,
       "dev.zio"                       %% "zio-nio"                       % zio,
       // ZIO Config.

@@ -9,7 +9,8 @@ import muse.service.{RequestSession, UserSessions}
 import muse.utils.Givens.given
 import sttp.client3.SttpBackend
 import sttp.model.StatusCode
-import zio.{Schedule, Task, ZIO, ZLayer}
+import zio.cache.{Cache, Lookup}
+import zio.{Schedule, Task, ZEnvironment, ZIO, ZLayer, durationInt}
 
 trait SpotifyService {
   def getCurrentUserProfile: Task[User]
@@ -46,18 +47,23 @@ trait SpotifyService {
 }
 
 object SpotifyService {
-  val live = for {
-    accessToken <- RequestSession.get[UserSession].map(_.accessToken)
-    backend     <- ZIO.service[SttpBackend[Task, Any]]
-    spotify      = SpotifyAPI(backend, accessToken)
-  } yield SpotifyServiceLive(spotify)
-
-  val layer    = ZLayer.fromZIO(live)
-  val getLayer = live.map(ZLayer.succeed(_))
 
   def live(accessToken: String) = for {
-    backend <- ZIO.service[SttpBackend[Task, Any]]
-  } yield SpotifyServiceLive(SpotifyAPI(backend, accessToken))
+    backend       <- ZIO.service[SttpBackend[Task, Any]]
+    spotify        = SpotifyAPI(backend, accessToken)
+    likeCache     <- Cache.make(
+                       1000,
+                       10.seconds,
+                       Lookup(trackIds => spotify.checkUserSavedTracks(trackIds))
+                     )
+    playlistCache <- Cache.make(
+                       200,
+                       30.seconds,
+                       Lookup((input: PlaylistInput) => spotify.getPlaylist(input.playlistId, input.market, input.fields))
+                     )
+  } yield SpotifyServiceLive(spotify, likeCache, playlistCache)
+
+//  def withSession[T](func: SpotifyService => T)
 
   def getCurrentUserProfile = ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserProfile)
 
@@ -138,7 +144,13 @@ object SpotifyService {
     ZIO.serviceWithZIO[SpotifyService](_.seekPlayback(deviceId, positionMs))
 }
 
-case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
+case class PlaylistInput(playlistId: String, fields: Option[String], market: Option[String])
+
+case class SpotifyServiceLive(
+    s: SpotifyAPI[Task],
+    likeCache: Cache[Vector[String], Throwable, Vector[(String, Boolean)]],
+    playlistCache: Cache[PlaylistInput, Throwable, UserPlaylist]
+) extends SpotifyService {
   def getCurrentUserProfile = s.getCurrentUserProfile
 
   def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None) =
@@ -151,7 +163,8 @@ case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
     s.isValidEntity(entityId, entityType)
 
   def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None): Task[UserPlaylist] =
-    s.getPlaylist(playlistId, fields, market)
+    playlistCache.get(PlaylistInput(playlistId, fields, market))
+      <* playlistCache.cacheStats.flatMap{stats => ZIO.logInfo(s"GetPlaylist stats: $stats")}
 
   def getTrack(id: String, market: Option[String] = None): Task[Track] =
     s.getTrack(id, market)
@@ -196,7 +209,7 @@ case class SpotifyServiceLive(s: SpotifyAPI[Task]) extends SpotifyService {
     s.getArtistTopTracks(artistId, country)
 
   def checkUserSavedTracks(trackIds: Vector[String]): Task[Vector[(String, Boolean)]] =
-    s.checkUserSavedTracks(trackIds)
+    likeCache.get(trackIds)
 
   def startPlayback(device: Option[String], startPlaybackBody: Option[StartPlaybackBody]) =
     s.startPlayback(device, startPlaybackBody)

@@ -2,10 +2,22 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE SCHEMA muse;
 
-CREATE TABLE muse.app_user
+CREATE TABLE muse.user
 (
     id         VARCHAR(30) PRIMARY KEY,
     created_at TIMESTAMP NOT NULL DEFAULT current_timestamp
+);
+
+CREATE TABLE muse.user_session
+(
+    session_id VARCHAR(1000) PRIMARY KEY NOT NULL,
+    refresh_token VARCHAR(1000) NOT NULL,
+    user_id   VARCHAR(30) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT current_timestamp,
+
+    CONSTRAINT userID
+        FOREIGN KEY (user_id)
+            REFERENCES muse.user (id) ON DELETE CASCADE
 );
 
 CREATE TABLE muse.review
@@ -21,7 +33,7 @@ CREATE TABLE muse.review
 
     CONSTRAINT creatorID
         FOREIGN KEY (creator_id)
-            REFERENCES muse.app_user (id)
+            REFERENCES muse.user (id)
 );
 
 CREATE TABLE muse.review_access
@@ -30,9 +42,11 @@ CREATE TABLE muse.review_access
     user_id       VARCHAR(30) NOT NULL,
     access_level  INT         NOT NULL,
     CONSTRAINT reviewID
-        FOREIGN KEY (review_id) REFERENCES muse.review (id) ON DELETE CASCADE,
+        FOREIGN KEY (review_id)
+            REFERENCES muse.review (id) ON DELETE CASCADE,
     CONSTRAINT userID
-        FOREIGN KEY (user_id) REFERENCES muse.app_user (id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id)
+            REFERENCES muse.user (id) ON DELETE CASCADE,
     CONSTRAINT pk PRIMARY KEY (user_id, review_id)
 );
 
@@ -59,7 +73,7 @@ CREATE TABLE muse.review_comment
             REFERENCES muse.review (id) ON DELETE CASCADE,
     CONSTRAINT userID
         FOREIGN KEY (commenter)
-            REFERENCES muse.app_user (id),
+            REFERENCES muse.user (id),
     CONSTRAINT parentCommentID
         FOREIGN KEY (parent_comment_id)
             REFERENCES muse.review_comment (id),

@@ -2,7 +2,7 @@ package muse.domain.table
 
 import java.time.Instant
 
-final case class AppUser(
+final case class User(
     id: String,
     createdAt: Instant
 )

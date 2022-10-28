@@ -7,7 +7,7 @@ import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import muse.utils.Utils.*
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
-import zio.{ZEnvironment, ZIO}
+import zio.ZIO
 
 case class CheckUserLikedSong(trackId: String) extends Request[Nothing, Boolean]
 

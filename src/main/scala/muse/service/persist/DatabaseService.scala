@@ -4,7 +4,7 @@ import io.getquill.*
 import io.getquill.context.ZioJdbc.*
 import muse.domain.common.EntityType
 import muse.domain.mutate.{CreateComment, CreateReview, DeleteComment, DeleteReview, ShareReview, UpdateComment, UpdateReview}
-import muse.domain.table.{AccessLevel, AppUser, Review, ReviewAccess, ReviewComment}
+import muse.domain.table.{AccessLevel, Review, ReviewAccess, ReviewComment, User, UserSession}
 import zio.ZLayer.*
 import zio.{IO, Schedule, TaskLayer, ZIO, ZLayer, durationInt}
 
@@ -19,14 +19,16 @@ trait DatabaseService {
    * Create!
    */
   def createUser(userId: String): IO[SQLException, Unit]
+  def createUserSession(sessionId: String, refreshToken: String, userId: String): IO[SQLException, Unit]
   def createReview(id: String, review: CreateReview): IO[SQLException, Review]
   def createReviewComment(id: String, review: CreateComment): IO[SQLException, ReviewComment]
 
   /**
    * Read!
    */
-  def getUsers: IO[SQLException, List[AppUser]]
-  def getUserById(userId: String): IO[SQLException, Option[AppUser]]
+  def getUsers: IO[SQLException, List[User]]
+  def getUserById(userId: String): IO[SQLException, Option[User]]
+  def getUserSession(sessionId: String): IO[SQLException, Option[UserSession]]
   // Reviews that the given user created.
   def getUserReviews(userId: String): IO[SQLException, List[Review]]
   // Reviews that the given user has access to.
@@ -67,7 +69,11 @@ trait DatabaseService {
 object DatabaseService {
   val layer = ZLayer.fromFunction(DatabaseServiceLive.apply(_))
 
-  def createUser(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.createUser(userId))
+  def createUser(userId: String) =
+    ZIO.serviceWithZIO[DatabaseService](_.createUser(userId))
+
+  def createUserSession(sessionId: String, refreshToken: String, userId: String) =
+    ZIO.serviceWithZIO[DatabaseService](_.createUserSession(sessionId, refreshToken, userId))
 
   def createReview(userId: String, review: CreateReview) =
     ZIO.serviceWithZIO[DatabaseService](_.createReview(userId, review))
@@ -76,6 +82,9 @@ object DatabaseService {
     ZIO.serviceWithZIO[DatabaseService](_.createReviewComment(userId, c))
 
   def getUserById(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getUserById(userId))
+
+  def getUserSession(sessionId: String) =
+    ZIO.serviceWithZIO[DatabaseService](_.getUserSession(sessionId))
 
   def getReview(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReview(reviewId))
 
@@ -123,19 +132,9 @@ object DatabaseService {
   def canMakeComment(userId: String, reviewId: UUID) =
     ZIO.serviceWithZIO[DatabaseService](_.canMakeComment(userId, reviewId))
 
-  /**
-   * If username already exists, update existing row's auth information. Otherwise create user.
-   *
-   * @param userId
-   *   current user request
-   * @return
-   *   true if new User was created, false if current user was updated.
-   */
-  def createOrUpdateUser(userId: String) =
-    getUserById(userId).map(_.isDefined).flatMap {
-      case true  => ZIO.succeed(false)
-      case false => createUser(userId).as(true)
-    }
+  def createOrUpdateUser(sessionId: String, refreshToken: String, userId: String) =
+    createUser(userId)
+      *> createUserSession(sessionId, refreshToken, userId)
 
   /**
    * TODO: FIX BELOW?
@@ -184,24 +183,26 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   val layer = ZLayer.succeed(d)
 
-  inline def users = querySchema[AppUser]("muse.app_user")
+  inline def user = querySchema[User]("muse.user")
+
+  inline def userSession = querySchema[UserSession]("muse.user_session")
 
   inline def reviewAccess = querySchema[ReviewAccess]("muse.review_access")
 
-  inline def reviews = querySchema[Review]("muse.review")
+  inline def review = querySchema[Review]("muse.review")
 
-  inline def comments = querySchema[ReviewComment]("muse.review_comment")
+  inline def comment = querySchema[ReviewComment]("muse.review_comment")
 
   /**
    * Read!
    */
 
-  inline def userReviews(inline userId: String) = reviews.filter(_.creatorId == userId)
+  inline def userReviews(inline userId: String) = review.filter(_.creatorId == userId)
 
   inline def userSharedReviews(inline userId: String) =
     reviewAccess
       .filter(_.userId == userId)
-      .leftJoin(reviews)
+      .leftJoin(review)
       .on((access, review) => review.id == access.reviewId)
       .map(_._2)
 
@@ -219,29 +220,33 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
     .map(_.flatten)
 
-  override def getUsers = run(users).provide(layer)
+  override def getUsers = run(user).provide(layer)
 
   override def getReview(reviewId: UUID) = run {
-    reviews.filter(_.id == lift(reviewId))
+    review.filter(_.id == lift(reviewId))
   }.map(_.headOption).provide(layer)
 
   override def getUserById(userId: String) = run {
-    users.filter(_.id == lift(userId))
+    user.filter(_.id == lift(userId))
+  }.map(_.headOption).provide(layer)
+
+  override def getUserSession(sessionId: String) = run {
+    userSession.filter(_.sessionId == lift(sessionId))
   }.map(_.headOption).provide(layer)
 
   override def getUserReviews(userId: String) =
     run(userReviews(lift(userId))).provide(layer)
 
   override def getReviewComments(reviewId: UUID) = run {
-    comments.filter(_.reviewId == lift(reviewId))
+    comment.filter(_.reviewId == lift(reviewId))
   }.provide(layer)
 
   override def getMultiReviewComments(reviewIds: List[UUID]) = run {
-    comments.filter(c => liftQuery(reviewIds.toSet).contains(c.reviewId))
+    comment.filter(c => liftQuery(reviewIds.toSet).contains(c.reviewId))
   }.provideLayer(layer)
 
   override def getReviews(reviewIds: List[UUID]) = run {
-    reviews.filter(c => liftQuery(reviewIds.toSet).contains(c.id))
+    review.filter(c => liftQuery(reviewIds.toSet).contains(c.id))
   }.provideLayer(layer)
 
   override def getUsersWithAccess(reviewId: UUID) = run {
@@ -253,28 +258,37 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
    */
 
   override def createUser(userId: String) = run {
-    users.insert(
-      _.id -> lift(userId)
+    user
+      .insert(
+        _.id -> lift(userId)
+      ).onConflictIgnore
+  }.provideLayer(layer).unit
+
+  def createUserSession(sessionId: String, refreshToken: String, userId: String) = run {
+    userSession.insert(
+      _.sessionId    -> lift(sessionId),
+      _.refreshToken -> lift(refreshToken),
+      _.userId       -> lift(userId)
     )
   }.provideLayer(layer).unit
 
-  override def createReview(userId: String, review: CreateReview) = run {
-    reviews
+  override def createReview(userId: String, create: CreateReview) = run {
+    review
       .insert(
         _.creatorId  -> lift(userId),
-        _.reviewName -> lift(review.name),
-        _.isPublic   -> lift(review.isPublic),
-        _.entityType -> lift(review.entityType),
-        _.entityId   -> lift(review.entityId)
+        _.reviewName -> lift(create.name),
+        _.isPublic   -> lift(create.isPublic),
+        _.entityType -> lift(create.entityType),
+        _.entityId   -> lift(create.entityId)
       )
       .returningGenerated(r => r.id -> r.createdAt)
   }.provide(layer).map {
     case (uuid, instant) =>
-      Review(uuid, instant, userId, review.name, review.isPublic, review.entityType, review.entityId)
+      Review(uuid, instant, userId, create.name, create.isPublic, create.entityType, create.entityId)
   }
 
   override def createReviewComment(userId: String, c: CreateComment) = run {
-    comments
+    comment
       .insert(
         _.reviewId        -> lift(c.reviewId),
         _.commenter       -> lift(userId),
@@ -294,7 +308,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
    * Update!
    */
   override def updateReview(r: UpdateReview) = run {
-    reviews
+    review
       .filter(_.id == lift(r.reviewId))
       .update(
         _.reviewName -> lift(r.name),
@@ -305,7 +319,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   override def updateComment(c: UpdateComment) = ZIO
     .succeed(Instant.now()).flatMap { now =>
       run {
-        comments
+        comment
           .filter(_.id == lift(c.commentId))
           .filter(_.reviewId == lift(c.reviewId))
           .update(
@@ -345,12 +359,12 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
    * Delete!
    */
   def deleteReview(delete: DeleteReview) = run {
-    reviews.filter(_.id == lift(delete.id)).delete
+    review.filter(_.id == lift(delete.id)).delete
   }.provide(layer)
     .map(_ > 0)
 
   def deleteComment(d: DeleteComment) = run {
-    comments
+    comment
       .filter(_.id == lift(d.commentId))
       .filter(_.reviewId == lift(d.reviewId))
       .delete
@@ -362,7 +376,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
    */
 
   inline def reviewCreator(inline reviewId: UUID): EntityQuery[String] =
-    reviews.filter(_.id == reviewId).map(_.creatorId)
+    review.filter(_.id == reviewId).map(_.creatorId)
 
   inline def usersWithAccess(inline reviewId: UUID): EntityQuery[String] =
     reviewAccess.filter(_.reviewId == reviewId).map(_.userId)
@@ -383,7 +397,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   override def canViewReview(userId: String, reviewId: UUID) =
     run {
       // Is review public?
-      (reviews.filter(_.isPublic).map(Some(_))
+      (review.filter(_.isPublic).map(Some(_))
         union
           // Or does user have access to it?
           allUserReviews(lift(userId)))
@@ -397,7 +411,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
 
   override def canModifyComment(userId: String, reviewId: UUID, commentId: Int) = run {
-    comments
+    comment
       .filter(_.id == lift(commentId))
       .filter(_.reviewId == lift(reviewId))
       .map(_.commenter)
