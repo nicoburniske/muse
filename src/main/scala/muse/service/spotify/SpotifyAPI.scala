@@ -39,7 +39,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val uri = uri"${SpotifyAPI.API_BASE}/tracks/$id?market=$market"
     execute[Track](uri, Method.GET)
 
-  def getTracks(ids: Seq[String], market: Option[String] = None): F[Vector[Track]] =
+  def getTracks(ids: Vector[String], market: Option[String] = None): F[Vector[Track]] =
     val uri = uri"${SpotifyAPI.API_BASE}/tracks?market=$market&ids=${ids.mkString(",")}"
     execute[MultiTrack](uri, Method.GET).map(_.tracks)
 
@@ -47,7 +47,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val uri = uri"${SpotifyAPI.API_BASE}/artists/$id"
     execute[Artist](uri, Method.GET)
 
-  def getArtists(ids: Seq[String]): F[Vector[Artist]] =
+  def getArtists(ids: Vector[String]): F[Vector[Artist]] =
     if (ids.length > 50) {
       m.raiseError(SpotifyError.MalformedRequest("Too many Artist IDs. Maximum allowed is 50"))
     } else {
@@ -59,7 +59,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val uri = uri"${SpotifyAPI.API_BASE}/albums/$id"
     execute[Album](uri, Method.GET)
 
-  def getAlbums(ids: Seq[String]): F[Vector[Album]] =
+  def getAlbums(ids: Vector[String]): F[Vector[Album]] =
     if (ids.length > 20) {
       m.raiseError(SpotifyError.MalformedRequest("Too many Album IDs. Maximum allowed is 20"))
     } else {
@@ -135,8 +135,12 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     executeAndIgnoreResponse(uri, Method.PUT).as(true)
 
   def saveTracks(trackIds: Vector[String]): F[Boolean] =
-    val uri = uri"${SpotifyAPI.API_BASE}/me/tracks/ids=${trackIds.distinct.mkString(",")}"
+    val uri = uri"${SpotifyAPI.API_BASE}/me/tracks?ids=${trackIds.distinct.mkString(",")}"
     executeAndIgnoreResponse(uri, Method.PUT).as(true)
+  
+  def removeSavedTracks(trackIds: Vector[String]): F[Boolean] =
+    val uri = uri"${SpotifyAPI.API_BASE}/me/tracks?ids=${trackIds.distinct.mkString(",")}"
+    executeAndIgnoreResponse(uri, Method.DELETE).as(true)
 
   def getPlaybackState: F[Option[PlaybackState]] =
     val uri = uri"${SpotifyAPI.API_BASE}/me/player"

@@ -74,57 +74,53 @@ object MuseMiddleware {
   }
 
   object Websockets {
-    private val sessions = Http.fromZIO {
+    private val session = Http.fromZIO {
       for {
-        ws   <- Ref.make[Option[UserSession]](None)
-        spot <- Ref.make[Option[SpotifyService]](None)
-      } yield (ws, spot)
+        ws <- Ref.make[Option[UserSession]](None)
+      } yield ws
     }
 
     def live[R <: UserSessions](interpreter: GraphQLInterpreter[R, CalibanError]) =
-      sessions.flatMap {
-        case (wsRef, spotRef) =>
-          val authSession = createSession[UserSession](wsRef)
-          val spotSession = createSession[SpotifyService](spotRef)
+      session.flatMap { ref =>
+        val authSession = createSession[UserSession](ref)
 
-          val connectionInit = WebSocketHooks.init { payload =>
-            ZIO
-              .fromOption {
-                payload match
-                  case InputValue.ObjectValue(fields) =>
-                    fields.get("Authorization").flatMap {
-                      case StringValue(s) => Some(s)
-                      case _              => None
-                    }
-                  case _                              => None
-              }.orElseFail(Unauthorized("Missing Auth: Unable to decode payload"))
-              .flatMap(auth => UserSessions.getUserSession(auth))
-              .flatMap(session => authSession.set(Some(session)) <&> spotSession.set(Some(session.spotifyService)))
-              .unit
-          }
+        val connectionInit = WebSocketHooks.init { payload =>
+          ZIO
+            .fromOption {
+              payload match
+                case InputValue.ObjectValue(fields) =>
+                  fields.get("Authorization").flatMap {
+                    case StringValue(s) => Some(s)
+                    case _              => None
+                  }
+                case _                              => None
+            }.orElseFail(Unauthorized("Missing Auth: Unable to decode payload"))
+            .flatMap(auth => UserSessions.getUserSession(auth))
+            .flatMap(session => authSession.set(Some(session)))
+            .unit
+        }
 
-          type Env = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]
-          // Ensure that each message has latest sessions in environment.
-          val transformService = WebSocketHooks.message(new StreamTransformer[Env, Throwable] {
-            def transform[R1 <: Env, E1 >: Throwable](
-                stream: ZStream[R1, E1, GraphQLWSOutput]
-            ): ZStream[R1, E1, GraphQLWSOutput] =
-              ZStream.fromZIO(
-                for {
-                  sessionId  <- authSession.get.map(_.sessionId)
-                  newSession <- UserSessions.getUserSession(sessionId)
-                  _          <- authSession.set(Some(newSession))
-                  _          <- spotSession.set(Some(newSession.spotifyService))
-                } yield ()
-              ) *> stream
-                .updateService[RequestSession[UserSession]](_ => authSession)
-                .updateService[RequestSession[SpotifyService]](_ => spotSession)
-          })
+        type Env = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]
+        // Ensure that each message has latest sessions in environment.
+        val transformService = WebSocketHooks.message(new StreamTransformer[Env, Throwable] {
+          def transform[R1 <: Env, E1 >: Throwable](
+              stream: ZStream[R1, E1, GraphQLWSOutput]
+          ): ZStream[R1, E1, GraphQLWSOutput] =
+            ZStream.fromZIO(
+              for {
+                sessionId     <- authSession.get.map(_.sessionId)
+                latestSession <- UserSessions.getUserSession(sessionId)
+                _             <- authSession.set(Some(latestSession)) <&>
+                                   RequestSession.set[UserSession](Some(latestSession)) <&>
+                                   RequestSession.set[SpotifyService](Some(latestSession.spotifyService))
+              } yield ()
+            ) *> stream
+        })
 
-          ZHttpAdapter.makeWebSocketService(
-            interpreter,
-            webSocketHooks = connectionInit ++ transformService
-          )
+        ZHttpAdapter.makeWebSocketService(
+          interpreter,
+          webSocketHooks = connectionInit ++ transformService
+        )
       }
   }
 

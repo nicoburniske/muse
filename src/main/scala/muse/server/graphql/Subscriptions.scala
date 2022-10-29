@@ -36,8 +36,8 @@ object Subscriptions {
   def playbackState(tickInterval: Int) =
     val tick = if (tickInterval < 1) 1 else tickInterval
     ZStream
-      .tick(tick.seconds)
-      .via(getSpotify)
+      .tick(500.millis)
+      .via(getSpotifyPipeline)
       .mapZIO(_.currentPlaybackState)
       .via(flattenOption)
       // Only send updates for new playback states.
@@ -57,7 +57,7 @@ object Subscriptions {
   lazy val availableDevices =
     ZStream
       .tick(5.seconds)
-      .via(getSpotify)
+      .via(getSpotifyPipeline)
       .mapZIO(_.getAvailableDevices)
       .map(_.toList)
       // If devices are the same don't send update.
@@ -78,7 +78,7 @@ object Subscriptions {
 //    .ensuring(
 //    )
 
-  private def getSpotify = ZPipeline.mapZIO(_ => ZIO.serviceWithZIO[RequestSession[SpotifyService]](_.get))
+  private def getSpotifyPipeline = ZPipeline.mapZIO(_ => ZIO.serviceWithZIO[RequestSession[SpotifyService]](_.get))
 
   private def flattenOption[T] =
     ZPipeline.filter[Option[T]](_.isDefined) >>>

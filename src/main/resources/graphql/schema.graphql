@@ -90,7 +90,7 @@ input SeekPlaybackInput {
 input ShareReviewInput {
   reviewId: ID!
   userId: String!
-  "If not specified user will have access revoked.
+  "If not specified user will have access revoked."
   accessLevel: AccessLevel
 }
 
@@ -194,7 +194,9 @@ type Mutations {
   pausePlayback(deviceId: String): Boolean
   skipToNext(deviceId: String): Boolean
   skipToPrevious(deviceId: String): Boolean
+  toggleShuffle(input: Boolean!): Boolean
   saveTracks(input: [String!]!): Boolean
+  removeSavedTracks(input: [String!]!): Boolean
 }
 
 type PlaybackContext {
@@ -264,7 +266,7 @@ type Review {
   comments: [Comment!]
   entityId: String!
   entityType: EntityType!
-  entity: ReviewEntity!
+  entity: ReviewEntity
   collaborators: [Collaborator!]
 }
 

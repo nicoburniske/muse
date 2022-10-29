@@ -21,7 +21,8 @@ object Auth {
     "playlist-read-collaborative",
     "user-modify-playback-state",
     "user-read-playback-state",
-    "user-read-currently-playing"
+    "user-read-currently-playing",
+    "user-library-modify"
   ).mkString(" ")
 
   val loginEndpoints = Http
@@ -107,7 +108,7 @@ object Auth {
       spotifyUserId = userInfo.id
       _            <- ZIO.logInfo(s"Retrieved profile data for user $spotifyUserId")
       _            <- DatabaseService
-                        .createOrUpdateUser(newSessionId,  auth.refreshToken, spotifyUserId)
+                        .createOrUpdateUser(newSessionId, auth.refreshToken, spotifyUserId)
                         .timeout(10.seconds)
                         .tapError(_ => ZIO.logError("Failed to process user login."))
       _            <- ZIO.logInfo(s"Successfully logged in $spotifyUserId.")

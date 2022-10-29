@@ -40,7 +40,7 @@ object UserSessions {
   private def getUserSessionLive(sessionId: String) = for {
     maybeSession <- DatabaseService.getUserSession(sessionId)
     session      <- ZIO.fromOption(maybeSession).orElseFail(Unauthorized(s"Invalid User Session."))
-    authInfo     <- SpotifyAuthService.requestNewAccessToken(session.refreshToken)
+    authInfo     <- SpotifyAuthService.requestNewAccessToken(session.refreshToken).retry(Schedule.recurs(2))
     spotify      <- SpotifyService.live(authInfo.accessToken)
     instant      <- Clock.instant
     expiration    = instant.plus(authInfo.expiresIn, ChronoUnit.SECONDS).minus(1, ChronoUnit.MINUTES)

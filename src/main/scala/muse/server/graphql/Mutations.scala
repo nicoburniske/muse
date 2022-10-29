@@ -51,8 +51,8 @@ final case class Mutations(
     skipToNext: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
     skipToPrevious: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
     toggleShuffle: Input[Boolean] => ZIO[MutationEnv, MutationError, Boolean],
-    saveTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean]
-    // Add un-saving.
+    saveTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean],
+    removeSavedTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean]
 )
 
 final case class Input[T](input: T)
@@ -73,7 +73,8 @@ object Mutations {
     i => skipToNext(i.deviceId),
     i => skipToPrevious(i.deviceId),
     i => toggleShuffle(i.input),
-    i => saveTracks(i.input)
+    i => saveTracks(i.input),
+    i => removeSavedTracks(i.input)
   )
 
   type Mutation[A] = ZIO[MutationEnv, MutationError, A]
@@ -193,14 +194,17 @@ object Mutations {
     spotify <- RequestSession.get[SpotifyService]
     res     <- spotify.skipToPrevious(deviceId)
   } yield res
-  
+
   def toggleShuffle(shuffleState: Boolean) = for {
     spotify <- RequestSession.get[SpotifyService]
-    res <- spotify.toggleShuffle(shuffleState)
+    res     <- spotify.toggleShuffle(shuffleState)
   } yield res
 
   def saveTracks(trackIds: List[String]) =
     RequestSession.get[SpotifyService].flatMap(_.saveTracks(trackIds.toVector)).addTimeLog("Tracks saved")
+
+  def removeSavedTracks(trackIds: List[String]) =
+    RequestSession.get[SpotifyService].flatMap(_.removeSavedTracks(trackIds.toVector)).addTimeLog("Removed tracks")
 
   private def toUri(entityType: EntityType, entityId: String) = entityType match
     case EntityType.Album    => s"spotify:album:$entityId"
