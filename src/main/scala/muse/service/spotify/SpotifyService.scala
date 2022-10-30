@@ -15,12 +15,15 @@ import zio.{Schedule, Task, ZEnvironment, ZIO, ZLayer, durationInt}
 
 trait SpotifyService {
   def getCurrentUserProfile: Task[User]
+  def getTrackRecommendations(input: TrackRecsInput): Task[Vector[Track]]
   def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None): Task[SearchResult]
   def getUserProfile(userId: String): Task[User]
   def isValidEntity(entityId: String, entityType: EntityType): Task[Boolean]
   def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None): Task[UserPlaylist]
   def getTrack(id: String, market: Option[String] = None): Task[Track]
   def getTracks(ids: Seq[String], market: Option[String] = None): Task[Vector[Track]]
+  def getTrackAudioFeatures(id: String): Task[AudioFeatures]
+  def getTracksAudioFeatures(ids: Vector[String]): Task[Vector[AudioFeatures]]
   def getArtist(id: String): Task[Artist]
   def getArtists(ids: Seq[String]): Task[Vector[Artist]]
   def getAlbum(id: String): Task[Album]
@@ -84,6 +87,12 @@ object SpotifyService {
 
   def getTracks(ids: Seq[String], market: Option[String] = None) =
     ZIO.serviceWithZIO[SpotifyService](_.getTracks(ids, market))
+
+  def getTrackAudioFeatures(id: String) =
+    ZIO.serviceWithZIO[SpotifyService](_.getTrackAudioFeatures(id))
+
+  def getTracksAudioFeatures(ids: Vector[String]) =
+    ZIO.serviceWithZIO[SpotifyService](_.getTracksAudioFeatures(ids))
 
   def getArtist(id: String) = ZIO.serviceWithZIO[SpotifyService](_.getArtist(id))
 
@@ -154,6 +163,7 @@ case class SpotifyServiceLive(
     albumCache: zcaffeine.Cache[Any, String, Album]
 ) extends SpotifyService {
   def getCurrentUserProfile = s.getCurrentUserProfile
+  def getTrackRecommendations(input: TrackRecsInput) = s.getTrackRecommendations(input).map(_.tracks)
 
   def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None) =
     s.search(query, entityTypes, limit, offset)
@@ -161,18 +171,24 @@ case class SpotifyServiceLive(
   def getUserProfile(userId: String) =
     s.getUserProfile(userId)
 
-  def isValidEntity(entityId: String, entityType: EntityType): Task[Boolean] =
+  def isValidEntity(entityId: String, entityType: EntityType) =
     s.isValidEntity(entityId, entityType)
 
-  def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None): Task[UserPlaylist] =
+  def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None) =
     playlistCache.get(PlaylistInput(playlistId, fields, market))
       <* playlistCache.cacheStats.flatMap { stats => ZIO.logInfo(s"GetPlaylist stats: $stats") }
 
-  def getTrack(id: String, market: Option[String] = None): Task[Track] =
+  def getTrack(id: String, market: Option[String] = None) =
     s.getTrack(id, market)
 
-  def getTracks(ids: Seq[String], market: Option[String] = None): Task[Vector[Track]] =
+  def getTracks(ids: Seq[String], market: Option[String] = None) =
     s.getTracks(ids.toVector, market)
+
+  def getTracksAudioFeatures(ids: Vector[String]) =
+    s.getTracksAudioFeatures(ids)
+
+  def getTrackAudioFeatures(id: String) =
+    s.getTrackAudioFeatures(id)
 
   def getArtist(id: String): Task[Artist] = artistCache.get(id)(s.getArtist)
 

@@ -144,6 +144,27 @@ type Artist implements ReviewEntity {
   topTracks: [Track!]
 }
 
+type AudioFeatures {
+  acousticness: Float!
+  analysisUrl: String!
+  danceability: Float!
+  durationMs: Int!
+  energy: Float!
+  id: String!
+  instrumentalness: Float!
+  key: Int!
+  liveness: Float!
+  loudness: Float!
+  mode: Int!
+  speechiness: Float!
+  tempo: Float!
+  timeSignature: Int!
+  trackHref: String!
+  type: String!
+  uri: String!
+  valence: Float!
+}
+
 type Collaborator {
   user: User!
   accessLevel: AccessLevel!
@@ -311,6 +332,7 @@ type Track implements ReviewEntity {
   isLocal: Boolean!
   uri: String!
   isLiked: Boolean
+  audioFeatures: AudioFeatures
 }
 
 type UpdatedComment {

@@ -9,7 +9,8 @@ import muse.server.graphql.resolver.{
   GetArtist,
   GetArtistAlbums,
   GetArtistTopTracks,
-  GetPlaylistTracks
+  GetPlaylistTracks,
+  GetTrackAudioFeatures
 }
 import muse.server.graphql.subgraph
 import muse.service.RequestSession
@@ -130,7 +131,8 @@ case class Track(
     trackNumber: Int,
     isLocal: Boolean,
     uri: String,
-    isLiked: ZQuery[RequestSession[SpotifyService], Throwable, Boolean]
+    isLiked: ZQuery[RequestSession[SpotifyService], Throwable, Boolean],
+    audioFeatures: ZQuery[RequestSession[SpotifyService], Throwable, spotify.AudioFeatures]
 ) extends ReviewEntity
 
 object Track {
@@ -155,7 +157,8 @@ object Track {
       t.trackNumber,
       t.isLocal,
       t.uri,
-      CheckUserLikedSong.query(t.id)
+      CheckUserLikedSong.query(t.id),
+      GetTrackAudioFeatures.query(t.id)
     )
   }
   def fromSpotify(t: spotify.Track, albumId: Option[String] = None) = {
@@ -175,7 +178,8 @@ object Track {
       t.trackNumber,
       t.isLocal,
       t.uri,
-      CheckUserLikedSong.query(t.id)
+      CheckUserLikedSong.query(t.id),
+      GetTrackAudioFeatures.query(t.id)
     )
   }
 }

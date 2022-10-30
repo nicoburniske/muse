@@ -16,6 +16,11 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val uri          = uri"${SpotifyAPI.API_BASE}/search?q=$query&type=$encodedTypes&limit=$limit&offset=$offset"
     execute(uri, Method.GET)
 
+  def getTrackRecommendations(input: TrackRecsInput): F[MultiRecommendations] = {
+    val uri = uri"${SpotifyAPI.API_BASE}/recommendations?${input.toUriString}"
+    execute(uri, Method.GET)
+  }
+
   def getCurrentUserProfile: F[User] =
     val uri = uri"${SpotifyAPI.API_BASE}/me"
     execute(uri, Method.GET)
@@ -42,6 +47,14 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
   def getTracks(ids: Vector[String], market: Option[String] = None): F[Vector[Track]] =
     val uri = uri"${SpotifyAPI.API_BASE}/tracks?market=$market&ids=${ids.mkString(",")}"
     execute[MultiTrack](uri, Method.GET).map(_.tracks)
+
+  def getTrackAudioFeatures(id: String) =
+    val uri = uri"${SpotifyAPI.API_BASE}/audio-features?id=$id"
+    execute[AudioFeatures](uri, Method.GET)
+
+  def getTracksAudioFeatures(ids: Vector[String]) =
+    val uri = uri"${SpotifyAPI.API_BASE}/audio-features?ids=${ids.mkString(",")}"
+    execute[MultiAudioFeatures](uri, Method.GET).map(_.audioFeatures)
 
   def getArtist(id: String): F[Artist] =
     val uri = uri"${SpotifyAPI.API_BASE}/artists/$id"
@@ -137,7 +150,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
   def saveTracks(trackIds: Vector[String]): F[Boolean] =
     val uri = uri"${SpotifyAPI.API_BASE}/me/tracks?ids=${trackIds.distinct.mkString(",")}"
     executeAndIgnoreResponse(uri, Method.PUT).as(true)
-  
+
   def removeSavedTracks(trackIds: Vector[String]): F[Boolean] =
     val uri = uri"${SpotifyAPI.API_BASE}/me/tracks?ids=${trackIds.distinct.mkString(",")}"
     executeAndIgnoreResponse(uri, Method.DELETE).as(true)
