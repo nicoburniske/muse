@@ -50,16 +50,16 @@ CREATE TABLE muse.review_entity
 
 CREATE TABLE muse.review_link
 (
-    parent_review UUID NOT NULL,
-    child_review  UUID NOT NULL,
+    parent_review_id UUID NOT NULL,
+    child_review_id  UUID NOT NULL,
 
     CONSTRAINT reviewLinkPrimaryKey
-        PRIMARY KEY (parent_review, child_review),
+        PRIMARY KEY (parent_review_id, child_review_id),
     CONSTRAINT parentReview
-        FOREIGN KEY (parent_review)
+        FOREIGN KEY (parent_review_id)
             REFERENCES muse.review (id),
     CONSTRAINT childReview
-        FOREIGN KEY (child_review)
+        FOREIGN KEY (child_review_id)
             REFERENCES muse.review (id)
 );
 

@@ -61,6 +61,7 @@ trait DatabaseService {
   def getMultiReviewComments(reviewIds: List[UUID]): IO[SQLException, List[(ReviewComment, Option[ReviewCommentEntity])]]
   def getReviews(reviewIds: List[UUID]): IO[SQLException, List[Review]]
   def getReview(reviewId: UUID): IO[SQLException, Option[(Review, Option[ReviewEntity])]]
+  def getReviewWithPermissions(reviewId: UUID, userId: String): IO[SQLException, Option[(Review, Option[ReviewEntity])]]
   def getChildReviews(reviewId: UUID): IO[SQLException, List[(Review, Option[ReviewEntity])]]
 
   def getUsersWithAccess(reviewId: UUID): IO[SQLException, List[ReviewAccess]]
@@ -73,6 +74,7 @@ trait DatabaseService {
   def updateReviewEntity(review: ReviewEntity): IO[SQLException, Boolean]
   def updateComment(comment: UpdateComment): IO[SQLException, ReviewComment]
   def shareReview(share: ShareReview): IO[SQLException, Boolean]
+  def linkReviews(parentReviewId: UUID, childReviewId: UUID): IO[SQLException, Boolean]
 
   /**
    * Delete!
@@ -82,6 +84,7 @@ trait DatabaseService {
   def deleteReview(d: DeleteReview): IO[SQLException, Boolean]
   // TODO: fix delete to mark boolean field as deleted.
   def deleteComment(d: DeleteComment): IO[SQLException, Boolean]
+  def deleteReviewLink(parentReviewId: UUID, childReviewId: UUID): IO[SQLException, Boolean]
 
   /**
    * Permissions!
@@ -168,7 +171,6 @@ object DatabaseService {
   def createOrUpdateUser(sessionId: String, refreshToken: String, userId: String) =
     createUser(userId)
       *> createUserSession(sessionId, refreshToken, userId)
-
 }
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
@@ -225,32 +227,26 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   inline def userSharedReviews(inline userId: String) =
     reviewAccess
       .filter(_.userId == userId)
-      .leftJoin(review)
+      .join(review)
       .on((access, review) => review.id == access.reviewId)
       .map(_._2)
 
   inline def allUserReviews(inline userId: String) =
-    userReviews(userId).map(Some(_)) union userSharedReviews(userId)
+    userReviews(userId) union userSharedReviews(userId)
 
   override def getAllUserReviews(userId: String) = run {
     allUserReviews(lift(userId))
       .leftJoin(reviewEntity)
-      .on((review, entity) => review.exists(_.id == entity.reviewId))
+      .on((review, entity) => review.id == entity.reviewId)
   }.provide(layer)
-    .map(a => filterNonDefinedReviews(a))
 
   override def getUserReviewsExternal(sourceUserId: String, viewerUserId: String) = run {
-    (userReviews(lift(sourceUserId)).filter(_.isPublic).map(Some(_)) union
-      userSharedReviews(lift(viewerUserId)))
-      .filter(_.exists(_.creatorId == lift(sourceUserId)))
-      .leftJoin(reviewEntity)
-      .on((review, entity) => review.exists(_.id == entity.reviewId))
+    for {
+      review <- userReviews(lift(sourceUserId)).filter(_.isPublic) union userSharedReviews(lift(viewerUserId))
+      if review.creatorId == lift(sourceUserId)
+      entity <- reviewEntity.leftJoin(_.reviewId == review.id)
+    } yield (review, entity)
   }.provide(layer)
-    .map(a => filterNonDefinedReviews(a))
-
-  private def filterNonDefinedReviews(a: List[(Option[Review], Option[ReviewEntity])]) =
-    a.filter { case (review, _) => review.isDefined }
-      .map { case (review, entity) => review.get -> entity }
 
   override def getUsers = run(user).provide(layer)
 
@@ -262,14 +258,21 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
     .map(_.headOption)
 
-  def getChildReviews(reviewId: UUID) = run {
+  override def getReviewWithPermissions(reviewId: UUID, userId: String) = run {
+    allViewableReviews(lift(userId))
+      .filter(_.id == lift(reviewId))
+      .leftJoin(reviewEntity)
+      .on((review, entity) => review.id == entity.reviewId)
+  }.provide(layer)
+    .map(_.headOption)
+
+  override def getChildReviews(reviewId: UUID) = run {
     for {
-      links          <- reviewLink.filter(_.parentReview == lift(reviewId))
-      child          <- review.leftJoin(_.id == links.childReview)
-      reviewEntities <- reviewEntity.leftJoin(e => child.exists(_.id == e.reviewId))
+      links          <- reviewLink.filter(_.parentReviewId == lift(reviewId))
+      child          <- review.join(_.id == links.childReviewId)
+      reviewEntities <- reviewEntity.leftJoin(e => child.id == e.reviewId)
     } yield (child, reviewEntities)
   }.provide(layer)
-    .map(a => filterNonDefinedReviews(a))
 
   override def getUserById(userId: String) = run {
     user.filter(_.id == lift(userId))
@@ -279,12 +282,11 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     userSession.filter(_.sessionId == lift(sessionId))
   }.map(_.headOption).provide(layer)
 
-  override def getUserReviews(userId: String) =
-    run(
-      userReviews(lift(userId))
-        .leftJoin(reviewEntity)
-        .on((review, entity) => review.id == entity.reviewId)
-    ).provide(layer)
+  override def getUserReviews(userId: String) = run {
+    userReviews(lift(userId))
+      .leftJoin(reviewEntity)
+      .on((review, entity) => review.id == entity.reviewId)
+  }.provide(layer)
 
   override def getReviewComments(reviewId: UUID) = run {
     comment
@@ -436,6 +438,14 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .provide(layer)
       .map(_ > 0)
 
+  def linkReviews(parentReviewId: UUID, childReviewId: UUID) = run {
+    reviewLink
+      .insert(
+        _.parentReviewId -> lift(parentReviewId),
+        _.childReviewId  -> lift(childReviewId)
+      ).onConflictIgnore
+  }.provide(layer).map(_ > 0)
+
   /**
    * Delete!
    */
@@ -452,18 +462,20 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
     .map(_ > 0)
 
+  def deleteReviewLink(parentReviewId: UUID, childReviewId: UUID) = run {
+    reviewLink
+      .filter(_.parentReviewId == lift(parentReviewId))
+      .filter(_.childReviewId == lift(childReviewId))
+      .delete
+  }.provide(layer)
+    .map(_ > 0)
+
   /**
    * Permissions logic.
    */
 
   inline def reviewCreator(inline reviewId: UUID): EntityQuery[String] =
     review.filter(_.id == reviewId).map(_.creatorId)
-
-  inline def usersWithAccess(inline reviewId: UUID): EntityQuery[String] =
-    reviewAccess.filter(_.reviewId == reviewId).map(_.userId)
-
-  inline def allReviewUsersWithViewAccess(inline reviewId: UUID): Query[String] =
-    reviewCreator(reviewId) union usersWithAccess(reviewId)
 
   inline def usersWithWriteAccess(inline reviewId: UUID): EntityQuery[String] =
     reviewAccess
@@ -474,16 +486,16 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   inline def allUsersWithWriteAccess(inline reviewId: UUID) =
     reviewCreator(reviewId) union usersWithWriteAccess(reviewId)
 
+  // Is review public?
+  // Or does user have access to it?
+  inline def allViewableReviews(inline userId: String) =
+    review.filter(_.isPublic) union allUserReviews(userId)
+
   // TODO: test this!
   override def canViewReview(userId: String, reviewId: UUID) =
     run {
-      // Is review public?
-      (review.filter(_.isPublic).map(Some(_))
-        union
-          // Or does user have access to it?
-          allUserReviews(lift(userId)))
-        .map(_.map(_.id))
-        .filter(_.exists(_ == lift(reviewId)))
+      allViewableReviews(lift(userId))
+        .filter(_.id == lift(reviewId))
         .nonEmpty
     }.provide(layer)
 
