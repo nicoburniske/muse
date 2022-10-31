@@ -22,14 +22,14 @@ final case class Subscriptions(
 )
 
 case class NowPlayingArgs(tickInterval: Int)
-case class ReviewUpdatesArgs(reviewId: UUID)
+case class ReviewUpdatesArgs(reviewIds: Set[UUID])
 
 object Subscriptions {
   val live: Subscriptions = Subscriptions(
     a => playbackState(a.tickInterval),
     availableDevices,
     i => GetPlaylistTracks.stream(i.input.playlistId, i.input.numTracks),
-    i => reviewUpdates(i.reviewId)
+    i => reviewUpdates(i.reviewIds)
   )
 
   // noinspection InfallibleEffectRecoveryInspection
@@ -70,9 +70,10 @@ object Subscriptions {
       .filter(_.nonEmpty)
       .tapErrorCause(cause => ZIO.logErrorCause(s"Error while getting availableDevices: $cause", cause))
 
-  def reviewUpdates(reviewId: UUID) = for {
+  def reviewUpdates(reviewIds: Set[UUID]) = for {
     queue  <- ZStream.fromZIO(ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.subscribe))
-    update <- ZStream.fromQueue(queue).filter(_.reviewId == reviewId)
+    update <- ZStream.fromQueue(queue)
+    if reviewIds.contains(update.reviewId)
   } yield update
   // TODO: Add user session references to see who is viewing review live.
 //    .ensuring(

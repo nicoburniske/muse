@@ -2,20 +2,28 @@ package muse.service.spotify
 
 import com.stuart.zcaffeine.ZCaffeine
 import com.stuart.zcaffeine.ZCaffeine.State
-import muse.domain.spotify.Album
 import com.stuart.zcaffeine.types.*
-import com.stuart.zcaffeine.ZCaffeine
-import muse.domain.spotify.{Album, Artist}
-import zio.{Duration, ZLayer, durationInt}
+import muse.domain.spotify.{Album, Artist, User}
+import zio.cache.{Cache, Lookup}
+import zio.{Duration, Task, ZIO, ZLayer, durationInt}
 
 object SpotifyCache {
-  val albumCacheLayer  = ZLayer.fromZIO(albumCache.flatMap(_.build()))
-  val artistCacheLayer = ZLayer.fromZIO(artistCache.flatMap(_.build()))
-  val layer            = albumCacheLayer ++ artistCacheLayer
+  val albumCacheLayer  = ZLayer.fromZIO(albumCache)
+  val artistCacheLayer = ZLayer.fromZIO(artistCache)
+  val userCacheLayer   = ZLayer.fromZIO(userCache)
+  val layer            = albumCacheLayer ++ artistCacheLayer ++ userCacheLayer
 
-  lazy val albumCache = ZCaffeine[Any, String, Album]().map(configureCache(1.hour, _))
+  lazy val albumCache = ZCaffeine[Any, String, Album]()
+    .map(configureCache(1.hour, _))
+    .flatMap(_.build())
 
-  lazy val artistCache = ZCaffeine[Any, String, Artist]().map(configureCache(1.hour, _))
+  lazy val artistCache = ZCaffeine[Any, String, Artist]()
+    .map(configureCache(1.hour, _))
+    .flatMap(_.build())
+
+  lazy val userCache = ZCaffeine[Any, String, User]()
+    .map(configureCache(30.minutes, _))
+    .flatMap(_.build())
 
   lazy val savedSongsCache = ZCaffeine[Any, String, Boolean]()
     .map(configureCache(10.seconds, _))

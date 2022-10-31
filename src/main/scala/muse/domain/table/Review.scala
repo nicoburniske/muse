@@ -11,9 +11,7 @@ final case class Review(
     createdAt: Instant,
     creatorId: String,
     reviewName: String,
-    isPublic: Boolean,
-    entityType: EntityType,
-    entityId: String
+    isPublic: Boolean
 )
 
 object Review {

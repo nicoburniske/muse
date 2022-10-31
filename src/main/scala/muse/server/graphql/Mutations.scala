@@ -3,23 +3,10 @@ package muse.server.graphql
 import muse.domain.common.EntityType
 import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
 import muse.domain.event.{CreatedComment, DeletedComment, ReviewUpdate, UpdatedComment}
-import muse.domain.mutate.{
-  AlterPlayback,
-  Context,
-  CreateComment,
-  CreateReview,
-  DeleteComment,
-  DeleteReview,
-  EntityOffset,
-  PlaybackContext,
-  PositionOffset,
-  SeekPlayback,
-  ShareReview,
-  UpdateComment,
-  UpdateReview
-}
+import muse.domain.mutate.*
 import muse.domain.session.UserSession
 import muse.domain.spotify.{ErrorReason, ErrorResponse, StartPlaybackBody, UriOffset, PositionOffset as SpotifyPostionOffset}
+import muse.domain.table
 import muse.server.graphql.subgraph.{Comment, Review}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
@@ -41,6 +28,7 @@ final case class Mutations(
     createReview: Input[CreateReview] => ZIO[MutationEnv, MutationError, Review],
     createComment: Input[CreateComment] => ZIO[MutationEnv, MutationError, Comment],
     updateReview: Input[UpdateReview] => ZIO[MutationEnv, MutationError, Review],
+    updateReviewEntity: Input[table.ReviewEntity] => ZIO[MutationEnv, MutationError, Review],
     updateComment: Input[UpdateComment] => ZIO[MutationEnv, MutationError, Comment],
     deleteReview: Input[DeleteReview] => ZIO[MutationEnv, MutationError, Boolean],
     deleteComment: Input[DeleteComment] => ZIO[MutationEnv, MutationError, Boolean],
@@ -63,6 +51,7 @@ object Mutations {
     i => createReview(i.input),
     i => createComment(i.input),
     i => updateReview(i.input),
+    i => updateReviewEntity(i.input),
     i => updateComment(i.input),
     i => deleteReview(i.input),
     i => deleteComment(i.input),
@@ -81,38 +70,51 @@ object Mutations {
 
   def createReview(create: CreateReview) = for {
     user <- RequestSession.get[UserSession]
-    _    <- validateEntity(create.entityId, create.entityType)
     r    <- DatabaseService.createReview(user.userId, create)
-  } yield Review.fromTable(r)
+  } yield Review.fromTable(r, None)
 
   def createComment(create: CreateComment) = for {
     user      <- RequestSession.get[UserSession]
     _         <- ZIO
                    .fail(BadRequest(Some("Comment must have a body or rating")))
                    .when(create.comment.exists(_.isEmpty) && create.rating.isEmpty)
-    _         <- validateEntity(create.entityId, create.entityType) <&> validateCommentPermissions(user.userId, create.reviewId)
+    _         <- ZIO.foreachPar(create.entities)(e => validateEntity(e._2, e._1)) <&> validateCommentPermissions(
+                   user.userId,
+                   create.reviewId)
     result    <- DatabaseService.createReviewComment(user.userId, create)
-    comment    = Comment.fromTable(result)
+    comment    = Comment.fromTable(result._1, result._2)
     published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(CreatedComment(comment)))
     _         <- ZIO.logError("Failed to publish comment creation").unless(published)
   } yield comment
 
   def updateReview(update: UpdateReview) = for {
-    user   <- RequestSession.get[UserSession]
-    _      <- validateReviewPermissions(user.userId, update.reviewId)
-    result <- DatabaseService.updateReview(update)
-  } yield Review.fromTable(result)
+    user    <- RequestSession.get[UserSession]
+    _       <- validateReviewPermissions(user.userId, update.reviewId)
+    review  <- DatabaseService.updateReview(update)
+    details <- DatabaseService.getReview(update.reviewId)
+  } yield Review.fromTable(review, details.flatMap(_._2))
+
+  def updateReviewEntity(update: table.ReviewEntity) = for {
+    user            <- RequestSession.get[UserSession]
+    _               <- validateReviewPermissions(user.userId, update.reviewId)
+    result          <- DatabaseService.updateReviewEntity(update) <&>
+                         DatabaseService
+                           .getReview(update.reviewId)
+    (_, maybeReview) = result
+    review          <- ZIO.fromOption(maybeReview).orElseFail(BadRequest(Some("Review not found.")))
+  } yield Review.fromTable(review._1, Some(update))
 
   def updateComment(update: UpdateComment) = for {
-    user      <- RequestSession.get[UserSession]
-    _         <- ZIO
-                   .fail(BadRequest(Some("Comment must have a body or rating")))
-                   .when(update.comment.exists(_.isEmpty) && update.rating.isEmpty)
-    _         <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
-    result    <- DatabaseService.updateComment(update)
-    comment    = Comment.fromTable(result)
-    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
-    _         <- ZIO.logError("Failed to publish comment update").unless(published)
+    user                  <- RequestSession.get[UserSession]
+    _                     <- ZIO
+                               .fail(BadRequest(Some("Comment must have a body.")))
+                               .when(update.comment.exists(_.isEmpty))
+    _                     <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
+    bothResults           <- DatabaseService.updateComment(update) <&> DatabaseService.getComment(update.commentId)
+    (result, maybeComment) = bothResults
+    comment                = Comment.fromTable(result, maybeComment.fold(Nil)(_._2))
+    published             <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
+    _                     <- ZIO.logError("Failed to publish comment update").unless(published)
   } yield comment
 
   def deleteComment(d: DeleteComment): Mutation[Boolean] = for {

@@ -23,6 +23,11 @@ enum EntityType {
   Track
 }
 
+input CommentEntityInput {
+  entityType: EntityType!
+  entityId: String!
+}
+
 input ContextInput {
   entityType: EntityType!
   entityId: String!
@@ -33,15 +38,12 @@ input CreateCommentInput {
   parentCommentId: Int
   comment: String
   rating: Int
-  entityType: EntityType!
-  entityId: String!
+  entities: [CommentEntityInput!]!
 }
 
 input CreateReviewInput {
   name: String!
   isPublic: Boolean!
-  entityType: EntityType!
-  entityId: String!
 }
 
 input DeleteCommentInput {
@@ -98,7 +100,12 @@ input UpdateCommentInput {
   commentId: Int!
   reviewId: ID!
   comment: String
-  rating: Int
+}
+
+input UpdateReviewEntityInput {
+  reviewId: ID!
+  entityType: EntityType!
+  entityId: String!
 }
 
 input UpdateReviewInput {
@@ -176,13 +183,9 @@ type Comment {
   createdAt: Instant!
   updatedAt: Instant!
   parentCommentId: Int
-  commenterId: String!
   commenter: User
   comment: String
-  rating: Int
-  entityId: String!
-  entityType: EntityType!
-  entity: ReviewEntity
+  entities: [ReviewEntity!]
 }
 
 type CreatedComment {
@@ -206,6 +209,7 @@ type Mutations {
   createReview(input: CreateReviewInput!): Review
   createComment(input: CreateCommentInput!): Comment
   updateReview(input: UpdateReviewInput!): Review
+  updateReviewEntity(input: UpdateReviewEntityInput!): Review
   updateComment(input: UpdateCommentInput!): Comment
   deleteReview(input: DeleteReviewInput!): Boolean
   deleteComment(input: DeleteCommentInput!): Boolean
@@ -285,9 +289,8 @@ type Review {
   reviewName: String!
   isPublic: Boolean!
   comments: [Comment!]
-  entityId: String!
-  entityType: EntityType!
   entity: ReviewEntity
+  childReviews: [Review!]
   collaborators: [Collaborator!]
 }
 
@@ -312,7 +315,7 @@ type Subscriptions {
   nowPlaying(tickInterval: Int!): PlaybackState
   availableDevices: [PlaybackDevice!]
   playlistTracks(input: GetPlaylistTracksInput!): PlaylistTrack
-  reviewUpdates(reviewId: ID!): ReviewUpdate
+  reviewUpdates(reviewIds: [ID!]!): ReviewUpdate
 }
 
 type Track implements ReviewEntity {

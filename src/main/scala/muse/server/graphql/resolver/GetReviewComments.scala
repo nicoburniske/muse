@@ -6,9 +6,10 @@ import muse.utils.Utils.*
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 import zio.{Chunk, ZIO}
 
+import java.sql.SQLException
 import java.util.UUID
 
-case class GetReviewComments(reviewId: UUID) extends Request[Nothing, List[Comment]]
+case class GetReviewComments(reviewId: UUID) extends Request[SQLException, List[Comment]]
 
 object GetReviewComments {
 
@@ -16,32 +17,16 @@ object GetReviewComments {
 
   // TODO: incorporate permissions
   val CommentDataSource: DataSource[DatabaseService, GetReviewComments] =
-    DataSource.Batched.make("ReviewCommentsDataSource") { (requests: Chunk[GetReviewComments]) =>
-      requests.toList match
-        case req :: Nil =>
-          DatabaseService
-            .getReviewComments(req.reviewId)
-            .fold(
-              e => CompletedRequestMap.empty.insert(req)(Left(e)),
-              comments => CompletedRequestMap.empty.insert(req)(Right(comments.map(Comment.fromTable)))
-            ).addTimeLog("Retrieved review comments")
-        case reqs       =>
-          val ids = reqs.map(_.reviewId)
-          for {
-            maybeComments <- DatabaseService.getAllReviewComments(ids).either
-            _             <- if (maybeComments.isRight) ZIO.logInfo(s"Retrieved review comments for reviews: ${ids.mkString(", ")}")
-                             else ZIO.logInfo(s"Failed to retrieve review comments: ${ids.mkString(",")}")
-          } yield {
-            maybeComments match
-              case Left(value)        =>
-                reqs.foldLeft(CompletedRequestMap.empty)((map, r) => map.insert(r)(Left(value)))
-              case Right(allComments) =>
-                val grouped = allComments.groupBy(_.reviewId)
-                reqs.foldLeft(CompletedRequestMap.empty) { (map, r) =>
-                  val asComments = grouped.getOrElse(r.reviewId, Nil).map(Comment.fromTable)
-                  map.insert(r)(Right(asComments))
-                }
+    DataSource.fromFunctionZIO("ReviewCommentsDataSource") { (req: GetReviewComments) =>
+      DatabaseService
+        .getReviewComments(req.reviewId).map { comments =>
+          val grouped = comments.groupBy(_._1.id)
+          grouped.map { (_, comments) =>
+            val comment  = comments.map(_._1).head
+            val entities = comments.map(_._2).flatten
+            Comment.fromTable(comment, entities)
           }
+        }.addTimeLog("Retrieved review comments")
     }
 
 }

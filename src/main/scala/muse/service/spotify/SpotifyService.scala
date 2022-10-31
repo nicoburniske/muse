@@ -66,7 +66,8 @@ object SpotifyService {
     // These are global caches that we can share them across instances.
     artistCache   <- ZIO.service[zcaffeine.Cache[Any, String, Artist]]
     albumCache    <- ZIO.service[zcaffeine.Cache[Any, String, Album]]
-  } yield SpotifyServiceLive(spotify, likeCache, playlistCache, artistCache, albumCache)
+    userCache     <- ZIO.service[zcaffeine.Cache[Any, String, User]]
+  } yield SpotifyServiceLive(spotify, likeCache, playlistCache, artistCache, albumCache, userCache)
 
   def getCurrentUserProfile = ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserProfile)
 
@@ -160,16 +161,16 @@ case class SpotifyServiceLive(
     likeCache: zcaffeine.Cache[Any, String, Boolean],
     playlistCache: Cache[PlaylistInput, Throwable, UserPlaylist],
     artistCache: zcaffeine.Cache[Any, String, Artist],
-    albumCache: zcaffeine.Cache[Any, String, Album]
+    albumCache: zcaffeine.Cache[Any, String, Album],
+    userCache:zcaffeine.Cache[Any, String, User]
 ) extends SpotifyService {
-  def getCurrentUserProfile = s.getCurrentUserProfile
+  def getCurrentUserProfile                          = s.getCurrentUserProfile
   def getTrackRecommendations(input: TrackRecsInput) = s.getTrackRecommendations(input).map(_.tracks)
 
   def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None) =
     s.search(query, entityTypes, limit, offset)
 
-  def getUserProfile(userId: String) =
-    s.getUserProfile(userId)
+  def getUserProfile(userId: String) = userCache.get(userId)(userId => s.getUserProfile(userId))
 
   def isValidEntity(entityId: String, entityType: EntityType) =
     s.isValidEntity(entityId, entityType)
