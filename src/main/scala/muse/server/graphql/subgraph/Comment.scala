@@ -19,7 +19,7 @@ final case class Comment(
     updatedAt: Instant,
     // If none, then it is root comment.
     parentCommentId: Option[Int],
-    commenter: ZQuery[DatabaseService & RequestSession[SpotifyService] & RequestSession[UserSession], Throwable, User],
+    commenter: User,
     comment: Option[String],
     entities: ZQuery[RequestSession[SpotifyService], Throwable, List[ReviewEntity]]
 )

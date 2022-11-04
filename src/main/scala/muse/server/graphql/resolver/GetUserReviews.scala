@@ -22,6 +22,12 @@ case object Owned extends WhichReviews
 case object WithAccess extends WhichReviews
 
 object GetUserReviews {
+  def query(userId: String): ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]] = for {
+    user   <- ZQuery.fromZIO(RequestSession.get[UserSession])
+    which   = if (user.userId == userId) All else WithAccess
+    result <- query(userId, which)
+  } yield result
+
   def query(userId: String, which: WhichReviews) = ZQuery.fromRequest(GetUserReviews(userId, which))(UserReviewsDataSource)
 
   val UserReviewsDataSource: DataSource[DatabaseService & RequestSession[UserSession], GetUserReviews] =

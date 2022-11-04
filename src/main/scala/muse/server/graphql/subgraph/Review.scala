@@ -18,7 +18,7 @@ import java.util.UUID
 final case class Review(
     id: UUID,
     createdAt: Instant,
-    creator: ZQuery[DatabaseService & RequestSession[UserSession], Unauthorized, User],
+    creator: User,
     reviewName: String,
     isPublic: Boolean,
     comments: ZQuery[DatabaseService, Throwable, List[Comment]],
@@ -39,11 +39,9 @@ object Review {
                         ZIO
                           .fail(Forbidden("You are not allowed to view this review"))
                           .when(r.creatorId != user && !reviewAccess.exists(_.userId == user)))
-      subQueries    = reviewAccess.map { reviewAccess =>
-                        GetUser.queryByUserId(reviewAccess.userId).map(user => Collaborator(user, reviewAccess.accessLevel))
-                      }
-      allUsers     <- ZQuery.collectAll(subQueries)
-    } yield allUsers
+    } yield reviewAccess.map { reviewAccess =>
+      Collaborator(GetUser.queryByUserId(reviewAccess.userId), reviewAccess.accessLevel)
+    }
 
     val maybeEntity = entity.fold(ZQuery.succeed(None))(r => GetEntity.query(r.entityId, r.entityType).map(Some(_)))
 

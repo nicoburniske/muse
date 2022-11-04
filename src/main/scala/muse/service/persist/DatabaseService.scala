@@ -4,7 +4,7 @@ import io.getquill.*
 import io.getquill.context.ZioJdbc.*
 import muse.domain.common.EntityType
 import muse.domain.mutate.{
-  CommentEntity,
+  ReviewEntityInput,
   CreateComment,
   CreateReview,
   DeleteComment,
@@ -49,7 +49,6 @@ trait DatabaseService {
   def getUserById(userId: String): IO[SQLException, Option[User]]
   def getUserSession(sessionId: String): IO[SQLException, Option[UserSession]]
 
-  // These are single list because we are only returning root review entity.
   // Reviews that the given user created.
   def getUserReviews(userId: String): IO[SQLException, List[(Review, Option[ReviewEntity])]]
   // Reviews that the given user has access to.
@@ -60,7 +59,9 @@ trait DatabaseService {
   def getReviewComments(reviewId: UUID): IO[SQLException, List[(ReviewComment, Option[ReviewCommentEntity])]]
   def getMultiReviewComments(reviewIds: List[UUID]): IO[SQLException, List[(ReviewComment, Option[ReviewCommentEntity])]]
   def getReviews(reviewIds: List[UUID]): IO[SQLException, List[Review]]
-  def getReview(reviewId: UUID): IO[SQLException, Option[(Review, Option[ReviewEntity])]]
+  def getReviewAndEntity(reviewId: UUID): IO[SQLException, Option[(Review, Option[ReviewEntity])]]
+  def getReview(reviewId: UUID): IO[SQLException, Option[Review]]
+  def getReviewEntity(reviewId: UUID): IO[SQLException, Option[ReviewEntity]]
   def getReviewWithPermissions(reviewId: UUID, userId: String): IO[SQLException, Option[(Review, Option[ReviewEntity])]]
   def getChildReviews(reviewId: UUID): IO[SQLException, List[(Review, Option[ReviewEntity])]]
 
@@ -108,6 +109,9 @@ object DatabaseService {
   def createReview(userId: String, review: CreateReview) =
     ZIO.serviceWithZIO[DatabaseService](_.createReview(userId, review))
 
+  def linkReviews(parentReviewId: UUID, childReviewId: UUID) =
+    ZIO.serviceWithZIO[DatabaseService](_.linkReviews(parentReviewId, childReviewId))
+
   def createReviewComment(userId: String, c: CreateComment) =
     ZIO.serviceWithZIO[DatabaseService](_.createReviewComment(userId, c))
 
@@ -116,7 +120,9 @@ object DatabaseService {
   def getUserSession(sessionId: String) =
     ZIO.serviceWithZIO[DatabaseService](_.getUserSession(sessionId))
 
-  def getReview(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReview(reviewId))
+  def getReviewAndEntity(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewAndEntity(reviewId))
+  def getReview(reviewId:UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReview(reviewId))
+  def getReviewEntity(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewEntity(reviewId))
 
   def getChildReviews(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getChildReviews(reviewId))
 
@@ -249,12 +255,22 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
 
   override def getUsers = run(user).provide(layer)
-
-  override def getReview(reviewId: UUID) = run {
+  
+  override def getReviewAndEntity(reviewId: UUID) = run {
     review
       .filter(_.id == lift(reviewId))
       .leftJoin(reviewEntity)
       .on((review, entity) => review.id == entity.reviewId)
+  }.provide(layer)
+    .map(_.headOption)
+  
+  override def getReview(reviewId: UUID) = run {
+    review.filter(_.id == lift(reviewId))
+  }.provide(layer)
+    .map(_.headOption)
+
+  override def getReviewEntity(reviewId: UUID) = run {
+    reviewEntity.filter(_.reviewId == lift(reviewId))
   }.provide(layer)
     .map(_.headOption)
 
@@ -329,7 +345,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       ).onConflictIgnore
   }.provideLayer(layer).unit
 
-  def createUserSession(sessionId: String, refreshToken: String, userId: String) = run {
+  override def createUserSession(sessionId: String, refreshToken: String, userId: String) = run {
     userSession.insert(
       _.sessionId    -> lift(sessionId),
       _.refreshToken -> lift(refreshToken),
@@ -362,7 +378,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer).flatMap {
     case (id, created, updated) =>
       val asCommentEntity =
-        c.entities.map { case CommentEntity(entityType, entityId) => ReviewCommentEntity(id, entityType, entityId) }
+        c.entities.map { case ReviewEntityInput(entityType, entityId) => ReviewCommentEntity(id, entityType, entityId) }
       run {
         liftQuery(asCommentEntity)
           .foreach(entity =>
@@ -438,7 +454,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .provide(layer)
       .map(_ > 0)
 
-  def linkReviews(parentReviewId: UUID, childReviewId: UUID) = run {
+  override def linkReviews(parentReviewId: UUID, childReviewId: UUID) = run {
     reviewLink
       .insert(
         _.parentReviewId -> lift(parentReviewId),
@@ -449,12 +465,12 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   /**
    * Delete!
    */
-  def deleteReview(delete: DeleteReview) = run {
+  override def deleteReview(delete: DeleteReview) = run {
     review.filter(_.id == lift(delete.id)).delete
   }.provide(layer)
     .map(_ > 0)
 
-  def deleteComment(d: DeleteComment) = run {
+  override def deleteComment(d: DeleteComment) = run {
     comment
       .filter(_.id == lift(d.commentId))
       .filter(_.reviewId == lift(d.reviewId))
@@ -462,7 +478,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
     .map(_ > 0)
 
-  def deleteReviewLink(parentReviewId: UUID, childReviewId: UUID) = run {
+  override def deleteReviewLink(parentReviewId: UUID, childReviewId: UUID) = run {
     reviewLink
       .filter(_.parentReviewId == lift(parentReviewId))
       .filter(_.childReviewId == lift(childReviewId))

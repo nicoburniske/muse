@@ -1,8 +1,10 @@
 package muse.server.graphql.subgraph
 
+import muse.server.graphql.resolver.GetSearch.PaginationResult
+
 final case class SearchResult(
-    albums: List[Album],
-    artists: List[Artist],
-    playlists: List[Playlist],
-    tracks: List[Track]
+    albums: Option[PaginationResult[Album]],
+    artists: Option[PaginationResult[Artist]],
+    playlists: Option[PaginationResult[Playlist]],
+    tracks: Option[PaginationResult[Track]]
 )

@@ -43,8 +43,6 @@ final case class Mutations(
     removeSavedTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean]
 )
 
-final case class Input[T](input: T)
-
 object Mutations {
 
   val live = Mutations(
@@ -69,9 +67,24 @@ object Mutations {
   type Mutation[A] = ZIO[MutationEnv, MutationError, A]
 
   def createReview(create: CreateReview) = for {
-    user <- RequestSession.get[UserSession]
-    r    <- DatabaseService.createReview(user.userId, create)
-  } yield Review.fromTable(r, None)
+    user       <- RequestSession.get[UserSession].map(_.userId)
+    r          <- DatabaseService.createReview(user, create)
+    _          <- ZIO.logInfo(s"Successfully created review! ${r.reviewName}")
+    maybeEntity = create.entity.map(e => table.ReviewEntity(r.id, e.entityType, e.entityId))
+    _          <- ZIO.fromOption(maybeEntity).flatMap(updateReviewEntityFromTable).orElse(ZIO.logInfo("No entity included!"))
+    _          <- ZIO
+                    .fromOption(create.link).flatMap { l =>
+                      DatabaseService.linkReviews(l.parentReviewId, r.id) *>
+                        ZIO.logInfo(s"Successfully linked review ${r.id} to ${l.parentReviewId}")
+                    }.orElse(ZIO.logInfo("No link included!"))
+  } yield Review.fromTable(r, maybeEntity)
+
+  private def updateReviewEntityFromTable(r: table.ReviewEntity) =
+    DatabaseService
+      .updateReviewEntity(r).fold(
+        sqlException => ZIO.logError(s"Failed to update review entity $r! ${sqlException.getMessage}"),
+        _ => ZIO.logInfo(s"Successfully updated review entity! ${r.reviewId}")
+      ).unit
 
   def createComment(create: CreateComment) = for {
     user      <- RequestSession.get[UserSession]
@@ -91,18 +104,15 @@ object Mutations {
     user    <- RequestSession.get[UserSession]
     _       <- validateReviewPermissions(user.userId, update.reviewId)
     review  <- DatabaseService.updateReview(update)
-    details <- DatabaseService.getReview(update.reviewId)
-  } yield Review.fromTable(review, details.flatMap(_._2))
+    details <- DatabaseService.getReviewEntity(update.reviewId)
+  } yield Review.fromTable(review, details)
 
   def updateReviewEntity(update: table.ReviewEntity) = for {
-    user            <- RequestSession.get[UserSession]
-    _               <- validateReviewPermissions(user.userId, update.reviewId)
-    result          <- DatabaseService.updateReviewEntity(update) <&>
-                         DatabaseService
-                           .getReview(update.reviewId)
-    (_, maybeReview) = result
-    review          <- ZIO.fromOption(maybeReview).orElseFail(BadRequest(Some("Review not found.")))
-  } yield Review.fromTable(review._1, Some(update))
+    user        <- RequestSession.get[UserSession]
+    _           <- validateReviewPermissions(user.userId, update.reviewId)
+    maybeReview <- DatabaseService.getReview(update.reviewId) <&> updateReviewEntityFromTable(update)
+    review      <- ZIO.fromOption(maybeReview).orElseFail(BadRequest(Some("Review not found.")))
+  } yield Review.fromTable(review, Some(update))
 
   def updateComment(update: UpdateComment) = for {
     user                  <- RequestSession.get[UserSession]

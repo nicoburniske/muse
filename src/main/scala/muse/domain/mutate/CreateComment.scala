@@ -1,11 +1,11 @@
 package muse.domain.mutate
 
+import caliban.schema.Annotations.GQLInputName
 import muse.domain.common.EntityType
 import zio.json.*
 
 import java.util.UUID
 
-final case class CommentEntity(entityType: EntityType, entityId: String)
 
 final case class CreateComment(
     reviewId: UUID,
@@ -13,5 +13,5 @@ final case class CreateComment(
     parentCommentId: Option[Int],
     comment: Option[String],
     rating: Option[Int],
-    entities: List[CommentEntity]
+    entities: List[ReviewEntityInput]
 )

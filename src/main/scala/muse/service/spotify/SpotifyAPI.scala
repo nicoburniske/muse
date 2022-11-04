@@ -80,6 +80,10 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       execute[MultiAlbum](uri, Method.GET).map(_.albums)
     }
 
+  def getCurrentUserPlaylists(limit: Int = 50, offset: Int = 0): F[Paging[UserPlaylist]] =
+    val uri = uri"${SpotifyAPI.API_BASE}/me/playlists?limit=$limit&offset=$offset"
+    execute(uri, Method.GET)
+
   def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None): F[Paging[UserPlaylist]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/users/$userId/playlists?limit=$limit&offset=$offset"
     execute(uri, Method.GET)

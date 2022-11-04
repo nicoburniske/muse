@@ -23,11 +23,6 @@ enum EntityType {
   Track
 }
 
-input CommentEntityInput {
-  entityType: EntityType!
-  entityId: String!
-}
-
 input ContextInput {
   entityType: EntityType!
   entityId: String!
@@ -38,12 +33,14 @@ input CreateCommentInput {
   parentCommentId: Int
   comment: String
   rating: Int
-  entities: [CommentEntityInput!]!
+  entities: [ReviewEntityInput!]!
 }
 
 input CreateReviewInput {
   name: String!
   isPublic: Boolean!
+  entity: ReviewEntityInput
+  link: InitialLinkInput
 }
 
 input DeleteCommentInput {
@@ -65,9 +62,13 @@ input GetPlaylistTracksInput {
   numTracks: Int!
 }
 
+input InitialLinkInput {
+  parentReviewId: ID!
+}
+
 input PaginationInput {
   first: Int!
-  from: Int! = 0
+  offset: Int! = 0
 }
 
 input PlaybackContextInput {
@@ -82,6 +83,16 @@ input PlaybackContextInput {
 input PositionOffsetInput {
   context: ContextInput!
   position: Int!
+}
+
+input ReviewEntityInput {
+  entityType: EntityType!
+  entityId: String!
+}
+
+input SearchUserPlaylistsInput {
+  pagination: PaginationInput!
+  search: String
 }
 
 input SeekPlaybackInput {
@@ -183,7 +194,7 @@ type Comment {
   createdAt: Instant!
   updatedAt: Instant!
   parentCommentId: Int
-  commenter: User
+  commenter: User!
   comment: String
   entities: [ReviewEntity!]
 }
@@ -222,6 +233,34 @@ type Mutations {
   toggleShuffle(input: Boolean!): Boolean
   saveTracks(input: [String!]!): Boolean
   removeSavedTracks(input: [String!]!): Boolean
+}
+
+type PaginationResultAlbum {
+  limit: Int!
+  nextOffset: Int
+  itemsLeft: Int!
+  items: [Album!]!
+}
+
+type PaginationResultArtist {
+  limit: Int!
+  nextOffset: Int
+  itemsLeft: Int!
+  items: [Artist!]!
+}
+
+type PaginationResultPlaylist {
+  limit: Int!
+  nextOffset: Int
+  itemsLeft: Int!
+  items: [Playlist!]!
+}
+
+type PaginationResultTrack {
+  limit: Int!
+  nextOffset: Int
+  itemsLeft: Int!
+  items: [Track!]!
 }
 
 type PlaybackContext {
@@ -278,14 +317,15 @@ type PlaylistTrack {
 type Queries {
   user(id: String): User
   review(id: ID!): Review
-  search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, from: 0}): SearchResult
+  search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, offset: 0}): SearchResult
   availableDevices: [PlaybackDevice!]
+  getPlaylist(id: String!): Playlist
 }
 
 type Review {
   id: ID!
   createdAt: Instant!
-  creator: User
+  creator: User!
   reviewName: String!
   isPublic: Boolean!
   comments: [Comment!]
@@ -295,10 +335,10 @@ type Review {
 }
 
 type SearchResult {
-  albums: [Album!]!
-  artists: [Artist!]!
-  playlists: [Playlist!]!
-  tracks: [Track!]!
+  albums: PaginationResultAlbum
+  artists: PaginationResultArtist
+  playlists: PaginationResultPlaylist
+  tracks: PaginationResultTrack
 }
 
 type SpotifyProfile {
@@ -346,4 +386,5 @@ type User {
   id: String!
   reviews: [Review!]
   spotifyProfile: SpotifyProfile
+  playlists(input: SearchUserPlaylistsInput!): [Playlist!]
 }

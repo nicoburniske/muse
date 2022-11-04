@@ -36,16 +36,14 @@ CREATE TABLE muse.review
 -- TODO: should you be able to have multiple review entities?
 CREATE TABLE muse.review_entity
 (
-    review_id   UUID        NOT NULL,
+    review_id   UUID        UNIQUE NOT NULL,
     --ENUM: Album, Artist, Playlist, Track
     entity_type INT         NOT NULL,
     entity_id   VARCHAR(50) NOT NULL,
 
-    CONSTRAINT reviewEntityPrimaryKey
-        PRIMARY KEY (review_id, entity_type, entity_id),
     CONSTRAINT reviewID
         FOREIGN KEY (review_id)
-            REFERENCES muse.review (id)
+            REFERENCES muse.review (id) ON DELETE CASCADE
 );
 
 CREATE TABLE muse.review_link

@@ -11,13 +11,10 @@ case class GetUser(id: String) extends Request[Nothing, User]
 
 object GetUser {
   def query(maybeId: Option[String]) = maybeId match
-    case None => currentUser
-    case Some(id) => queryByUserId(id)
+    case None     => currentUser
+    case Some(id) => ZQuery.succeed(queryByUserId(id))
 
-  def queryByUserId(userId: String) = for {
-    user <- ZQuery.fromZIO(RequestSession.get[UserSession])
-    which = if (user.userId == userId) All else WithAccess
-  } yield User(userId, GetUserReviews.query(userId, which), GetSpotifyProfile.query(userId))
+  def queryByUserId(userId: String) = User(userId, GetUserReviews.query(userId), GetSpotifyProfile.query(userId))
 
   def currentUser: ZQuery[RequestSession[UserSession] & DatabaseService, Unauthorized, User] = for {
     userId <- ZQuery.fromZIO(RequestSession.get[UserSession]).map(_.userId)

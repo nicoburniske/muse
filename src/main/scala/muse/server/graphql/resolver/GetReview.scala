@@ -19,7 +19,7 @@ object GetReview {
   // TODO: should we give errors or just not return the review?
   val ReviewDataSource: DataSource[DatabaseService, GetReview] =
     DataSource.fromFunctionZIO("ReviewDataSource") { g =>
-      DatabaseService.getReview(g.reviewId).map(_.map { case (review, entity) => Review.fromTable(review, entity) })
+      DatabaseService.getReviewAndEntity(g.reviewId).map(_.map { case (review, entity) => Review.fromTable(review, entity) })
     }
 
 }
