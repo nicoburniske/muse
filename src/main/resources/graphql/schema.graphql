@@ -90,6 +90,11 @@ input ReviewEntityInput {
   entityId: String!
 }
 
+input ReviewLinkInput {
+  parentReviewId: ID!
+  childReviewId: ID!
+}
+
 input SearchUserPlaylistsInput {
   pagination: PaginationInput!
   search: String
@@ -219,11 +224,13 @@ type KVStringString {
 type Mutations {
   createReview(input: CreateReviewInput!): Review
   createComment(input: CreateCommentInput!): Comment
+  linkReviews(input: ReviewLinkInput!): Boolean
   updateReview(input: UpdateReviewInput!): Review
   updateReviewEntity(input: UpdateReviewEntityInput!): Review
   updateComment(input: UpdateCommentInput!): Comment
   deleteReview(input: DeleteReviewInput!): Boolean
   deleteComment(input: DeleteCommentInput!): Boolean
+  deleteReviewLink(input: ReviewLinkInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
   startPlayback(input: PlaybackContextInput!): Boolean
   seekPlayback(input: SeekPlaybackInput!): Boolean

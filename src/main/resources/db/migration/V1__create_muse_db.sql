@@ -55,10 +55,10 @@ CREATE TABLE muse.review_link
         PRIMARY KEY (parent_review_id, child_review_id),
     CONSTRAINT parentReview
         FOREIGN KEY (parent_review_id)
-            REFERENCES muse.review (id),
+            REFERENCES muse.review (id) ON DELETE CASCADE,
     CONSTRAINT childReview
         FOREIGN KEY (child_review_id)
-            REFERENCES muse.review (id)
+            REFERENCES muse.review (id) ON DELETE CASCADE
 );
 
 CREATE TABLE muse.review_access

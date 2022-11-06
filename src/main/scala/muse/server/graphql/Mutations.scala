@@ -27,12 +27,15 @@ type MutationError = Throwable | MuseError
 final case class Mutations(
     createReview: Input[CreateReview] => ZIO[MutationEnv, MutationError, Review],
     createComment: Input[CreateComment] => ZIO[MutationEnv, MutationError, Comment],
+    linkReviews: Input[table.ReviewLink] => ZIO[MutationEnv, MutationError, Boolean],
     updateReview: Input[UpdateReview] => ZIO[MutationEnv, MutationError, Review],
     updateReviewEntity: Input[table.ReviewEntity] => ZIO[MutationEnv, MutationError, Review],
     updateComment: Input[UpdateComment] => ZIO[MutationEnv, MutationError, Comment],
     deleteReview: Input[DeleteReview] => ZIO[MutationEnv, MutationError, Boolean],
     deleteComment: Input[DeleteComment] => ZIO[MutationEnv, MutationError, Boolean],
+    deleteReviewLink: Input[table.ReviewLink] => ZIO[MutationEnv, MutationError, Boolean],
     shareReview: Input[ShareReview] => ZIO[MutationEnv, MutationError, Boolean],
+    // Consider separating these mutations out.
     startPlayback: Input[PlaybackContext] => ZIO[MutationEnv, MutationError, Boolean],
     seekPlayback: Input[SeekPlayback] => ZIO[MutationEnv, MutationError, Boolean],
     pausePlayback: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
@@ -48,11 +51,13 @@ object Mutations {
   val live = Mutations(
     i => createReview(i.input),
     i => createComment(i.input),
+    i => linkReviews(i.input),
     i => updateReview(i.input),
     i => updateReviewEntity(i.input),
     i => updateComment(i.input),
     i => deleteReview(i.input),
     i => deleteComment(i.input),
+    i => deleteReviewLink(i.input),
     i => shareReview(i.input),
     i => startPlayback(i.input),
     i => seekPlayback(i.input),
@@ -74,7 +79,7 @@ object Mutations {
     _          <- ZIO.fromOption(maybeEntity).flatMap(updateReviewEntityFromTable).orElse(ZIO.logInfo("No entity included!"))
     _          <- ZIO
                     .fromOption(create.link).flatMap { l =>
-                      DatabaseService.linkReviews(l.parentReviewId, r.id) *>
+                      DatabaseService.linkReviews(table.ReviewLink(l.parentReviewId, r.id)) *>
                         ZIO.logInfo(s"Successfully linked review ${r.id} to ${l.parentReviewId}")
                     }.orElse(ZIO.logInfo("No link included!"))
   } yield Review.fromTable(r, maybeEntity)
@@ -99,6 +104,13 @@ object Mutations {
     published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(CreatedComment(comment)))
     _         <- ZIO.logError("Failed to publish comment creation").unless(published)
   } yield comment
+
+  def linkReviews(link: table.ReviewLink) = for {
+    user   <- RequestSession.get[UserSession]
+    _      <- ZIO.fail(BadRequest(Some("Can't link a review to itself"))).when(link.parentReviewId == link.childReviewId)
+    _      <- validateReviewPermissions(user.userId, link.parentReviewId)
+    result <- DatabaseService.linkReviews(link)
+  } yield result
 
   def updateReview(update: UpdateReview) = for {
     user    <- RequestSession.get[UserSession]
@@ -139,6 +151,12 @@ object Mutations {
     user   <- RequestSession.get[UserSession]
     _      <- validateReviewPermissions(user.userId, d.id)
     result <- DatabaseService.deleteReview(d)
+  } yield result
+
+  def deleteReviewLink(link: table.ReviewLink) = for {
+    user   <- RequestSession.get[UserSession]
+    _      <- validateReviewPermissions(user.userId, link.parentReviewId)
+    result <- DatabaseService.deleteReviewLink(link)
   } yield result
 
   def shareReview(s: ShareReview): ZIO[MutationEnv, MutationError | InvalidUser, Boolean] = for {

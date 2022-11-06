@@ -8,7 +8,7 @@ import muse.server.graphql.subgraph.{PlaybackState, PlaylistTrack}
 import muse.service.spotify.SpotifyService
 import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils.*
-import zio.*
+import zio.{Schedule, *}
 import zio.stream.{ZPipeline, ZStream}
 
 import java.util.UUID
@@ -38,7 +38,7 @@ object Subscriptions {
     ZStream
       .tick(500.millis)
       .via(getSpotifyPipeline)
-      .mapZIO(_.currentPlaybackState)
+      .mapZIO(_.currentPlaybackState.retry(Schedule.recurs(3) && Schedule.exponential(1.second)))
       .via(flattenOption)
       // Only send updates for new playback states.
       .mapAccum(Option.empty[SpotPlaybackState]) {

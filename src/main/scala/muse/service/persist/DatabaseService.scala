@@ -75,7 +75,7 @@ trait DatabaseService {
   def updateReviewEntity(review: ReviewEntity): IO[SQLException, Boolean]
   def updateComment(comment: UpdateComment): IO[SQLException, ReviewComment]
   def shareReview(share: ShareReview): IO[SQLException, Boolean]
-  def linkReviews(parentReviewId: UUID, childReviewId: UUID): IO[SQLException, Boolean]
+  def linkReviews(link: ReviewLink): IO[SQLException, Boolean]
 
   /**
    * Delete!
@@ -85,7 +85,7 @@ trait DatabaseService {
   def deleteReview(d: DeleteReview): IO[SQLException, Boolean]
   // TODO: fix delete to mark boolean field as deleted.
   def deleteComment(d: DeleteComment): IO[SQLException, Boolean]
-  def deleteReviewLink(parentReviewId: UUID, childReviewId: UUID): IO[SQLException, Boolean]
+  def deleteReviewLink(link: ReviewLink): IO[SQLException, Boolean]
 
   /**
    * Permissions!
@@ -109,8 +109,8 @@ object DatabaseService {
   def createReview(userId: String, review: CreateReview) =
     ZIO.serviceWithZIO[DatabaseService](_.createReview(userId, review))
 
-  def linkReviews(parentReviewId: UUID, childReviewId: UUID) =
-    ZIO.serviceWithZIO[DatabaseService](_.linkReviews(parentReviewId, childReviewId))
+  def linkReviews(link: ReviewLink) =
+    ZIO.serviceWithZIO[DatabaseService](_.linkReviews(link))
 
   def createReviewComment(userId: String, c: CreateComment) =
     ZIO.serviceWithZIO[DatabaseService](_.createReviewComment(userId, c))
@@ -121,8 +121,8 @@ object DatabaseService {
     ZIO.serviceWithZIO[DatabaseService](_.getUserSession(sessionId))
 
   def getReviewAndEntity(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewAndEntity(reviewId))
-  def getReview(reviewId:UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReview(reviewId))
-  def getReviewEntity(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewEntity(reviewId))
+  def getReview(reviewId: UUID)          = ZIO.serviceWithZIO[DatabaseService](_.getReview(reviewId))
+  def getReviewEntity(reviewId: UUID)    = ZIO.serviceWithZIO[DatabaseService](_.getReviewEntity(reviewId))
 
   def getChildReviews(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getChildReviews(reviewId))
 
@@ -158,6 +158,9 @@ object DatabaseService {
 
   def deleteReview(d: DeleteReview) =
     ZIO.serviceWithZIO[DatabaseService](_.deleteReview(d))
+
+  def deleteReviewLink(d: ReviewLink) =
+    ZIO.serviceWithZIO[DatabaseService](_.deleteReviewLink(d))
 
   def deleteComment(d: DeleteComment) =
     ZIO.serviceWithZIO[DatabaseService](_.deleteComment(d))
@@ -255,7 +258,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
 
   override def getUsers = run(user).provide(layer)
-  
+
   override def getReviewAndEntity(reviewId: UUID) = run {
     review
       .filter(_.id == lift(reviewId))
@@ -263,7 +266,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .on((review, entity) => review.id == entity.reviewId)
   }.provide(layer)
     .map(_.headOption)
-  
+
   override def getReview(reviewId: UUID) = run {
     review.filter(_.id == lift(reviewId))
   }.provide(layer)
@@ -454,11 +457,11 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .provide(layer)
       .map(_ > 0)
 
-  override def linkReviews(parentReviewId: UUID, childReviewId: UUID) = run {
+  override def linkReviews(link: ReviewLink) = run {
     reviewLink
       .insert(
-        _.parentReviewId -> lift(parentReviewId),
-        _.childReviewId  -> lift(childReviewId)
+        _.parentReviewId -> lift(link.parentReviewId),
+        _.childReviewId  -> lift(link.childReviewId)
       ).onConflictIgnore
   }.provide(layer).map(_ > 0)
 
@@ -478,10 +481,10 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
     .map(_ > 0)
 
-  override def deleteReviewLink(parentReviewId: UUID, childReviewId: UUID) = run {
+  override def deleteReviewLink(link: ReviewLink) = run {
     reviewLink
-      .filter(_.parentReviewId == lift(parentReviewId))
-      .filter(_.childReviewId == lift(childReviewId))
+      .filter(_.parentReviewId == lift(link.parentReviewId))
+      .filter(_.childReviewId == lift(link.childReviewId))
       .delete
   }.provide(layer)
     .map(_ > 0)
