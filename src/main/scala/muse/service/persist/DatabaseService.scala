@@ -375,7 +375,8 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
         _.reviewId        -> lift(c.reviewId),
         _.commenter       -> lift(userId),
         _.parentCommentId -> lift(c.parentCommentId),
-        _.comment         -> lift(c.comment)
+        // No idea why I can't use 'Some' here.
+        _.comment         -> lift(Option.apply(c.comment))
       )
       .returningGenerated(c => (c.id, c.createdAt, c.updatedAt))
   }.provide(layer).flatMap {
@@ -391,7 +392,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
               _.entityId   -> entity.entityId
             ))
       }.provide(layer).as(
-          ReviewComment(id, created, updated, false, c.parentCommentId, c.reviewId, userId, c.comment) -> asCommentEntity)
+          ReviewComment(id, created, updated, false, c.parentCommentId, c.reviewId, userId, Some(c.comment)) -> asCommentEntity)
   }
 
   /**

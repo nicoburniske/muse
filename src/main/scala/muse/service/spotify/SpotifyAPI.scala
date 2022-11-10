@@ -27,7 +27,11 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
 
   def getUserProfile(userId: String): F[User] =
     val uri = uri"${SpotifyAPI.API_BASE}/users/$userId"
-    execute(uri, Method.GET)
+    if (userId.isBlank) {
+      SpotifyError.HttpError(Left(List("No User Found")), uri, Method.GET, StatusCode.NotFound).raiseError
+    } else {
+      execute(uri, Method.GET)
+    }
 
   def isValidEntity(entityId: String, entityType: EntityType): F[Boolean] =
     entityType match

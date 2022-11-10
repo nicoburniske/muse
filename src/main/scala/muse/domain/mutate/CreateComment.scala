@@ -11,7 +11,6 @@ final case class CreateComment(
     reviewId: UUID,
     // If none, then it is root comment.
     parentCommentId: Option[Int],
-    comment: Option[String],
-    rating: Option[Int],
+    comment: String,
     entities: List[ReviewEntityInput]
 )

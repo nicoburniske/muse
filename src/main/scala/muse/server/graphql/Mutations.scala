@@ -94,8 +94,8 @@ object Mutations {
   def createComment(create: CreateComment) = for {
     user      <- RequestSession.get[UserSession]
     _         <- ZIO
-                   .fail(BadRequest(Some("Comment must have a body or rating")))
-                   .when(create.comment.exists(_.isEmpty) && create.rating.isEmpty)
+                   .fail(BadRequest(Some("Comment must have a non-empty body")))
+                   .when(create.comment.isEmpty)
     _         <- ZIO.foreachPar(create.entities)(e => validateEntity(e._2, e._1)) <&> validateCommentPermissions(
                    user.userId,
                    create.reviewId)
