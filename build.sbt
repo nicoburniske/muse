@@ -42,6 +42,8 @@ lazy val root = (project in file("."))
       "dev.zio"                       %% "zio-json"                      % zioJson,
       "dev.zio"                       %% "zio-nio"                       % zio,
       "dev.zio"                       %% "zio-cache"                     % "0.2.0",
+      "dev.zio"                       %% "zio-metrics-prometheus"        % zio,
+      "dev.zio"                       %% "zio-metrics-connectors"        % zio,
       "com.stuart"                    %% "zcaffeine"                     % "1.0.0-M2",
       // ZIO Config.
       "dev.zio"                       %% "zio-config"                    % zioConfig,
@@ -93,7 +95,7 @@ lazy val dockerSettings = Seq(
 //    dockerRepository := sys.props.get("docker.registry")
   dockerUpdateLatest   := false,
   // TODO: Can this be read from config?
-  dockerExposedPorts   := Seq(8883),
+  dockerExposedPorts   := Seq(8883, 9091),
   dockerBaseImage      := "azul/zulu-openjdk:17",
   Universal / javaOptions ++= Seq(
     "-J-XX:ActiveProcessorCount=4", // Overrides the automatic detection mechanism of the JVM that doesn't work very well in k8s.

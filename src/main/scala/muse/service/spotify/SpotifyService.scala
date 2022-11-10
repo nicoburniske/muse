@@ -177,7 +177,6 @@ case class SpotifyServiceLive(
 
   def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None) =
     playlistCache.get(PlaylistInput(playlistId, fields, market))
-      <* playlistCache.cacheStats.flatMap { stats => ZIO.logInfo(s"GetPlaylist stats: $stats") }
 
   def getTrack(id: String, market: Option[String] = None) =
     s.getTrack(id, market)

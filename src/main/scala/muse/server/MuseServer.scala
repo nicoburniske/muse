@@ -16,6 +16,7 @@ import zhttp.http.*
 import zhttp.http.Middleware.cors
 import zhttp.http.middleware.Cors.CorsConfig
 import zhttp.service
+import zio.metrics.connectors.prometheus.PrometheusPublisher
 import zio.{Tag, Task, ZIO}
 
 // TODO: incorporate cookie signing.
@@ -28,7 +29,9 @@ object MuseServer {
     _                  <- MigrationService.runMigrations
     protectedEndpoints <- createProtectedEndpoints
     allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ (MuseMiddleware.handleErrors ++ cors(config))
-    _                  <- service.Server.start(port, allEndpoints).forever
+    metrics             = service.Server.start(9091, metricsRouter).forever
+    museEndpoints       = service.Server.start(port, allEndpoints).forever
+    _                  <- metrics <&> museEndpoints
   } yield ()
 
   val config: CorsConfig = CorsConfig(allowedOrigins = _ => true)
@@ -43,6 +46,10 @@ object MuseServer {
     interpreter <- MuseGraphQL.interpreter
   } yield Http.collectHttp[Request] { case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter) }
     -> Http.collectHttp[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
+
+  val metricsRouter = Http.collectZIO[Request] {
+    case Method.GET -> !! / "metrics" => ZIO.serviceWithZIO[PrometheusPublisher](_.get.map(Response.text))
+  }
 
   // TODO: Expose this?
   lazy val writeSchemaToFile = for {

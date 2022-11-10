@@ -5,9 +5,12 @@ import muse.domain.error.InvalidEntity
 import muse.server.graphql.subgraph.Artist
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
-import muse.utils.Utils.addTimeLog
+import muse.utils.Utils
 import zio.ZIO
+import zio.metrics.Metric
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
+
+import java.time.temporal.ChronoUnit
 
 case class GetArtist(id: String) extends Request[Throwable, Artist]
 
@@ -15,6 +18,8 @@ object GetArtist {
   val MAX_ARTISTS_PER_REQUEST = 20
 
   def query(artistId: String) = ZQuery.fromRequest(GetArtist(artistId))(ArtistDataSource)
+
+  def metric = Utils.timer("GetArtist", ChronoUnit.MILLIS)
 
   val ArtistDataSource: DataSource[RequestSession[SpotifyService], GetArtist] =
     DataSource.Batched.make("ArtistDataSource") { reqs =>
@@ -27,7 +32,7 @@ object GetArtist {
           Artist.fromSpotify,
           _.id,
           _.id
-        ).addTimeLog(s"Retrieved Artists ${reqs.size}")
+        ) @@ metric.trackDuration
     }
 
 }
