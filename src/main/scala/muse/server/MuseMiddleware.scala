@@ -34,7 +34,6 @@ object MuseMiddleware {
             _       <- ZIO.logInfo(s"Found session for ${session.userId} with session ${session.sessionId}")
             _       <- RequestSession.set[UserSession](Some(session))
             _       <- RequestSession.set[SpotifyService](Some(session.spotifyService))
-            _       <- ZIO.logAnnotate("user_id", session.userId)
           } yield app
         }
       }

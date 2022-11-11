@@ -31,6 +31,7 @@ object UserSessions {
                  59.minutes,
                  Lookup(getUserSessionLive)
                )
+      _     <- startCacheReporter(cache)
     } yield UserSessionsLive(cache)
   }
 
@@ -45,6 +46,11 @@ object UserSessions {
     instant      <- Clock.instant
     expiration    = instant.plus(authInfo.expiresIn, ChronoUnit.SECONDS).minus(1, ChronoUnit.MINUTES)
   } yield UserSession(sessionId, session.userId, expiration, authInfo.accessToken, session.refreshToken, spotify)
+
+  def startCacheReporter(cache: Cache[String, Throwable, UserSession]) = {
+    val reporter = CacheUtils.ZioCacheStatReporter("user_sessions", cache)
+    reporter.report.repeat(Schedule.spaced(10.seconds) && Schedule.forever).forkDaemon
+  }
 }
 
 final case class UserSessionsLive(cache: Cache[String, Throwable, UserSession]) extends UserSessions {
