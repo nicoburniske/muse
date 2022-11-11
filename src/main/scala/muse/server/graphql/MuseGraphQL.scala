@@ -10,7 +10,7 @@ import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
 import muse.domain.error.{Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
 import muse.domain.event.ReviewUpdate
-import muse.domain.mutate.{CreateComment, CreateReview, PlaybackContext, UpdateComment, UpdateReview}
+import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify
 import muse.domain.spotify.AlbumType

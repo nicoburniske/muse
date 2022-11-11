@@ -58,12 +58,8 @@ object SpotifyService {
     spotify        = SpotifyAPI(backend, accessToken)
     // Given permissions vary, we want to create cache per instance to avoid conflicts.
     likeCache     <- SpotifyCache.savedSongsCache
-    playlistCache <- Cache.make(
-                       1000,
-                       5.minutes,
-                       Lookup((input: PlaylistInput) => spotify.getPlaylist(input.playlistId, input.market, input.fields))
-                     )
-    // These are global caches that we can share them across instances.
+    playlistCache <- SpotifyCache.playlistCache(spotify)
+    // These are global caches that we can share across instances.
     artistCache   <- ZIO.service[zcaffeine.Cache[Any, String, Artist]]
     albumCache    <- ZIO.service[zcaffeine.Cache[Any, String, Album]]
     userCache     <- ZIO.service[zcaffeine.Cache[Any, String, User]]
@@ -153,8 +149,6 @@ object SpotifyService {
   def seekPlayback(deviceId: Option[String], positionMs: Int) =
     ZIO.serviceWithZIO[SpotifyService](_.seekPlayback(deviceId, positionMs))
 }
-
-case class PlaylistInput(playlistId: String, fields: Option[String], market: Option[String])
 
 case class SpotifyServiceLive(
     s: SpotifyAPI[Task],

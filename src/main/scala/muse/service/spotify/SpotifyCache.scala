@@ -5,12 +5,15 @@ import com.stuart.zcaffeine.ZCaffeine
 import com.stuart.zcaffeine.ZCaffeine.State
 import com.stuart.zcaffeine.types.*
 import muse.domain.spotify.{Album, Artist, User}
+import muse.service.CacheUtils
 import zio.cache.{Cache, Lookup}
 import zio.metrics.prometheus.Registry
 import zio.metrics.{Label, Metric}
 import zio.{Duration, Schedule, Task, ZIO, ZLayer, durationInt}
 
 object SpotifyCache {
+  val cacheStatReportInterval = Schedule.spaced(10.seconds) && Schedule.forever
+
   val albumCacheLayer  = ZLayer.fromZIO(albumCache)
   val artistCacheLayer = ZLayer.fromZIO(artistCache)
   val userCacheLayer   = ZLayer.fromZIO(userCache)
@@ -23,26 +26,10 @@ object SpotifyCache {
       "album"  -> albumCache,
       "artist" -> artistCache,
       "user"   -> userCache
-    ).map { case (label, cache) => CaffeineStatReporter(label, cache) }
+    ).map { case (label, cache) => CacheUtils.CaffeineStatReporter(label, cache) }
 
-    ZIO.foreachPar(cacheStats)(_.report).repeat(Schedule.spaced(10.seconds) && Schedule.forever).forkDaemon
+    ZIO.foreachPar(cacheStats)(_.report).repeat(cacheStatReportInterval).forkDaemon
   )
-
-  case class CaffeineStatReporter[R, K, V](name: String, cache: zcaffeine.Cache[R, K, V]) {
-    val hits      = Metric.gauge("cache_hits").tagged("cache_name", name)
-    val misses    = Metric.gauge("cache_misses").tagged("cache_name", name)
-    val requests  = Metric.gauge("cache_request_count").tagged("cache_name", name)
-    val totalSize = Metric.gauge("cache_size").tagged("cache_name", name)
-
-    def report = for {
-      stats         <- cache.stats
-      _             <- hits.set(stats.hitCount)
-      _             <- misses.set(stats.missCount())
-      _             <- requests.set(stats.requestCount())
-      estimatedSize <- cache.estimatedSize
-      _             <- totalSize.set(estimatedSize)
-    } yield ()
-  }
 
   lazy val albumCache = ZCaffeine[Any, String, Album]()
     .map(configureCache(1.hour, _))
@@ -67,4 +54,16 @@ object SpotifyCache {
       .recordStats()
       .expireAfterWrite(duration)
   }
+
+  def playlistCache(spotify: SpotifyAPI[Task]) = for {
+    cache   <- Cache.make(
+                 1000,
+                 5.minutes,
+                 Lookup((input: PlaylistInput) => spotify.getPlaylist(input.playlistId, input.market, input.fields))
+               )
+    reporter = CacheUtils.ZioCacheStatReporter("playlist", cache)
+    _       <- reporter.report.repeat(cacheStatReportInterval).forkDaemon
+  } yield cache
 }
+
+case class PlaylistInput(playlistId: String, fields: Option[String], market: Option[String])

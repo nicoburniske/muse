@@ -31,8 +31,7 @@ input ContextInput {
 input CreateCommentInput {
   reviewId: ID!
   parentCommentId: Int
-  comment: String
-  rating: Int
+  comment: String!
   entities: [ReviewEntityInput!]!
 }
 
@@ -71,13 +70,26 @@ input PaginationInput {
   offset: Int! = 0
 }
 
-input PlaybackContextInput {
-  "If device id is specified, playback will be transferred to that device. Otherwise, playback will be executed on user's active device."
-  deviceId: String
-  uris: [String!]
-  positionOffset: PositionOffsetInput
-  entityOffset: EntityOffsetInput
+input PlayEntityContextInput {
+  offset: EntityOffsetInput!
   positionMs: Int
+  deviceId: String
+}
+
+input PlayInput {
+  deviceId: String
+}
+
+input PlayOffsetContextInput {
+  offset: PositionOffsetInput!
+  positionMs: Int
+  deviceId: String
+}
+
+input PlayTracksInput {
+  trackIds: [String!]!
+  positionMs: Int
+  deviceId: String
 }
 
 input PositionOffsetInput {
@@ -232,7 +244,10 @@ type Mutations {
   deleteComment(input: DeleteCommentInput!): Boolean
   deleteReviewLink(input: ReviewLinkInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
-  startPlayback(input: PlaybackContextInput!): Boolean
+  play(input: PlayInput!): Boolean
+  playTracks(input: PlayTracksInput!): Boolean
+  playOffsetContext(input: PlayOffsetContextInput!): Boolean
+  playEntityContext(input: PlayEntityContextInput!): Boolean
   seekPlayback(input: SeekPlaybackInput!): Boolean
   pausePlayback(deviceId: String): Boolean
   skipToNext(deviceId: String): Boolean
@@ -327,6 +342,7 @@ type Queries {
   search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, offset: 0}): SearchResult
   availableDevices: [PlaybackDevice!]
   getPlaylist(id: String!): Playlist
+  getAlbum(id: String!): Album
 }
 
 type Review {

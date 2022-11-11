@@ -3,12 +3,16 @@ package muse.server.graphql.resolver
 import muse.server.graphql.subgraph.Track
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
-import muse.utils.Utils.addTimeLog
+import muse.utils.Utils
 import zio.ZIO
 import zio.query.ZQuery
 
+import java.time.temporal.ChronoUnit
+
 object GetAlbumTracks {
   val MAX_TRACKS_PER_REQUEST = 50
+  
+  def metric = Utils.timer("GetPlaylistTracks", ChronoUnit.MILLIS)
 
   /**
    * Retrieves tracks for the given album.
@@ -37,5 +41,5 @@ object GetAlbumTracks {
               .map(_.map(t => Track.fromSpotify(t, Some(albumId))))
           }
           .map(_.flatten.toList)
-    }).addTimeLog("Retrieved Album Tracks", retrievedTracks => retrievedTracks.size.toString))
+    }) @@ metric.trackDuration)
 }

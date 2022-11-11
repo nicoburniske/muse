@@ -6,7 +6,7 @@ import muse.domain.event.{CreatedComment, DeletedComment, ReviewUpdate, UpdatedC
 import muse.domain.mutate.*
 import muse.domain.session.UserSession
 import muse.domain.spotify.{ErrorReason, ErrorResponse, StartPlaybackBody, UriOffset, PositionOffset as SpotifyPostionOffset}
-import muse.domain.table
+import muse.domain.{spotify, table}
 import muse.server.graphql.subgraph.{Comment, Review}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
@@ -36,7 +36,10 @@ final case class Mutations(
     deleteReviewLink: Input[table.ReviewLink] => ZIO[MutationEnv, MutationError, Boolean],
     shareReview: Input[ShareReview] => ZIO[MutationEnv, MutationError, Boolean],
     // Consider separating these mutations out.
-    startPlayback: Input[PlaybackContext] => ZIO[MutationEnv, MutationError, Boolean],
+    play: Input[Play] => ZIO[MutationEnv, MutationError, Boolean],
+    playTracks: Input[PlayTracks] => ZIO[MutationEnv, MutationError, Boolean],
+    playOffsetContext: Input[PlayOffsetContext] => ZIO[MutationEnv, MutationError, Boolean],
+    playEntityContext: Input[PlayEntityContext] => ZIO[MutationEnv, MutationError, Boolean],
     seekPlayback: Input[SeekPlayback] => ZIO[MutationEnv, MutationError, Boolean],
     pausePlayback: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
     skipToNext: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
@@ -59,7 +62,10 @@ object Mutations {
     i => deleteComment(i.input),
     i => deleteReviewLink(i.input),
     i => shareReview(i.input),
-    i => startPlayback(i.input),
+    i => play(i.input),
+    i => playTracks(i.input),
+    i => playOffsetContext(i.input),
+    i => playEntityContext(i.input),
     i => seekPlayback(i.input),
     i => pausePlayback(i.deviceId),
     i => skipToNext(i.deviceId),
@@ -166,42 +172,33 @@ object Mutations {
     result <- DatabaseService.shareReview(s)
   } yield result
 
-  def startPlayback(playback: PlaybackContext) =
-    val startPlayback = for {
-      context                    <- spotifyPlaybackBody(playback)
-      (deviceId, playbackContext) = context
-      playback                   <- RequestSession.get[SpotifyService].flatMap(_.startPlayback(deviceId, playbackContext))
-    } yield playback
+  def play(play: Play) = for {
+      spotify <- RequestSession.get[SpotifyService]
+      res <- spotify.startPlayback(play.deviceId, None)
+    } yield res
 
-    playback
-      .deviceId
-      .fold(startPlayback) { deviceId =>
-        RequestSession
-          .get[SpotifyService].flatMap(_.transferPlayback(deviceId)).foldZIO(
-            _ => ZIO.logInfo("Failed to transfer playback, starting playback on any device") *> startPlayback,
-            _ => ZIO.logInfo("Succeeded transferring playback") *> startPlayback
-          )
-      }.addTimeLog("Playback started")
+  def playTracks(play: PlayTracks) = for {
+    spotify <- RequestSession.get[SpotifyService]
+    uris     = play.trackIds.map(toUri(EntityType.Track, _))
+    body     = StartPlaybackBody(None, Some(uris), None, play.positionMs)
+    res     <- spotify.startPlayback(play.deviceId, Some(body))
+  } yield res
 
-  private def spotifyPlaybackBody(playback: PlaybackContext) =
-    playback match
-      case PlaybackContext(_, _, Some(_), Some(_), _)                                                            =>
-        ZIO.fail(BadRequest(Some("Playback can only use one kind of offset (Position, Entity).")))
-      case PlaybackContext(
-            deviceId,
-            uris,
-            None,
-            Some(EntityOffset(Context(outerType, outerId), Context(innerType, innerId))),
-            positionMs) =>
-        val outerUri = Some(toUri(outerType, outerId))
-        val innerUri = Some(UriOffset(toUri(innerType, innerId)))
-        ZIO.succeed(deviceId -> Some(StartPlaybackBody(outerUri, uris, innerUri, positionMs)))
-      case PlaybackContext(deviceId, uris, Some(PositionOffset(Context(eType, id), position)), None, positionMs) =>
-        val outerUri = Some(toUri(eType, id))
-        val innerUri = Some(SpotifyPostionOffset(position))
-        ZIO.succeed(deviceId -> Some(StartPlaybackBody(outerUri, uris, innerUri, positionMs)))
-      case PlaybackContext(None, None, None, None, None)                                                         =>
-        ZIO.succeed(None -> None)
+  def playOffsetContext(play: PlayOffsetContext) = for {
+    spotifyService <- RequestSession.get[SpotifyService]
+    offset = spotify.PositionOffset(play.offset.position)
+    contextUri = toUri(play.offset.context)
+    body = StartPlaybackBody(Some(contextUri),None, Some(offset), play.positionMs)
+    res <- spotifyService.startPlayback(play.deviceId, Some(body))
+  } yield res
+
+  def playEntityContext(play: PlayEntityContext) = for {
+    spotify <- RequestSession.get[SpotifyService]
+    outerUri = toUri(play.offset.outer)
+    innerUri = toUri(play.offset.inner)
+    body = StartPlaybackBody(Some(outerUri), None, Some(UriOffset(innerUri)), play.positionMs)
+    res <- spotify.startPlayback(play.deviceId, Some(body))
+  } yield res
 
   def seekPlayback(playback: SeekPlayback) = for {
     _       <- ZIO.fail(BadRequest(Some("Playback offset cannot be negative"))).when(playback.positionMs < 0)
@@ -236,6 +233,7 @@ object Mutations {
   def removeSavedTracks(trackIds: List[String]) =
     RequestSession.get[SpotifyService].flatMap(_.removeSavedTracks(trackIds.toVector)).addTimeLog("Removed tracks")
 
+  private def toUri(e: Context): String = toUri(e.entityType, e.entityId)
   private def toUri(entityType: EntityType, entityId: String) = entityType match
     case EntityType.Album    => s"spotify:album:$entityId"
     case EntityType.Artist   => s"spotify:artist:$entityId"
