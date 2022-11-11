@@ -156,7 +156,7 @@ case class SpotifyServiceLive(
     playlistCache: Cache[PlaylistInput, Throwable, UserPlaylist],
     artistCache: zcaffeine.Cache[Any, String, Artist],
     albumCache: zcaffeine.Cache[Any, String, Album],
-    userCache:zcaffeine.Cache[Any, String, User]
+    userCache: zcaffeine.Cache[Any, String, User]
 ) extends SpotifyService {
   def getCurrentUserProfile                          = s.getCurrentUserProfile
   def getTrackRecommendations(input: TrackRecsInput) = s.getTrackRecommendations(input).map(_.tracks)
@@ -244,8 +244,14 @@ case class SpotifyServiceLive(
   def getAvailableDevices                                     = s.getAvailableDevices
   def transferPlayback(deviceId: String)                      = s.transferPlayback(deviceId)
   def seekPlayback(deviceId: Option[String], positionMs: Int) = s.seekPlayback(deviceId, positionMs)
-  def saveTracks(trackIds: Vector[String])                    = s.saveTracks(trackIds)
-  def removeSavedTracks(trackIds: Vector[String])             = s.removeSavedTracks(trackIds)
+  
+  def saveTracks(trackIds: Vector[String])                    =
+    s.saveTracks(trackIds) <* toggleSaveTracks(trackIds, true) 
+  def removeSavedTracks(trackIds: Vector[String])             =
+    s.removeSavedTracks(trackIds) <* toggleSaveTracks(trackIds, false)
+  private def toggleSaveTracks(trackIds: Vector[String], save: Boolean) =
+    ZIO.foreachPar(trackIds)(id => likeCache.put(id, ZIO.succeed(save)))
+    
   def currentPlaybackState                                    = s.getPlaybackState
   def pausePlayback(deviceId: Option[String])                 = s.pausePlayback(deviceId)
   def skipToNext(deviceId: Option[String])                    = s.skipToNext(deviceId)
