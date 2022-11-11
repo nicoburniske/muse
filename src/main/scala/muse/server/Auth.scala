@@ -53,6 +53,7 @@ object Auth {
                 newSessionId,
                 isSecure = true,
                 isHttpOnly = true,
+                maxAge = Some(365.days.toSeconds),
                 // Cross domain cookie until we are hosting on same domain.
                 sameSite = Some(Cookie.SameSite.None)
               )
