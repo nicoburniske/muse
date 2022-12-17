@@ -20,6 +20,7 @@ import java.time.temporal.ChronoUnit
 trait UserSessions {
   def getUserSession(sessionId: String): IO[Throwable, UserSession]
   def deleteUserSession(sessionId: String): UIO[Unit]
+  def refreshUserSession(sessionId: String): IO[Throwable, UserSession]
 }
 
 object UserSessions {
@@ -37,6 +38,7 @@ object UserSessions {
 
   def getUserSession(sessionId: String)    = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
   def deleteUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
+  def refreshUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.refreshUserSession(sessionId))
 
   private def getUserSessionLive(sessionId: String) = for {
     maybeSession <- DatabaseService.getUserSession(sessionId)
@@ -55,5 +57,7 @@ object UserSessions {
 
 final case class UserSessionsLive(cache: Cache[String, Throwable, UserSession]) extends UserSessions {
   override def getUserSession(sessionId: String)    = cache.get(sessionId)
+  override def refreshUserSession(sessionId: String) = cache.refresh(sessionId) *> cache.get(sessionId)
+  // TODO: Delete from database as well.
   override def deleteUserSession(sessionId: String) = cache.invalidate(sessionId)
 }

@@ -124,6 +124,11 @@ input ShareReviewInput {
   accessLevel: AccessLevel
 }
 
+input TransferPlaybackInput {
+  deviceId: String!
+  play: Boolean
+}
+
 input UpdateCommentInput {
   commentId: Int!
   reviewId: ID!
@@ -245,6 +250,7 @@ type Mutations {
   deleteReviewLink(input: ReviewLinkInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
   play(input: PlayInput!): Boolean
+  transferPlayback(input: TransferPlaybackInput!): Boolean
   playTracks(input: PlayTracksInput!): Boolean
   playOffsetContext(input: PlayOffsetContextInput!): Boolean
   playEntityContext(input: PlayEntityContextInput!): Boolean
@@ -343,6 +349,7 @@ type Queries {
   availableDevices: [PlaybackDevice!]
   getPlaylist(id: String!): Playlist
   getAlbum(id: String!): Album
+  getTrack(id: String!): Track
 }
 
 type Review {

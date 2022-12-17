@@ -148,7 +148,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
   // device id must be active!
   def transferPlayback(deviceId: String): F[Boolean] =
     val uri  = uri"${SpotifyAPI.API_BASE}/me/player"
-    val body = PlaybackDeviceIds(List(deviceId)).toJson
+    val body = TransferPlaybackBody(List(deviceId)).toJson
     executeAndIgnoreResponse(uri, Method.PUT, Some(body)).as(true)
 
   def seekPlayback(deviceId: Option[String], positionMs: Int): F[Boolean] =
@@ -194,6 +194,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     go(Vector.empty, 0)
   }
 
+  // TODO: handle 429 error.
   private def executeMaybeNoContent[T: JsonDecoder](uri: Uri, method: Method): F[Option[T]] =
     basicRequest
       .auth.bearer(accessToken)

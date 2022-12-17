@@ -22,7 +22,11 @@ object Auth {
     "user-modify-playback-state",
     "user-read-playback-state",
     "user-read-currently-playing",
-    "user-library-modify"
+    "user-library-modify",
+    // Streaming permissions!
+    "user-read-email",
+    "user-read-private",
+    "streaming"
   ).mkString(" ")
 
   val loginEndpoints = Http
@@ -75,6 +79,12 @@ object Auth {
         for {
           session <- RequestSession.get[UserSession]
         } yield Response.text(session.sessionId)
+      case Method.GET -> !! / "token" =>
+          // Guaranteed to have a valid access token for next 60 min.
+          for {
+            session <- RequestSession.get[UserSession]
+            newSession <- UserSessions.refreshUserSession(session.sessionId)
+          } yield Response.text(newSession.accessToken)
     }
 
   val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {

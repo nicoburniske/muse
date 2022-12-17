@@ -5,7 +5,14 @@ import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, Mus
 import muse.domain.event.{CreatedComment, DeletedComment, ReviewUpdate, UpdatedComment}
 import muse.domain.mutate.*
 import muse.domain.session.UserSession
-import muse.domain.spotify.{ErrorReason, ErrorResponse, StartPlaybackBody, UriOffset, PositionOffset as SpotifyPostionOffset}
+import muse.domain.spotify.{
+  ErrorReason,
+  ErrorResponse,
+  StartPlaybackBody,
+  TransferPlaybackBody,
+  UriOffset,
+  PositionOffset as SpotifyPostionOffset
+}
 import muse.domain.{spotify, table}
 import muse.server.graphql.subgraph.{Comment, Review}
 import muse.service.RequestSession
@@ -37,6 +44,7 @@ final case class Mutations(
     shareReview: Input[ShareReview] => ZIO[MutationEnv, MutationError, Boolean],
     // Consider separating these mutations out.
     play: Input[Play] => ZIO[MutationEnv, MutationError, Boolean],
+    transferPlayback: Input[TransferPlayback] => ZIO[MutationEnv, MutationError, Boolean],
     playTracks: Input[PlayTracks] => ZIO[MutationEnv, MutationError, Boolean],
     playOffsetContext: Input[PlayOffsetContext] => ZIO[MutationEnv, MutationError, Boolean],
     playEntityContext: Input[PlayEntityContext] => ZIO[MutationEnv, MutationError, Boolean],
@@ -63,6 +71,7 @@ object Mutations {
     i => deleteReviewLink(i.input),
     i => shareReview(i.input),
     i => play(i.input),
+    i => transferPlayback(i.input),
     i => playTracks(i.input),
     i => playOffsetContext(i.input),
     i => playEntityContext(i.input),
@@ -173,9 +182,14 @@ object Mutations {
   } yield result
 
   def play(play: Play) = for {
-      spotify <- RequestSession.get[SpotifyService]
-      res <- spotify.startPlayback(play.deviceId, None)
-    } yield res
+    spotify <- RequestSession.get[SpotifyService]
+    res     <- spotify.startPlayback(play.deviceId, None)
+  } yield res
+
+  def transferPlayback(transferPlayback: TransferPlayback) = for {
+    spotify <- RequestSession.get[SpotifyService]
+    res     <- spotify.transferPlayback(transferPlayback.deviceId)
+  } yield res
 
   def playTracks(play: PlayTracks) = for {
     spotify <- RequestSession.get[SpotifyService]
@@ -186,18 +200,18 @@ object Mutations {
 
   def playOffsetContext(play: PlayOffsetContext) = for {
     spotifyService <- RequestSession.get[SpotifyService]
-    offset = spotify.PositionOffset(play.offset.position)
-    contextUri = toUri(play.offset.context)
-    body = StartPlaybackBody(Some(contextUri),None, Some(offset), play.positionMs)
-    res <- spotifyService.startPlayback(play.deviceId, Some(body))
+    offset          = spotify.PositionOffset(play.offset.position)
+    contextUri      = toUri(play.offset.context)
+    body            = StartPlaybackBody(Some(contextUri), None, Some(offset), play.positionMs)
+    res            <- spotifyService.startPlayback(play.deviceId, Some(body))
   } yield res
 
   def playEntityContext(play: PlayEntityContext) = for {
     spotify <- RequestSession.get[SpotifyService]
     outerUri = toUri(play.offset.outer)
     innerUri = toUri(play.offset.inner)
-    body = StartPlaybackBody(Some(outerUri), None, Some(UriOffset(innerUri)), play.positionMs)
-    res <- spotify.startPlayback(play.deviceId, Some(body))
+    body     = StartPlaybackBody(Some(outerUri), None, Some(UriOffset(innerUri)), play.positionMs)
+    res     <- spotify.startPlayback(play.deviceId, Some(body))
   } yield res
 
   def seekPlayback(playback: SeekPlayback) = for {
@@ -233,7 +247,7 @@ object Mutations {
   def removeSavedTracks(trackIds: List[String]) =
     RequestSession.get[SpotifyService].flatMap(_.removeSavedTracks(trackIds.toVector)).addTimeLog("Removed tracks")
 
-  private def toUri(e: Context): String = toUri(e.entityType, e.entityId)
+  private def toUri(e: Context): String                       = toUri(e.entityType, e.entityId)
   private def toUri(entityType: EntityType, entityId: String) = entityType match
     case EntityType.Album    => s"spotify:album:$entityId"
     case EntityType.Artist   => s"spotify:artist:$entityId"

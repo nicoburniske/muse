@@ -6,8 +6,8 @@ import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.PlaybackDevice
 import muse.server.graphql.Pagination.Default
-import muse.server.graphql.resolver.{GetAlbum, GetPlaylist, GetReview, GetSearch, GetUser}
-import muse.server.graphql.subgraph.{Album, Playlist, Review, SearchResult, User}
+import muse.server.graphql.resolver.{GetAlbum, GetPlaylist, GetReview, GetSearch, GetTrack, GetUser}
+import muse.server.graphql.subgraph.{Album, Playlist, Review, SearchResult, Track, User}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
@@ -33,7 +33,8 @@ final case class Queries(
     search: SearchArgs => ZQuery[RequestSession[SpotifyService], Throwable, SearchResult],
     availableDevices: ZIO[RequestSession[SpotifyService], Throwable, List[PlaybackDevice]],
     getPlaylist: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Playlist],
-    getAlbum: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Album]
+    getAlbum: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Album],
+    getTrack: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Track]
 )
 
 object Queries {
@@ -43,6 +44,7 @@ object Queries {
     args => GetSearch.query(args.query, args.types, args.pagination.getOrElse(Default.Search)),
     RequestSession.get[SpotifyService].flatMap(_.getAvailableDevices.map(_.toList)),
     args => GetPlaylist.query(args.id),
-    args => GetAlbum.query(args.id)
+    args => GetAlbum.query(args.id),
+    args => GetTrack.query(args.id)
   )
 }
