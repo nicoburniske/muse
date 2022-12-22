@@ -1,12 +1,13 @@
 package muse.domain.spotify
 import zio.json.*
 
+@jsonMemberNames(SnakeCase)
 final case class AuthCodeFlowData(
-    @jsonField("token_type") tokenType: String,
-    @jsonField("access_token") accessToken: String,
-    @jsonField("refresh_token") refreshToken: String,
-    @jsonField("scope") scope: Option[String],
-    @jsonField("expires_in") expiresIn: Int)
+    tokenType: String,
+    accessToken: String,
+    refreshToken: String,
+    scope: Option[String],
+    expiresIn: Int)
 
 object AuthCodeFlowData {
   given decoder: JsonDecoder[AuthCodeFlowData] = DeriveJsonDecoder.gen[AuthCodeFlowData]

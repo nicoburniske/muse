@@ -11,7 +11,7 @@ import java.time.temporal.ChronoUnit
 
 object GetAlbumTracks {
   val MAX_TRACKS_PER_REQUEST = 50
-  
+
   def metric = Utils.timer("GetPlaylistTracks", ChronoUnit.MILLIS)
 
   /**
@@ -30,7 +30,7 @@ object GetAlbumTracks {
         RequestSession
           .get[SpotifyService]
           .flatMap(_.getAllAlbumTracks(albumId))
-          .map(_.map(t => Track.fromSpotify(t, Some(albumId))).toList)
+          .map(_.map(t => Track.fromAlbum(t, albumId)).toList)
       case Some(total) =>
         ZIO
           .foreachPar((0 until total).grouped(MAX_TRACKS_PER_REQUEST).map(_.start).toList) { r =>
@@ -38,7 +38,7 @@ object GetAlbumTracks {
               .get[SpotifyService]
               .flatMap(_.getSomeAlbumTracks(albumId, Some(MAX_TRACKS_PER_REQUEST), Some(r)))
               .map(_.items)
-              .map(_.map(t => Track.fromSpotify(t, Some(albumId))))
+              .map(_.map(t => Track.fromAlbum(t, albumId)))
           }
           .map(_.flatten.toList)
     }) @@ metric.trackDuration)

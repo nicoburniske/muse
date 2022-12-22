@@ -30,7 +30,7 @@ object GetSearch {
           albums.flatMap(a => createPaginationResult(a, Album.fromSpotify)),
           artists.flatMap(a => createPaginationResult(a, Artist.fromSpotify)),
           playlists.flatMap(p => createPaginationResult(p, Playlist.fromSpotify)),
-          tracks.flatMap(t => createPaginationResult(t, t => Track.fromSpotify(t, None)))
+          tracks.flatMap(t => createPaginationResult(t, t => Track.fromSpotify(t)))
         )
     }
   }

@@ -1,13 +1,11 @@
 package muse.domain.spotify
 
-import zio.json.{DeriveJsonDecoder, JsonDecoder, jsonField}
+import zio.json.{DeriveJsonDecoder, JsonDecoder, SnakeCase, jsonField, jsonMemberNames}
 
+@jsonMemberNames(SnakeCase)
 final case class ClientCredentialsFlowData(
-    @jsonField("access_token")
     accessToken: String,
-    @jsonField("token_type")
     tokenType: String,
-    @jsonField("expires_in")
     expiresIn: Int)
 
 object ClientCredentialsFlowData {

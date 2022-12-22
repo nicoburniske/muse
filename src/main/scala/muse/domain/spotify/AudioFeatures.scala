@@ -1,14 +1,13 @@
 package muse.domain.spotify
 
-import zio.json.{DeriveJsonDecoder, JsonDecoder, jsonField}
+import zio.json.{DeriveJsonDecoder, JsonDecoder, SnakeCase, jsonField, jsonMemberNames}
 
 
-case class AudioFeatures(
+@jsonMemberNames(SnakeCase)
+final case class AudioFeatures(
                           acousticness: Double,
-                          @jsonField("analysis_url")
                           analysisUrl: String,
                           danceability: Double,
-                          @jsonField("duration_ms")
                           durationMs: Int,
                           energy: Double,
                           id: String,
@@ -19,9 +18,7 @@ case class AudioFeatures(
                           mode: Int,
                           speechiness: Double,
                           tempo: Double,
-    @jsonField("time_signature")
                           timeSignature: Int,
-                          @jsonField("track_href")
                           trackHref: String,
                           `type`: String,
                           uri: String,

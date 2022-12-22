@@ -45,6 +45,6 @@ object GetPlaylistTracks {
       .get[SpotifyService]
       .flatMap(_.getSomePlaylistTracks(playlistId, MAX_PLAYLIST_TRACKS_PER_REQUEST, Some(offset)))
       .map(_.items)
-      .map(_.map(PlaylistTrack.fromSpotify))
+      .map(_.map(PlaylistTrack.fromSpotify(_, playlistId)))
   }
 }

@@ -32,8 +32,8 @@ trait SpotifyService {
   def getAllUserPlaylists(userId: String): Task[Vector[UserPlaylist]]
   def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): Task[Paging[PlaylistTrack]]
   def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]]
-  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Track]]
-  def getAllAlbumTracks(albumId: String): Task[Vector[Track]]
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[AlbumTrack]]
+  def getAllAlbumTracks(albumId: String): Task[Vector[AlbumTrack]]
   def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Album]]
   def getAllArtistAlbums(artistId: String): Task[Vector[Album]]
   def getArtistTopTracks(artistId: String, country: String = "US"): Task[Vector[Track]]
@@ -204,25 +204,25 @@ case class SpotifyServiceLive(
         } yield albums.map(a => a.id -> a).toMap
       }.map(_.values.toVector)
 
-  def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None): Task[Paging[UserPlaylist]] =
+  def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None) =
     s.getUserPlaylists(userId, limit, offset)
 
   def getAllUserPlaylists(userId: String): Task[Vector[UserPlaylist]] =
     s.getAllUserPlaylists(userId)
 
-  def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): Task[Paging[PlaylistTrack]] =
+  def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None) =
     s.getSomePlaylistTracks(playlistId, limit, offset)
 
   def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]] =
     s.getAllPlaylistTracks(playlistId)
 
-  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Track]] =
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None) =
     s.getSomeAlbumTracks(album, limit, offset)
 
-  def getAllAlbumTracks(albumId: String): Task[Vector[Track]] =
+  def getAllAlbumTracks(albumId: String) =
     s.getAllAlbumTracks(albumId)
 
-  def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Album]] =
+  def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None) =
     s.getSomeArtistAlbums(artistId, limit, offset)
 
   def getAllArtistAlbums(artistId: String): Task[Vector[Album]] = s.getAllArtistAlbums(artistId)
@@ -244,17 +244,17 @@ case class SpotifyServiceLive(
   def getAvailableDevices                                     = s.getAvailableDevices
   def transferPlayback(deviceId: String)                      = s.transferPlayback(deviceId)
   def seekPlayback(deviceId: Option[String], positionMs: Int) = s.seekPlayback(deviceId, positionMs)
-  
-  def saveTracks(trackIds: Vector[String])                    =
-    s.saveTracks(trackIds) <* toggleSaveTracks(trackIds, true) 
-  def removeSavedTracks(trackIds: Vector[String])             =
+
+  def saveTracks(trackIds: Vector[String])                              =
+    s.saveTracks(trackIds) <* toggleSaveTracks(trackIds, true)
+  def removeSavedTracks(trackIds: Vector[String])                       =
     s.removeSavedTracks(trackIds) <* toggleSaveTracks(trackIds, false)
   private def toggleSaveTracks(trackIds: Vector[String], save: Boolean) =
     ZIO.foreachPar(trackIds)(id => likeCache.put(id, ZIO.succeed(save)))
-    
-  def currentPlaybackState                                    = s.getPlaybackState
-  def pausePlayback(deviceId: Option[String])                 = s.pausePlayback(deviceId)
-  def skipToNext(deviceId: Option[String])                    = s.skipToNext(deviceId)
-  def skipToPrevious(deviceId: Option[String])                = s.skipToPrevious(deviceId)
-  def toggleShuffle(shuffleState: Boolean)                    = s.toggleShuffle(shuffleState)
+
+  def currentPlaybackState                     = s.getPlaybackState
+  def pausePlayback(deviceId: Option[String])  = s.pausePlayback(deviceId)
+  def skipToNext(deviceId: Option[String])     = s.skipToNext(deviceId)
+  def skipToPrevious(deviceId: Option[String]) = s.skipToPrevious(deviceId)
+  def toggleShuffle(shuffleState: Boolean)     = s.toggleShuffle(shuffleState)
 }

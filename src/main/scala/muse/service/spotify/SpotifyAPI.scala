@@ -108,11 +108,11 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val request         = (offset: Int) => getSomePlaylistTracks(playlistId, MAX_PER_REQUEST, Some(offset))
     getAllPaging(request, MAX_PER_REQUEST)
 
-  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): F[Paging[Track]] =
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): F[Paging[AlbumTrack]] =
     val uri = uri"${SpotifyAPI.API_BASE}/albums/$album/tracks?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
 
-  def getAllAlbumTracks(albumId: String): F[Vector[Track]] =
+  def getAllAlbumTracks(albumId: String): F[Vector[AlbumTrack]] =
     val MAX_PER_REQUEST = 20
     val request         = (offset: Int) => getSomeAlbumTracks(albumId, Some(MAX_PER_REQUEST), Some(offset))
     getAllPaging(request, MAX_PER_REQUEST)

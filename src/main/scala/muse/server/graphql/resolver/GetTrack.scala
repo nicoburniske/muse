@@ -29,7 +29,7 @@ object GetTrack {
           MAX_TRACKS_PER_REQUEST,
           req => RequestSession.get[SpotifyService].flatMap(_.getTrack(req.id)),
           reqs => RequestSession.get[SpotifyService].flatMap(_.getTracks(reqs.map(_.id))),
-          Track.fromSpotify(_, None),
+          Track.fromSpotify,
           _.id,
           _.id
         ) @@ metric.trackDuration

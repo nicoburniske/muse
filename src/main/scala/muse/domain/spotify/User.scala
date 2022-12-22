@@ -2,14 +2,12 @@ package muse.domain.spotify
 
 import zio.json.*
 
+@jsonMemberNames(SnakeCase)
 final case class User(
-    @jsonField("display_name")
     displayName: Option[String],
-    @jsonField("external_urls")
     externalUrls: Map[String, String],
     href: String,
     id: String,
-    @jsonField("type")
     `type`: String,
     uri: String,
     images: Option[List[Image]],

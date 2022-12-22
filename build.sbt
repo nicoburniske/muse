@@ -4,7 +4,7 @@ ThisBuild / name         := "muse"
 ThisBuild / scalaVersion := "3.1.0"
 
 val zio          = "2.0.0"
-val zioJson      = "0.3.0-RC10"
+val zioJson      = "0.4.2"
 val zioConfig    = "3.0.1"
 val zhttp        = "2.0.0-RC10"
 val protoQuill   = "4.0.0"
