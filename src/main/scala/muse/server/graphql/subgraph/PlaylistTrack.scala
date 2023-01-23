@@ -1,7 +1,7 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.spotify
-import muse.server.graphql.resolver.GetPlaylist
+import muse.server.graphql.resolver.{GetPlaylist, GetUser}
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
@@ -17,13 +17,22 @@ final case class PlaylistTrack(
 )
 
 object PlaylistTrack {
-  def fromSpotify(t: spotify.PlaylistTrack, playlistId: String) =
+  // When track is added by Spotify (generated playlist) the user is empty.
+  def fromSpotify(t: spotify.PlaylistTrack, playlistId: String) = {
+    val user = {
+      if (t.addedBy.id.isBlank)
+        GetUser.queryByUserId("spotify")
+      else
+          User.missingSome(t.addedBy.id, t.addedBy.displayName, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls)
+    }
+
     PlaylistTrack(
       t.addedAt,
-      User.missingSome(t.addedBy.id, t.addedBy.displayName, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls),
+      user,
       t.isLocal,
       Track.fromSpotify(t.track),
       // TODO: This should never fail because playlist should be in cache. hopefully?
       GetPlaylist.query(playlistId).orDie
     )
+  }
 }
