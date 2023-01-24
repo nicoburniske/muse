@@ -19,7 +19,7 @@ import java.time.temporal.ChronoUnit
 
 trait UserSessions {
   def getUserSession(sessionId: String): IO[Throwable, UserSession]
-  def deleteUserSession(sessionId: String): UIO[Unit]
+  def deleteUserSession(sessionId: String): IO[Throwable, Boolean]
   def refreshUserSession(sessionId: String): IO[Throwable, UserSession]
 }
 
@@ -32,8 +32,9 @@ object UserSessions {
                  59.minutes,
                  Lookup(getUserSessionLive)
                )
+      databaseService <- ZIO.service[DatabaseService]
       _     <- startCacheReporter(cache)
-    } yield UserSessionsLive(cache)
+    } yield UserSessionsLive(cache, databaseService)
   }
 
   def getUserSession(sessionId: String)    = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
@@ -55,9 +56,8 @@ object UserSessions {
   }
 }
 
-final case class UserSessionsLive(cache: Cache[String, Throwable, UserSession]) extends UserSessions {
+final case class UserSessionsLive(cache: Cache[String, Throwable, UserSession], databaseService: DatabaseService) extends UserSessions {
   override def getUserSession(sessionId: String)    = cache.get(sessionId)
   override def refreshUserSession(sessionId: String) = cache.refresh(sessionId) *> cache.get(sessionId)
-  // TODO: Delete from database as well.
-  override def deleteUserSession(sessionId: String) = cache.invalidate(sessionId)
+  override def deleteUserSession(sessionId: String) = cache.invalidate(sessionId) *> databaseService.deleteUserSession(sessionId)
 }

@@ -2,13 +2,14 @@ package muse.service.persist
 
 import io.getquill.*
 import io.getquill.context.ZioJdbc.*
+import io.getquill.jdbczio.Quill
 import muse.domain.common.EntityType
 import muse.domain.mutate.{
-  ReviewEntityInput,
   CreateComment,
   CreateReview,
   DeleteComment,
   DeleteReview,
+  ReviewEntityInput,
   ShareReview,
   UpdateComment,
   UpdateReview
@@ -40,7 +41,7 @@ trait DatabaseService {
   def createUser(userId: String): IO[SQLException, Unit]
   def createUserSession(sessionId: String, refreshToken: String, userId: String): IO[SQLException, Unit]
   def createReview(id: String, review: CreateReview): IO[SQLException, Review]
-  def createReviewComment(id: String, review: CreateComment): IO[SQLException, (ReviewComment, List[ReviewCommentEntity])]
+  def createReviewComment(id: String, review: CreateComment): IO[Throwable, (ReviewComment, List[ReviewCommentEntity])]
 
   /**
    * Read!
@@ -86,6 +87,7 @@ trait DatabaseService {
   // TODO: fix delete to mark boolean field as deleted.
   def deleteComment(d: DeleteComment): IO[SQLException, Boolean]
   def deleteReviewLink(link: ReviewLink): IO[SQLException, Boolean]
+  def deleteUserSession(sessionId: String): IO[SQLException, Boolean]
 
   /**
    * Permissions!
@@ -165,6 +167,9 @@ object DatabaseService {
   def deleteComment(d: DeleteComment) =
     ZIO.serviceWithZIO[DatabaseService](_.deleteComment(d))
 
+  def deleteUserSession(sessionId: String) =
+    ZIO.serviceWithZIO[DatabaseService](_.deleteUserSession(sessionId))
+
   def canViewReview(userId: String, reviewId: UUID) =
     ZIO.serviceWithZIO[DatabaseService](_.canViewReview(userId, reviewId))
 
@@ -185,12 +190,7 @@ object DatabaseService {
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
   // Exponential backoff retry strategy for connecting to Postgres DB.
   val schedule        = Schedule.exponential(1.second) && Schedule.recurs(10)
-  val dataSourceLayer = DataSourceLayer.fromPrefix("database").retry(schedule)
-
-  given instantDecoder: Decoder[Instant] = decoder((index, row, session) => row.getTimestamp(index).toInstant)
-
-  given instantEncoder: Encoder[Instant] =
-    encoder(Types.TIMESTAMP, (index, value, row) => row.setTimestamp(index, Timestamp.from(value)))
+  val dataSourceLayer = Quill.DataSource.fromPrefix("database").retry(schedule)
 
   given entityTypeDecoder: Decoder[EntityType] =
     decoder((index, row, session) => EntityType.fromOrdinal(row.getInt(index)))
@@ -369,31 +369,36 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       Review(uuid, instant, userId, create.name, create.isPublic)
   }
 
-  override def createReviewComment(userId: String, c: CreateComment) = run {
-    comment
-      .insert(
-        _.reviewId        -> lift(c.reviewId),
-        _.commenter       -> lift(userId),
-        _.parentCommentId -> lift(c.parentCommentId),
-        // No idea why I can't use 'Some' here.
-        _.comment         -> lift(Option.apply(c.comment))
-      )
-      .returningGenerated(c => (c.id, c.createdAt, c.updatedAt))
-  }.provide(layer).flatMap {
-    case (id, created, updated) =>
-      val asCommentEntity =
-        c.entities.map { case ReviewEntityInput(entityType, entityId) => ReviewCommentEntity(id, entityType, entityId) }
-      run {
-        liftQuery(asCommentEntity)
-          .foreach(entity =>
-            commentEntity.insert(
-              _.commentId  -> entity.commentId,
-              _.entityType -> entity.entityType,
-              _.entityId   -> entity.entityId
-            ))
-      }.provide(layer).as(
-          ReviewComment(id, created, updated, false, c.parentCommentId, c.reviewId, userId, Some(c.comment)) -> asCommentEntity)
-  }
+  override def createReviewComment(userId: String, c: CreateComment) = transaction {
+    for {
+      created                   <- run {
+                                     comment
+                                       .insert(
+                                         _.reviewId        -> lift(c.reviewId),
+                                         _.commenter       -> lift(userId),
+                                         _.parentCommentId -> lift(c.parentCommentId),
+                                         // No idea why I can't use 'Some' here.
+                                         _.comment         -> lift(Option.apply(c.comment))
+                                       )
+                                       .returningGenerated(gen => (gen.id, gen.createdAt, gen.updatedAt))
+                                   }
+      (id, createdAt, updatedAt) = created
+      _                         <- run {
+                                     liftQuery(c.entities)
+                                       .foreach(entity =>
+                                         commentEntity.insert(
+                                           _.commentId  -> lift(id),
+                                           _.entityType -> entity.entityType,
+                                           _.entityId   -> entity.entityId
+                                         ))
+                                   }
+    } yield {
+      val createdComment  =
+        ReviewComment(id, createdAt, updatedAt, false, c.parentCommentId, c.reviewId, userId, Some(c.comment))
+      val commentEntities = c.entities.map(input => ReviewCommentEntity(id, input.entityType, input.entityId))
+      createdComment -> commentEntities
+    }
+  }.provide(layer)
 
   /**
    * Update!
@@ -486,6 +491,13 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     reviewLink
       .filter(_.parentReviewId == lift(link.parentReviewId))
       .filter(_.childReviewId == lift(link.childReviewId))
+      .delete
+  }.provide(layer)
+    .map(_ > 0)
+
+  def deleteUserSession(sessionId: String) = run {
+    userSession
+      .filter(_.sessionId == lift(sessionId))
       .delete
   }.provide(layer)
     .map(_ > 0)
