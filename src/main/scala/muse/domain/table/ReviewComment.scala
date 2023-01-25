@@ -8,6 +8,7 @@ import java.util.UUID
 final case class ReviewComment(
     // GUID?
     id: Int,
+    commentIndex: Int,
     createdAt: Instant,
     updatedAt: Instant,
     deleted: Boolean,

@@ -33,6 +33,7 @@ input CreateCommentInput {
   parentCommentId: Int
   comment: String!
   entities: [ReviewEntityInput!]!
+  commentIndex: Int
 }
 
 input CreateReviewInput {
@@ -224,6 +225,7 @@ type Collaborator {
 
 type Comment {
   id: Int!
+  commentIndex: Int!
   reviewId: ID!
   createdAt: Instant!
   updatedAt: Instant!

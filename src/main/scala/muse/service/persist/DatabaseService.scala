@@ -14,6 +14,7 @@ import muse.domain.mutate.{
   ReviewEntityInput,
   ShareReview,
   UpdateComment,
+  UpdateCommentIndex,
   UpdateReview,
   UpdateReviewLink
 }
@@ -380,34 +381,76 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   override def createReviewComment(userId: String, c: CreateComment) = transaction {
     for {
-      created                   <- run {
-                                     comment
-                                       .insert(
-                                         _.reviewId        -> lift(c.reviewId),
-                                         _.commenter       -> lift(userId),
-                                         _.parentCommentId -> lift(c.parentCommentId),
-                                         // No idea why I can't use 'Some' here.
-                                         _.comment         -> lift(Option.apply(c.comment))
-                                       )
-                                       .returningGenerated(gen => (gen.id, gen.createdAt, gen.updatedAt))
-                                   }
-      (id, createdAt, updatedAt) = created
-      _                         <- run {
-                                     liftQuery(c.entities)
-                                       .foreach(entity =>
-                                         commentEntity.insert(
-                                           _.commentId  -> lift(id),
-                                           _.entityType -> entity.entityType,
-                                           _.entityId   -> entity.entityId
-                                         ))
-                                   }
+      createdComment <- createComment(userId, c)
+      _              <- run {
+                          liftQuery(c.entities)
+                            .foreach(entity =>
+                              commentEntity.insert(
+                                _.commentId  -> lift(createdComment.id),
+                                _.entityType -> entity.entityType,
+                                _.entityId   -> entity.entityId
+                              ))
+                        }
     } yield {
-      val createdComment  =
-        ReviewComment(id, createdAt, updatedAt, false, c.parentCommentId, c.reviewId, userId, Some(c.comment))
-      val commentEntities = c.entities.map(input => ReviewCommentEntity(id, input.entityType, input.entityId))
+      val commentEntities = c.entities.map(input => ReviewCommentEntity(createdComment.id, input.entityType, input.entityId))
       createdComment -> commentEntities
     }
   }.provide(layer)
+
+  private def createComment(userId: String, create: CreateComment) = {
+    def insertComment(insertIndex: Int) = run {
+      comment
+        .insert(
+          _.reviewId        -> lift(create.reviewId),
+          _.commenter       -> lift(userId),
+          _.parentCommentId -> lift(create.parentCommentId),
+          // No idea why I can't use 'Some' here.
+          _.comment         -> lift(Option.apply(create.comment)),
+          _.commentIndex    -> lift(insertIndex)
+        ).returningGenerated(comment => (comment.id, comment.createdAt, comment.updatedAt, comment.deleted))
+    }.map {
+      case (id, createdAt, updatedAt, deleted) =>
+        ReviewComment(
+          id,
+          insertIndex,
+          createdAt,
+          updatedAt,
+          deleted,
+          create.parentCommentId,
+          create.reviewId,
+          userId,
+          Some(create.comment))
+    }
+
+    create.commentIndex match {
+      // Insert the comment at the end of the list.
+      case None              =>
+        for {
+          topIndex   <- run {
+                          comment
+                            .filter(_.reviewId == lift(create.reviewId))
+                            .map(_.commentIndex)
+                            .max
+                        }
+          insertIndex = topIndex.map(_ + 1).getOrElse(0)
+          _          <- ZIO.logInfo(s"Inserting comment at index $insertIndex")
+          created    <- insertComment(insertIndex)
+        } yield created
+      // Move all other comments down. Then insert the new comment at the specified index.
+      case Some(insertIndex) =>
+        transaction {
+          for {
+            _       <- run {
+                         comment
+                           .filter(_.reviewId == lift(create.reviewId))
+                           .filter(_.commentIndex >= lift(insertIndex))
+                           .update(comment => comment.commentIndex -> (comment.commentIndex + 1))
+                       }
+            created <- insertComment(insertIndex)
+          } yield created
+        }
+    }
+  }
 
   /**
    * Update!
@@ -446,6 +489,8 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
           ).returning(r => r)
       }
     }.provide(layer)
+
+  def updateCommentIndex(c: UpdateCommentIndex) = ???
 
   override def shareReview(share: ShareReview) =
     (share.accessLevel match
@@ -509,45 +554,39 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   override def linkReviews(link: LinkReviews) = (link.linkIndex match
     // Find the current greatest index and then insert the new link at that index + 1.
-    case None            =>
-      transaction {
-        for {
-          insertIndex <- run {
-                           reviewLink
-                             .filter(_.parentReviewId == lift(link.parentReviewId))
-                             .size
-                         }
-          insertCount <- run {
-                           reviewLink
-                             .insert(
-                               _.parentReviewId -> lift(link.parentReviewId),
-                               _.childReviewId  -> lift(link.childReviewId),
-                               // TODO: Is Long -> Int safe?
-                               _.linkIndex      -> lift(insertIndex.toInt)
-                             )
-                         }
-        } yield insertCount
-      }
-    case Some(linkIndex) =>
+    case None              =>
+      for {
+        topIndex    <- run {
+                         reviewLink
+                           .filter(_.parentReviewId == lift(link.parentReviewId))
+                           .map(_.linkIndex)
+                           .max
+                       }
+        insertIndex  = topIndex.map(_ + 1).getOrElse(0)
+        insertCount <- run(insertLink(link.parentReviewId, link.childReviewId, insertIndex))
+      } yield insertCount
+    // Move all other links down. Then insert the new link at the specified index.
+    case Some(insertIndex) =>
       transaction {
         for {
           _           <- run {
                            reviewLink
                              .filter(_.parentReviewId == lift(link.parentReviewId))
-                             .filter(_.linkIndex >= lift(linkIndex))
+                             .filter(_.linkIndex >= lift(insertIndex))
                              .update(link => link.linkIndex -> (link.linkIndex + 1))
                          }
-          insertCount <- run {
-                           reviewLink
-                             .insert(
-                               _.parentReviewId -> lift(link.parentReviewId),
-                               _.childReviewId  -> lift(link.childReviewId),
-                               _.linkIndex      -> lift(linkIndex)
-                             )
-                         }
+          insertCount <- run(insertLink(link.parentReviewId, link.childReviewId, insertIndex))
         } yield insertCount
       }
   ).provide(layer).map(_ > 0)
+
+  inline def insertLink(inline parentReviewId: UUID, inline childReviewId: UUID, inline linkIndex: Int) =
+    reviewLink
+      .insert(
+        _.parentReviewId -> lift(parentReviewId),
+        _.childReviewId  -> lift(childReviewId),
+        _.linkIndex      -> lift(linkIndex)
+      )
 
   /**
    * Delete!
@@ -583,7 +622,10 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     comment
       .filter(_.id == lift(d.commentId))
       .filter(_.reviewId == lift(d.reviewId))
-      .delete
+      .update(
+        _.deleted -> true,
+        _.comment -> None
+      )
   }.provide(layer)
     .map(_ > 0)
 

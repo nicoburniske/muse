@@ -14,6 +14,7 @@ import java.util.UUID
 
 final case class Comment(
     id: Int,
+    commentIndex: Int,
     reviewId: UUID,
     createdAt: Instant,
     updatedAt: Instant,
@@ -27,6 +28,7 @@ final case class Comment(
 object Comment {
   def fromTable(r: table.ReviewComment, entities: List[table.ReviewCommentEntity]) = Comment(
     r.id,
+    r.commentIndex,
     r.reviewId,
     r.createdAt,
     r.updatedAt,

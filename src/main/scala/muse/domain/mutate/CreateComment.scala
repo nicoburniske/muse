@@ -12,5 +12,7 @@ final case class CreateComment(
     // If none, then it is root comment.
     parentCommentId: Option[Int],
     comment: String,
-    entities: List[ReviewEntityInput]
+    entities: List[ReviewEntityInput],
+    // If none, will be added to the end of the list.
+    commentIndex: Option[Int]
 )
