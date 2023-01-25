@@ -9,10 +9,13 @@ import muse.domain.mutate.{
   CreateReview,
   DeleteComment,
   DeleteReview,
+  DeleteReviewLink,
+  LinkReviews,
   ReviewEntityInput,
   ShareReview,
   UpdateComment,
-  UpdateReview
+  UpdateReview,
+  UpdateReviewLink
 }
 import muse.domain.table.{
   AccessLevel,
@@ -42,6 +45,7 @@ trait DatabaseService {
   def createUserSession(sessionId: String, refreshToken: String, userId: String): IO[SQLException, Unit]
   def createReview(id: String, review: CreateReview): IO[SQLException, Review]
   def createReviewComment(id: String, review: CreateComment): IO[Throwable, (ReviewComment, List[ReviewCommentEntity])]
+  def linkReviews(link: LinkReviews): IO[Throwable, Boolean]
 
   /**
    * Read!
@@ -76,17 +80,17 @@ trait DatabaseService {
   def updateReviewEntity(review: ReviewEntity): IO[SQLException, Boolean]
   def updateComment(comment: UpdateComment): IO[SQLException, ReviewComment]
   def shareReview(share: ShareReview): IO[SQLException, Boolean]
-  def linkReviews(link: ReviewLink): IO[SQLException, Boolean]
+  def updateReviewLink(link: UpdateReviewLink): IO[Throwable, Boolean]
 
   /**
    * Delete!
    *
    * Returns whether a record was deleted.
    */
-  def deleteReview(d: DeleteReview): IO[SQLException, Boolean]
+  def deleteReview(d: DeleteReview): IO[Throwable, Boolean]
   // TODO: fix delete to mark boolean field as deleted.
   def deleteComment(d: DeleteComment): IO[SQLException, Boolean]
-  def deleteReviewLink(link: ReviewLink): IO[SQLException, Boolean]
+  def deleteReviewLink(link: DeleteReviewLink): IO[Throwable, Boolean]
   def deleteUserSession(sessionId: String): IO[SQLException, Boolean]
 
   /**
@@ -111,7 +115,7 @@ object DatabaseService {
   def createReview(userId: String, review: CreateReview) =
     ZIO.serviceWithZIO[DatabaseService](_.createReview(userId, review))
 
-  def linkReviews(link: ReviewLink) =
+  def linkReviews(link: LinkReviews) =
     ZIO.serviceWithZIO[DatabaseService](_.linkReviews(link))
 
   def createReviewComment(userId: String, c: CreateComment) =
@@ -155,13 +159,16 @@ object DatabaseService {
   def updateComment(comment: UpdateComment) =
     ZIO.serviceWithZIO[DatabaseService](_.updateComment(comment))
 
+  def updateReviewLink(link: UpdateReviewLink) =
+    ZIO.serviceWithZIO[DatabaseService](_.updateReviewLink(link))
+
   def shareReview(share: ShareReview) =
     ZIO.serviceWithZIO[DatabaseService](_.shareReview(share))
 
   def deleteReview(d: DeleteReview) =
     ZIO.serviceWithZIO[DatabaseService](_.deleteReview(d))
 
-  def deleteReviewLink(d: ReviewLink) =
+  def deleteReviewLink(d: DeleteReviewLink) =
     ZIO.serviceWithZIO[DatabaseService](_.deleteReviewLink(d))
 
   def deleteComment(d: DeleteComment) =
@@ -286,11 +293,13 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     .map(_.headOption)
 
   override def getChildReviews(reviewId: UUID) = run {
-    for {
-      links          <- reviewLink.filter(_.parentReviewId == lift(reviewId))
-      child          <- review.join(_.id == links.childReviewId)
+    (for {
+      link           <- reviewLink.filter(_.parentReviewId == lift(reviewId))
+      child          <- review.join(_.id == link.childReviewId)
       reviewEntities <- reviewEntity.leftJoin(e => child.id == e.reviewId)
-    } yield (child, reviewEntities)
+    } yield (link, child, reviewEntities))
+      .sortBy(_._1.linkIndex)
+      .map { case (_, review, entity) => (review, entity) }
   }.provide(layer)
 
   override def getUserById(userId: String) = run {
@@ -463,20 +472,111 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .provide(layer)
       .map(_ > 0)
 
-  override def linkReviews(link: ReviewLink) = run {
+  inline def getReviewLink(inline parentReviewId: UUID, inline childReviewId: UUID) =
     reviewLink
-      .insert(
-        _.parentReviewId -> lift(link.parentReviewId),
-        _.childReviewId  -> lift(link.childReviewId)
-      ).onConflictIgnore
-  }.provide(layer).map(_ > 0)
+      .filter(_.parentReviewId == lift(parentReviewId))
+      .filter(_.childReviewId == lift(childReviewId))
+
+  override def updateReviewLink(update: UpdateReviewLink) = transaction {
+    for {
+      currentLinkIndex <- run {
+                            getReviewLink(update.parentReviewId, update.childReviewId)
+                              .map(_.linkIndex)
+                              .take(1)
+                          }.map(_.headOption)
+      // Move entries above current placement down.
+      _                <- run {
+                            reviewLink
+                              .filter(_.parentReviewId == lift(update.parentReviewId))
+                              .filter(link => lift(currentLinkIndex).exists(link.linkIndex >= _))
+                              .update(link => link.linkIndex -> (link.linkIndex - 1))
+                          }
+      // Move entries below new placement up.
+      _                <- run {
+                            reviewLink
+                              .filter(_.parentReviewId == lift(update.parentReviewId))
+                              .filter(_.linkIndex >= lift(update.linkIndex))
+                              .update(link => link.linkIndex -> (link.linkIndex + 1))
+                          }
+      // Update index.
+      update           <- run {
+                            getReviewLink(update.parentReviewId, update.childReviewId)
+                              .update(_.linkIndex -> lift(update.linkIndex))
+                          }
+    } yield update
+  }.provide(layer)
+    .map(_ > 0)
+
+  override def linkReviews(link: LinkReviews) = (link.linkIndex match
+    // Find the current greatest index and then insert the new link at that index + 1.
+    case None            =>
+      transaction {
+        for {
+          insertIndex <- run {
+                           reviewLink
+                             .filter(_.parentReviewId == lift(link.parentReviewId))
+                             .size
+                         }
+          insertCount <- run {
+                           reviewLink
+                             .insert(
+                               _.parentReviewId -> lift(link.parentReviewId),
+                               _.childReviewId  -> lift(link.childReviewId),
+                               // TODO: Is Long -> Int safe?
+                               _.linkIndex      -> lift(insertIndex.toInt)
+                             )
+                         }
+        } yield insertCount
+      }
+    case Some(linkIndex) =>
+      transaction {
+        for {
+          _           <- run {
+                           reviewLink
+                             .filter(_.parentReviewId == lift(link.parentReviewId))
+                             .filter(_.linkIndex >= lift(linkIndex))
+                             .update(link => link.linkIndex -> (link.linkIndex + 1))
+                         }
+          insertCount <- run {
+                           reviewLink
+                             .insert(
+                               _.parentReviewId -> lift(link.parentReviewId),
+                               _.childReviewId  -> lift(link.childReviewId),
+                               _.linkIndex      -> lift(linkIndex)
+                             )
+                         }
+        } yield insertCount
+      }
+  ).provide(layer).map(_ > 0)
 
   /**
    * Delete!
    */
-  override def deleteReview(delete: DeleteReview) = run {
-    review.filter(_.id == lift(delete.id)).delete
-  }.provide(layer)
+  override def deleteReview(delete: DeleteReview) = transaction {
+    for {
+      // We want to delete all links.
+      deletedLinks <- run {
+                        reviewLink
+                          .filter(_.childReviewId == lift(delete.id))
+                          .delete
+                          .returningMany(deleted => deleted)
+                      }
+      // Ensure there are no holes.
+      _            <- run {
+                        liftQuery(deletedLinks).foreach { deletedLink =>
+                          reviewLink
+                            .filter(_.parentReviewId == deletedLink.parentReviewId)
+                            .filter(_.linkIndex >= deletedLink.linkIndex)
+                            .update(link => link.linkIndex -> (link.linkIndex - 1))
+                        }
+                      }
+      // Then delete the review.
+      deleted      <- run {
+                        review.filter(_.id == lift(delete.id)).delete
+                      }
+    } yield deleted
+  }
+    .provide(layer)
     .map(_ > 0)
 
   override def deleteComment(d: DeleteComment) = run {
@@ -487,11 +587,22 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
     .map(_ > 0)
 
-  override def deleteReviewLink(link: ReviewLink) = run {
-    reviewLink
-      .filter(_.parentReviewId == lift(link.parentReviewId))
-      .filter(_.childReviewId == lift(link.childReviewId))
-      .delete
+  override def deleteReviewLink(link: DeleteReviewLink) = transaction {
+    for {
+      deleteIndex <- run {
+                       reviewLink
+                         .filter(_.parentReviewId == lift(link.parentReviewId))
+                         .filter(_.childReviewId == lift(link.childReviewId))
+                         .delete
+                         .returning(deleted => deleted.linkIndex)
+                     }
+      _           <- run {
+                       reviewLink
+                         .filter(_.parentReviewId == lift(link.parentReviewId))
+                         .filter(_.linkIndex >= lift(deleteIndex))
+                         .update(link => link.linkIndex -> (link.linkIndex - 1))
+                     }
+    } yield deleteIndex
   }.provide(layer)
     .map(_ > 0)
 
