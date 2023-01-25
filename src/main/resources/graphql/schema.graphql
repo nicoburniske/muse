@@ -51,6 +51,11 @@ input DeleteReviewInput {
   id: ID!
 }
 
+input DeleteReviewLinkInput {
+  parentReviewId: ID!
+  childReviewId: ID!
+}
+
 input EntityOffsetInput {
   outer: ContextInput!
   inner: ContextInput!
@@ -63,6 +68,12 @@ input GetPlaylistTracksInput {
 
 input InitialLinkInput {
   parentReviewId: ID!
+}
+
+input LinkReviewsInput {
+  parentReviewId: ID!
+  childReviewId: ID!
+  linkIndex: Int
 }
 
 input PaginationInput {
@@ -100,11 +111,6 @@ input PositionOffsetInput {
 input ReviewEntityInput {
   entityType: EntityType!
   entityId: String!
-}
-
-input ReviewLinkInput {
-  parentReviewId: ID!
-  childReviewId: ID!
 }
 
 input SearchUserPlaylistsInput {
@@ -145,6 +151,12 @@ input UpdateReviewInput {
   reviewId: ID!
   name: String!
   isPublic: Boolean!
+}
+
+input UpdateReviewLinkInput {
+  parentReviewId: ID!
+  childReviewId: ID!
+  linkIndex: Int!
 }
 
 interface ReviewEntity {
@@ -241,13 +253,14 @@ type KVStringString {
 type Mutations {
   createReview(input: CreateReviewInput!): Review
   createComment(input: CreateCommentInput!): Comment
-  linkReviews(input: ReviewLinkInput!): Boolean
+  linkReviews(input: LinkReviewsInput!): Boolean
+  updateReviewLink(input: UpdateReviewLinkInput!): Boolean
   updateReview(input: UpdateReviewInput!): Review
   updateReviewEntity(input: UpdateReviewEntityInput!): Review
   updateComment(input: UpdateCommentInput!): Comment
   deleteReview(input: DeleteReviewInput!): Boolean
   deleteComment(input: DeleteCommentInput!): Boolean
-  deleteReviewLink(input: ReviewLinkInput!): Boolean
+  deleteReviewLink(input: DeleteReviewLinkInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
   play(input: PlayInput!): Boolean
   transferPlayback(input: TransferPlaybackInput!): Boolean
@@ -340,6 +353,7 @@ type PlaylistTrack {
   addedBy: User!
   isLocal: Boolean!
   track: Track!
+  playlist: Playlist!
 }
 
 type Queries {
@@ -402,7 +416,7 @@ type Track implements ReviewEntity {
   popularity: Int
   previewUrl: String
   trackNumber: Int!
-  isLocal: Boolean!
+  isLocal: Boolean
   uri: String!
   isLiked: Boolean
   audioFeatures: AudioFeatures
