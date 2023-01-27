@@ -1,13 +1,16 @@
-# fly.toml file generated for muse-spotify on 2022-10-26T16:20:40-04:00
+# fly.toml file generated for muselabs on 2023-01-27T12:38:05-05:00
 
-app = "muse-spotify"
+app = "muselabs"
 kill_signal = "SIGINT"
 kill_timeout = 5
 processes = []
 
 [env]
   SERVER_PORT = "8080"
-  SPOTIFY_REDIRECT_URI = "https://muse-spotify.fly.dev/callback"
+  SPOTIFY_REDIRECT_URI = "https://muselabs.fly.dev/callback"
+
+[build]
+  image = "muse-server:0.1.0"
 
 [experimental]
   allowed_public_ports = []
@@ -17,8 +20,8 @@ processes = []
   exec = []
 
 [metrics]
-  port = 9091 # default for most prometheus clients
-  path = "/metrics" # default for most prometheus clients
+  path = "/metrics"
+  port = 9091
 
 [[services]]
   http_checks = []
