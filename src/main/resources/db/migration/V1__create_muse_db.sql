@@ -1,5 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 CREATE SCHEMA muse;
 
 CREATE TABLE muse.user
@@ -22,7 +20,7 @@ CREATE TABLE muse.user_session
 
 CREATE TABLE muse.review
 (
-    id          UUID PRIMARY KEY     DEFAULT uuid_generate_v4(),
+    id          UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
     created_at  TIMESTAMP   NOT NULL DEFAULT current_timestamp,
     creator_id  VARCHAR(30) NOT NULL,
     review_name VARCHAR(50) NOT NULL,
@@ -33,7 +31,6 @@ CREATE TABLE muse.review
             REFERENCES muse.user (id)
 );
 
--- TODO: should you be able to have multiple review entities?
 CREATE TABLE muse.review_entity
 (
     review_id   UUID UNIQUE NOT NULL,
