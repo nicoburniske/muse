@@ -42,9 +42,9 @@ object AppConfig {
       string("password")).to[SqlConfig]
 
   lazy val serverDescriptor: ConfigDescriptor[ServerConfig] =
-    (string("frontend_url") zip
+    (string("domain").optional zip
+      string("frontend_url") zip
       int("port") zip
       string("schema_file") zip
-      string("user_sessions_file") zip
       int("n_threads")).to[ServerConfig]
 }

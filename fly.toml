@@ -7,10 +7,10 @@ processes = []
 
 [env]
   SERVER_PORT = "8080"
-  SPOTIFY_REDIRECT_URI = "https://muselabs.fly.dev/callback"
+  SPOTIFY_REDIRECT_URI = "https://api.muselabs.xyz/callback"
 
 [build]
-  image = "muse-server:0.1.0"
+  dockerfile = "target/docker/stage/Dockerfile"
 
 [experimental]
   allowed_public_ports = []

@@ -51,27 +51,25 @@ object Auth {
               authData     <- SpotifyAuthService.getAuthCode(code)
               _            <- ZIO.logInfo("Received auth data for login")
               newSessionId <- handleUserLogin(authData)
-              frontendURL  <- ZIO.serviceWith[ServerConfig](_.frontendUrl)
+              config       <- ZIO.service[ServerConfig]
               _            <- ZIO.logInfo(s"Successfully added session.")
             } yield {
-              // TODO: add domain to cookie.
               val cookie = Cookie(
                 COOKIE_KEY,
                 newSessionId,
                 isSecure = true,
                 isHttpOnly = true,
                 maxAge = Some(365.days.toSeconds),
-                // Cross domain cookie until we are hosting on same domain.
-                sameSite = Some(Cookie.SameSite.None)
+                // On localhost dev, we don't want a cookie domain.
+                domain = config.domain
               )
-              Response.redirect(frontendURL).addCookie(cookie)
+              Response.redirect(config.frontendUrl).addCookie(cookie)
             }
           }
     }
 
   // @@ csrfGenerate() // TODO: get this working?
-  val logoutEndpoint = Http
-    .collectZIO[Request] {
+  val logoutEndpoint = Http.collectZIO[Request] {
       case Method.POST -> !! / "logout" =>
         for {
           session <- RequestSession.get[UserSession]
@@ -89,6 +87,10 @@ object Auth {
           newSession <- UserSessions.refreshUserSession(session.sessionId)
         } yield Response.text(newSession.accessToken)
     }
+
+    lazy val logEndpoint = Middleware.identity[Request, Response].contramapZIO[Request](request=> {
+      ZIO.logInfo(s"Request: ${request.method} ${request.url}").as(request)
+    })
 
   val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {
     c     <- ZIO.service[SpotifyConfig]

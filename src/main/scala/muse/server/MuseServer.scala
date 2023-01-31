@@ -28,13 +28,23 @@ object MuseServer {
     _                  <- ZIO.serviceWithZIO[AppConfig](c => ZIO.logInfo(s"Starting server with config $c"))
     _                  <- MigrationService.runMigrations
     protectedEndpoints <- createProtectedEndpoints
-    allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ (MuseMiddleware.handleErrors ++ cors(config))
+    corsConfig         <- getCorsConfig
+    allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ (MuseMiddleware.handleErrors ++ cors(corsConfig))
     metrics             = service.Server.start(9091, metricsRouter).forever
     museEndpoints       = service.Server.start(port, allEndpoints).forever
     _                  <- metrics <&> museEndpoints
   } yield ()
 
-  val config: CorsConfig = CorsConfig(allowedOrigins = _ => true)
+  // TODO: Is this necessary?
+  val getCorsConfig = for {
+    domain <- ZIO.serviceWith[ServerConfig](_.domain)
+  } yield CorsConfig(
+    allowedOrigins = origin => origin.contains(domain),
+    allowedMethods = Some(Set(Method.GET, Method.POST, Method.PUT, Method.DELETE, Method.OPTIONS)),
+    allowedHeaders = Some(
+      Set(HttpHeaderNames.CONTENT_TYPE.toString, HttpHeaderNames.AUTHORIZATION.toString, COOKIE_KEY, "*")
+    )
+  )
 
   def createProtectedEndpoints = endpointsGraphQL.map {
     case (rest, websocket) =>
