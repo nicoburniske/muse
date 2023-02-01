@@ -47,6 +47,6 @@ object GetCollaborators {
           }
 
           processed.foldLeft(CompletedRequestMap.empty) { case (acc, (req, result)) => acc.insert(req)(result) }
-        }.addTimeLog("CollaboratorsDataSource") @@ metric.trackDuration
+        }.addTimeLog("GetCollaborators") @@ metric.trackDuration
     }
 }

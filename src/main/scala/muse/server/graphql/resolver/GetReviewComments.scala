@@ -26,7 +26,7 @@ object GetReviewComments {
             val entities = comments.map(_._2).flatten
             Comment.fromTable(comment, entities)
           }
-        }.addTimeLog("Retrieved review comments")
+        }.addTimeLog("GetReviewComments")
     }
 
 }
