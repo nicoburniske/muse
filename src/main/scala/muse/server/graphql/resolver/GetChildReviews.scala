@@ -8,7 +8,11 @@ import java.sql.SQLException
 import java.util.UUID
 
 object GetChildReviews {
+  
+  val MAX_CHILD_REVIEWS_PER_REQUEST = 20
+  
   case class ChildReviewsRequest(reviewId: UUID) extends Request[SQLException, List[Review]]
+  
   def query(reviewId: UUID) = ZQuery.fromRequest(ChildReviewsRequest(reviewId))(ChildReviewDataSource)
 
   val ChildReviewDataSource: DataSource[DatabaseService, ChildReviewsRequest] =

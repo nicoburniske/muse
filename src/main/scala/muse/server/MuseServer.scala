@@ -1,6 +1,7 @@
 package muse.server
 
 import caliban.*
+import caliban.execution.QueryExecution
 import io.netty.handler.codec.http.HttpHeaderNames
 import muse.config.{AppConfig, ServerConfig, SpotifyConfig}
 import muse.domain.error.Unauthorized
@@ -54,7 +55,9 @@ object MuseServer {
 
   val endpointsGraphQL = for {
     interpreter <- MuseGraphQL.interpreter
-  } yield Http.collectHttp[Request] { case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter) }
+  } yield Http.collectHttp[Request] {
+    case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter, queryExecution = QueryExecution.Batched)
+  }
     -> Http.collectHttp[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
 
   val metricsRouter = Http.collectZIO[Request] {

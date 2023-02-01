@@ -71,7 +71,8 @@ object Mutations {
     i => deleteReview(i.input),
     i => deleteComment(i.input),
     i => deleteReviewLink(i.input),
-    i => shareReview(i.input),
+    i => shareReview(i.input)
+    ,
     i => play(i.input),
     i => transferPlayback(i.input),
     i => playTracks(i.input),
@@ -131,12 +132,11 @@ object Mutations {
   } yield result
 
   def updateReviewLink(link: UpdateReviewLink) = for {
-    user <- RequestSession.get[UserSession]
-    _ <- ZIO.fail(BadRequest(Some("Can't link a review to itself"))).when(link.parentReviewId == link.childReviewId)
-    _ <- validateReviewPermissions(user.userId, link.parentReviewId)
+    user   <- RequestSession.get[UserSession]
+    _      <- ZIO.fail(BadRequest(Some("Can't link a review to itself"))).when(link.parentReviewId == link.childReviewId)
+    _      <- validateReviewPermissions(user.userId, link.parentReviewId)
     result <- DatabaseService.updateReviewLink(link)
   } yield result
-
 
   def updateReview(update: UpdateReview) = for {
     user    <- RequestSession.get[UserSession]

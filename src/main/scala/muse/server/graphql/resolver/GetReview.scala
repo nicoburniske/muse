@@ -1,25 +1,53 @@
 package muse.server.graphql.resolver
 
+import muse.domain.session.UserSession
 import muse.server.graphql.subgraph.Review
+import muse.service.RequestSession
 import muse.service.persist.DatabaseService
+import muse.utils.Utils
+import muse.utils.Utils.addTimeLog
+import zio.ZIO
 import zio.query.{DataSource, Request, ZQuery}
 
 import java.sql.SQLException
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 case class GetReview(reviewId: UUID) extends Request[SQLException, Option[Review]]
 
 object GetReview {
+  val MAX_REVIEWS_PER_REQUEST = 100
+
   def query(reviewId: UUID) = ZQuery.fromRequest(GetReview(reviewId))(ReviewDataSource)
+  def multiQuery(reviewIds: List[UUID]) = (ZQuery.foreachPar(reviewIds)(query)).map(_.flatten)
 
+  def metric = Utils.timer("GetReview", ChronoUnit.MILLIS)
 
-  // TODO: create batch data source for review by id.
-  // TODO: Incorporate permissions
-  // TODO: Add user id to request so we can infer user permissions!
-  // TODO: should we give errors or just not return the review?
-  val ReviewDataSource: DataSource[DatabaseService, GetReview] =
-    DataSource.fromFunctionZIO("ReviewDataSource") { g =>
-      DatabaseService.getReviewAndEntity(g.reviewId).map(_.map { case (review, entity) => Review.fromTable(review, entity) })
+  val ReviewDataSource: DataSource[DatabaseService & RequestSession[UserSession], GetReview] =
+    DataSource.Batched.make("ReviewDataSource") { reqs =>
+      DatasourceUtils.createBatchedDataSource(
+        reqs,
+        MAX_REVIEWS_PER_REQUEST,
+        req =>
+          for {
+            session <- RequestSession.get[UserSession]
+            review  <- DatabaseService
+              .getReviewWithPermissions(req.reviewId, session.userId)
+              .addTimeLog("GetReviewWithPermissions")
+          } yield review,
+        // We are wrapping in 'Some' because single request returns 'Option' and batched request returns 'List'
+        reqs =>
+          for {
+            session <- RequestSession.get[UserSession]
+            reviews <-
+              DatabaseService
+                .getReviewsWithPermissions(reqs.map(_.reviewId).toList, session.userId)
+                .addTimeLog("GetReviewsWithPermissions")
+          } yield reviews.map { Some(_) }.toVector,
+        maybeReview => maybeReview.map(Review.fromTable),
+        _.reviewId.toString,
+        _.map(_.id.toString).getOrElse("")
+      ) @@ metric.trackDuration
     }
 
 }

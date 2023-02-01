@@ -5,7 +5,7 @@ import muse.domain.error.{Forbidden, Unauthorized}
 import muse.domain.session.UserSession
 import muse.domain.table
 import muse.domain.table.AccessLevel
-import muse.server.graphql.resolver.{GetChildReviews, GetCollaborators, GetEntity, GetReviewComments, GetUser}
+import muse.server.graphql.resolver.{GetChildReviews, GetCollaborators, GetEntity, GetReview, GetReviewComments, GetUser}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
@@ -28,21 +28,21 @@ final case class Review(
     collaborators: ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Collaborator]]
 )
 
-case class Collaborator(user: User, accessLevel: AccessLevel)
+case class Collaborator(
+    user: User,
+    accessLevel: AccessLevel,
+    review: ZQuery[DatabaseService & RequestSession[UserSession], Throwable, Review])
+
+object Collaborator {
+  def fromTable(r: table.ReviewAccess) = Collaborator(
+    GetUser.queryByUserId(r.userId),
+    r.accessLevel,
+    GetReview.query(r.reviewId).map(_.get)
+  )
+}
 
 object Review {
   def fromTable(r: table.Review, entity: Option[table.ReviewEntity]) = {
-    val collaborators = for {
-      reviewAccess <- GetCollaborators.query(r.id)
-      user         <- ZQuery.fromZIO(RequestSession.get[UserSession]).map(_.userId)
-      _            <- ZQuery.fromZIO(
-                        ZIO
-                          .fail(Forbidden("You are not allowed to view this review"))
-                          .when(r.creatorId != user && !reviewAccess.exists(_.userId == user)))
-    } yield reviewAccess.map { reviewAccess =>
-      Collaborator(GetUser.queryByUserId(reviewAccess.userId), reviewAccess.accessLevel)
-    }
-
     val maybeEntity = entity.fold(ZQuery.succeed(None))(r => GetEntity.query(r.entityId, r.entityType).map(Some(_)))
 
     Review(
@@ -57,7 +57,7 @@ object Review {
       // Things are deleted from Spotify.
       maybeEntity,
       GetChildReviews.query(r.id),
-      collaborators
+      GetCollaborators.query(r.id)
     )
   }
 }
