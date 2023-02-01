@@ -4,6 +4,7 @@ import com.stuart.zcaffeine
 import com.stuart.zcaffeine.ZCaffeine
 import com.stuart.zcaffeine.ZCaffeine.State
 import com.stuart.zcaffeine.types.*
+import muse.config.SpotifyServiceConfig
 import muse.domain.spotify.{Album, Artist, User}
 import muse.service.CacheUtils
 import zio.cache.{Cache, Lookup}
@@ -17,7 +18,8 @@ object SpotifyCache {
   val albumCacheLayer  = ZLayer.fromZIO(albumCache)
   val artistCacheLayer = ZLayer.fromZIO(artistCache)
   val userCacheLayer   = ZLayer.fromZIO(userCache)
-  val layer            = (albumCacheLayer ++ artistCacheLayer ++ userCacheLayer).tap(env =>
+
+  val layer = (albumCacheLayer ++ artistCacheLayer ++ userCacheLayer).tap(env =>
     val albumCache  = env.get[zcaffeine.Cache[Any, String, Album]]
     val artistCache = env.get[zcaffeine.Cache[Any, String, Artist]]
     val userCache   = env.get[zcaffeine.Cache[Any, String, User]]
@@ -31,23 +33,35 @@ object SpotifyCache {
     ZIO.foreachPar(cacheStats)(_.report).repeat(cacheStatReportInterval).forkDaemon
   )
 
-  lazy val albumCache = ZCaffeine[Any, String, Album]()
-    .map(configureCache(1.hour, _))
-    .flatMap(_.build())
+  lazy val albumCache = for {
+    cache     <- ZCaffeine[Any, String, Album]()
+    config    <- ZIO.service[SpotifyServiceConfig]
+    configured = configureCache(cache, 1.hour, config.albumCacheSize)
+    built     <- configured.build()
+  } yield built
 
-  lazy val artistCache = ZCaffeine[Any, String, Artist]()
-    .map(configureCache(1.hour, _))
-    .flatMap(_.build())
+  lazy val artistCache = for {
+    cache     <- ZCaffeine[Any, String, Artist]()
+    config    <- ZIO.service[SpotifyServiceConfig]
+    configured = configureCache(cache, 1.hour, config.artistCacheSize)
+    built     <- configured.build()
+  } yield built
 
-  lazy val userCache = ZCaffeine[Any, String, User]()
-    .map(configureCache(30.minutes, _))
-    .flatMap(_.build())
+  lazy val userCache = for {
+    cache     <- ZCaffeine[Any, String, User]()
+    config    <- ZIO.service[SpotifyServiceConfig]
+    configured = configureCache(cache, 1.hour, config.userCacheSize)
+    built     <- configured.build()
+  } yield built
 
-  lazy val savedSongsCache = ZCaffeine[Any, String, Boolean]()
-    .map(configureCache(10.seconds, _))
-    .flatMap(_.build())
+  lazy val savedSongsCache = for {
+    cache     <- ZCaffeine[Any, String, Boolean]()
+    config    <- ZIO.service[SpotifyServiceConfig]
+    configured = configureCache(cache, 1.hour, config.likedSongsCacheSize)
+    built     <- configured.build()
+  } yield built
 
-  def configureCache[K, V](duration: Duration, z: ZCaffeine[Any, State.Unconfigured, K, V]) = {
+  def configureCache[K, V](z: ZCaffeine[Any, State.Unconfigured, K, V], duration: Duration, maxSize: Long) = {
     z.initialCapacity(InitialCapacity(1))
       .maximumSize(MaxSize(1000))
       .enableScheduling()
@@ -56,8 +70,9 @@ object SpotifyCache {
   }
 
   def playlistCache(spotify: SpotifyAPI[Task]) = for {
+    config  <- ZIO.service[SpotifyServiceConfig]
     cache   <- Cache.make(
-                 1000,
+                 config.playlistCacheSize,
                  5.minutes,
                  Lookup((input: PlaylistInput) => spotify.getPlaylist(input.playlistId, input.market, input.fields))
                )
