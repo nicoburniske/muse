@@ -71,8 +71,7 @@ object Mutations {
     i => deleteReview(i.input),
     i => deleteComment(i.input),
     i => deleteReviewLink(i.input),
-    i => shareReview(i.input)
-    ,
+    i => shareReview(i.input),
     i => play(i.input),
     i => transferPlayback(i.input),
     i => playTracks(i.input),

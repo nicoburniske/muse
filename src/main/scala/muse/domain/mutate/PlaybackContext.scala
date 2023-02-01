@@ -13,4 +13,3 @@ case class Play(deviceId: Option[String])
 case class PlayTracks(trackIds: List[String], positionMs: Option[Int], deviceId: Option[String])
 case class PlayOffsetContext(offset: PositionOffset, positionMs: Option[Int], deviceId: Option[String])
 case class PlayEntityContext(offset: EntityOffset, positionMs: Option[Int], deviceId: Option[String])
-

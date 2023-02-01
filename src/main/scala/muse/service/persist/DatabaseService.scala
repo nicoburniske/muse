@@ -69,16 +69,16 @@ trait DatabaseService {
   def getReview(reviewId: UUID): IO[SQLException, Option[Review]]
   def getReviewEntity(reviewId: UUID): IO[SQLException, Option[ReviewEntity]]
 
-  // TODO: Might have to incorporate permissions here. 
+  // TODO: Might have to incorporate permissions here.
   // Review will only be returned if the user has access to it.
   def getReviewWithPermissions(reviewId: UUID, userId: String): IO[SQLException, Option[(Review, Option[ReviewEntity])]]
   // Multi review version of getReviewWithPermissions.
   def getReviewsWithPermissions(reviewIds: List[UUID], userId: String): IO[SQLException, List[(Review, Option[ReviewEntity])]]
-  
-  // TODO: Might have to incorporate permissions here. 
+
+  // TODO: Might have to incorporate permissions here.
   def getChildReviews(reviewId: UUID): IO[SQLException, List[(Review, Option[ReviewEntity])]]
   // Multi review version of getChildReviews.
-  def getAllChildReviews(reviewIds: List[UUID]) : IO[SQLException, List[(ReviewLink, Review, Option[ReviewEntity])]]
+  def getAllChildReviews(reviewIds: List[UUID]): IO[SQLException, List[(ReviewLink, Review, Option[ReviewEntity])]]
 
   def getUsersWithAccess(reviewId: UUID): IO[SQLException, List[ReviewAccess]]
   def getAllUsersWithAccess(reviewIds: List[UUID]): IO[SQLException, List[ReviewAccess]]
@@ -141,12 +141,12 @@ object DatabaseService {
   def getReview(reviewId: UUID)          = ZIO.serviceWithZIO[DatabaseService](_.getReview(reviewId))
   def getReviewEntity(reviewId: UUID)    = ZIO.serviceWithZIO[DatabaseService](_.getReviewEntity(reviewId))
 
-  def getReviewWithPermissions(reviewId: UUID, userId: String) =
+  def getReviewWithPermissions(reviewId: UUID, userId: String)         =
     ZIO.serviceWithZIO[DatabaseService](_.getReviewWithPermissions(reviewId, userId))
   def getReviewsWithPermissions(reviewIds: List[UUID], userId: String) =
     ZIO.serviceWithZIO[DatabaseService](_.getReviewsWithPermissions(reviewIds, userId))
 
-  def getChildReviews(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getChildReviews(reviewId))
+  def getChildReviews(reviewId: UUID)           = ZIO.serviceWithZIO[DatabaseService](_.getChildReviews(reviewId))
   def getAllChildReviews(reviewIds: List[UUID]) = ZIO.serviceWithZIO[DatabaseService](_.getAllChildReviews(reviewIds))
 
   def getUsers = ZIO.serviceWithZIO[DatabaseService](_.getUsers)
@@ -331,12 +331,11 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   override def getAllChildReviews(reviewIds: List[UUID]) = run {
     (for {
-      link <- reviewLink.filter(link => liftQuery(reviewIds.toSet).contains(link.parentReviewId))
-      child <- review.join(_.id == link.childReviewId)
+      link           <- reviewLink.filter(link => liftQuery(reviewIds.toSet).contains(link.parentReviewId))
+      child          <- review.join(_.id == link.childReviewId)
       reviewEntities <- reviewEntity.leftJoin(e => child.id == e.reviewId)
     } yield (link, child, reviewEntities))
   }.provide(layer)
-
 
   override def getUserById(userId: String) = run {
     user.filter(_.id == lift(userId))
@@ -377,7 +376,6 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   def getAllUsersWithAccess(reviewIds: List[UUID]) = run {
     reviewAccess.filter(c => liftQuery(reviewIds.toSet).contains(c.reviewId))
   }.provideLayer(layer)
-
 
   override def getComment(commentId: Int) = run {
     comment

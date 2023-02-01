@@ -3,8 +3,8 @@ package muse.server.graphql.resolver
 import muse.server.graphql.subgraph.Comment
 import muse.service.persist.DatabaseService
 import zio.query.{DataSource, Request, ZQuery}
-import java.sql.SQLException
 
+import java.sql.SQLException
 import java.util.UUID
 
 object GetComment {
@@ -18,6 +18,5 @@ object GetComment {
       DatabaseService.getComment(req.id).map { maybeTuple =>
         val comment: Option[Comment] = maybeTuple.map { case (comment, entities) => Comment.fromTable(comment, entities) }
         comment
-      }
-    )
+      })
 }

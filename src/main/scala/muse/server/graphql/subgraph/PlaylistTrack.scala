@@ -23,7 +23,7 @@ object PlaylistTrack {
       if (t.addedBy.id.isBlank)
         GetUser.queryByUserId("spotify")
       else
-          User.missingSome(t.addedBy.id, t.addedBy.displayName, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls)
+        User.missingSome(t.addedBy.id, t.addedBy.displayName, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls)
     }
 
     PlaylistTrack(

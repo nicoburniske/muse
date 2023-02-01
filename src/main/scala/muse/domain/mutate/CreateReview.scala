@@ -1,6 +1,7 @@
 package muse.domain.mutate
 
 import zio.json.*
+
 import java.util.UUID
 
 final case class InitialLink(parentReviewId: UUID)

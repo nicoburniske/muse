@@ -8,8 +8,8 @@ import muse.server.graphql.subgraph.{PlaybackState, PlaylistTrack}
 import muse.service.spotify.SpotifyService
 import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils.*
-import zio.{Schedule, *}
 import zio.stream.{ZPipeline, ZStream}
+import zio.{Schedule, *}
 
 import java.util.UUID
 

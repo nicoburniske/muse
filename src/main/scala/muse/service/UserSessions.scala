@@ -26,19 +26,19 @@ trait UserSessions {
 object UserSessions {
   val layer = ZLayer.fromZIO {
     for {
-      cache <- Cache.make(
-                 1000,
-                 // Default TTL is 1 hour.
-                 59.minutes,
-                 Lookup(getUserSessionLive)
-               )
+      cache           <- Cache.make(
+                           1000,
+                           // Default TTL is 1 hour.
+                           59.minutes,
+                           Lookup(getUserSessionLive)
+                         )
       databaseService <- ZIO.service[DatabaseService]
-      _     <- startCacheReporter(cache)
+      _               <- startCacheReporter(cache)
     } yield UserSessionsLive(cache, databaseService)
   }
 
-  def getUserSession(sessionId: String)    = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
-  def deleteUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
+  def getUserSession(sessionId: String)     = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
+  def deleteUserSession(sessionId: String)  = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
   def refreshUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.refreshUserSession(sessionId))
 
   private def getUserSessionLive(sessionId: String) = for {
@@ -56,8 +56,9 @@ object UserSessions {
   }
 }
 
-final case class UserSessionsLive(cache: Cache[String, Throwable, UserSession], databaseService: DatabaseService) extends UserSessions {
-  override def getUserSession(sessionId: String)    = cache.get(sessionId)
+final case class UserSessionsLive(cache: Cache[String, Throwable, UserSession], databaseService: DatabaseService)
+    extends UserSessions {
+  override def getUserSession(sessionId: String)     = cache.get(sessionId)
   override def refreshUserSession(sessionId: String) = cache.refresh(sessionId) *> cache.get(sessionId)
-  override def deleteUserSession(sessionId: String) = cache.invalidate(sessionId) *> databaseService.deleteUserSession(sessionId)
+  override def deleteUserSession(sessionId: String)  = cache.invalidate(sessionId) *> databaseService.deleteUserSession(sessionId)
 }

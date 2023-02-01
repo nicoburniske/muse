@@ -70,25 +70,26 @@ object Auth {
 
   // @@ csrfGenerate() // TODO: get this working?
   val logoutEndpoint = Http.collectZIO[Request] {
-      case Method.POST -> !! / "logout" =>
-        for {
-          session <- RequestSession.get[UserSession]
-          _       <- UserSessions.deleteUserSession(session.sessionId)
-          _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId} with cookie: ${session.sessionId.take(10)}")
-        } yield Response.ok
-      case Method.GET -> !! / "session" =>
-        for {
-          session <- RequestSession.get[UserSession]
-        } yield Response.text(session.sessionId)
-      case Method.GET -> !! / "token"   =>
-        // Guaranteed to have a valid access token for next 60 min.
-        for {
-          session    <- RequestSession.get[UserSession]
-          newSession <- UserSessions.refreshUserSession(session.sessionId)
-        } yield Response.text(newSession.accessToken)
-    }
+    case Method.POST -> !! / "logout" =>
+      for {
+        session <- RequestSession.get[UserSession]
+        _       <- UserSessions.deleteUserSession(session.sessionId)
+        _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId} with cookie: ${session.sessionId.take(10)}")
+      } yield Response.ok
+    case Method.GET -> !! / "session" =>
+      for {
+        session <- RequestSession.get[UserSession]
+      } yield Response.text(session.sessionId)
+    case Method.GET -> !! / "token"   =>
+      // Guaranteed to have a valid access token for next 60 min.
+      for {
+        session    <- RequestSession.get[UserSession]
+        newSession <- UserSessions.refreshUserSession(session.sessionId)
+      } yield Response.text(newSession.accessToken)
+  }
 
-    lazy val logEndpoint = Middleware.identity[Request, Response].contramapZIO[Request](request=> {
+  lazy val logEndpoint = Middleware
+    .identity[Request, Response].contramapZIO[Request](request => {
       ZIO.logInfo(s"Request: ${request.method} ${request.url}").as(request)
     })
 

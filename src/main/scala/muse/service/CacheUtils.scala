@@ -21,9 +21,7 @@ object CacheUtils {
     } yield ()
   }
 
-  case class ZioCacheStatReporter[Key, Error, Value](
-      name: String,
-      zcache: cache.Cache[Key, Error, Value]) {
+  case class ZioCacheStatReporter[Key, Error, Value](name: String, zcache: cache.Cache[Key, Error, Value]) {
     val hits     = Metric.gauge("cache_hits").tagged("cache_name", name)
     val misses   = Metric.gauge("cache_misses").tagged("cache_name", name)
     val requests = Metric.gauge("cache_request_count").tagged("cache_name", name)

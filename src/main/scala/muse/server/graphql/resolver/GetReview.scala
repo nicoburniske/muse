@@ -18,7 +18,7 @@ case class GetReview(reviewId: UUID) extends Request[SQLException, Option[Review
 object GetReview {
   val MAX_REVIEWS_PER_REQUEST = 100
 
-  def query(reviewId: UUID) = ZQuery.fromRequest(GetReview(reviewId))(ReviewDataSource)
+  def query(reviewId: UUID)             = ZQuery.fromRequest(GetReview(reviewId))(ReviewDataSource)
   def multiQuery(reviewIds: List[UUID]) = (ZQuery.foreachPar(reviewIds)(query)).map(_.flatten)
 
   def metric = Utils.timer("GetReview", ChronoUnit.MILLIS)
@@ -32,8 +32,8 @@ object GetReview {
           for {
             session <- RequestSession.get[UserSession]
             review  <- DatabaseService
-              .getReviewWithPermissions(req.reviewId, session.userId)
-              .addTimeLog("GetReviewWithPermissions")
+                         .getReviewWithPermissions(req.reviewId, session.userId)
+                         .addTimeLog("GetReviewWithPermissions")
           } yield review,
         // We are wrapping in 'Some' because single request returns 'Option' and batched request returns 'List'
         reqs =>

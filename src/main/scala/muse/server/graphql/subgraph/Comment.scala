@@ -35,6 +35,6 @@ object Comment {
     r.parentCommentId,
     GetUser.queryByUserId(r.commenter),
     r.comment,
-    ZQuery.foreachPar(entities)(e =>  GetEntity.query(e.entityId, e.entityType))
+    ZQuery.foreachPar(entities)(e => GetEntity.query(e.entityId, e.entityType))
   )
 }

@@ -53,7 +53,13 @@ object User {
         // Only want the ones containing the search in their name.
         allPlaylists  = playlists ++ newPlaylists.items.filter(p => query.exists(p.name.contains(_))).map(Playlist.fromSpotify)
         result       <- newPlaylists.next.fold(ZIO.succeed(allPlaylists)) { _ =>
-                          searchThroughPlaylists(spotifyService, userId, query, total, currentPosition + MAX_PLAYLIST_REQUEST, allPlaylists)
+                          searchThroughPlaylists(
+                            spotifyService,
+                            userId,
+                            query,
+                            total,
+                            currentPosition + MAX_PLAYLIST_REQUEST,
+                            allPlaylists)
                         }
       } yield result
     }

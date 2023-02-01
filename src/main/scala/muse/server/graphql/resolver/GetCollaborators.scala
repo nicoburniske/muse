@@ -35,7 +35,7 @@ object GetCollaborators {
             .either
             .map(batch.toList -> _)
         }.map { (results: Vector[(List[GetCollaborators], Either[SQLException, List[ReviewAccess]])]) =>
-          val processed = results.flatMap{
+          val processed = results.flatMap {
             // In error case all requests get error.
             case (reqs, Left(error))          =>
               reqs.map(_ -> Left(error))

@@ -5,9 +5,9 @@ import muse.domain.error.InvalidEntity
 import muse.server.graphql.subgraph.Track
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
+import muse.utils.Utils
 import zio.ZIO
 import zio.metrics.Metric
-import muse.utils.Utils
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 
 import java.time.temporal.ChronoUnit

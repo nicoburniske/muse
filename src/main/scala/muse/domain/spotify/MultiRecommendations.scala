@@ -14,6 +14,6 @@ final case class RecommendationSeed(
     `type`: String)
 
 object MultiRecommendations {
-  given decoder: JsonDecoder[MultiRecommendations] = DeriveJsonDecoder.gen[MultiRecommendations]
+  given decoder: JsonDecoder[MultiRecommendations]   = DeriveJsonDecoder.gen[MultiRecommendations]
   given seedDecoder: JsonDecoder[RecommendationSeed] = DeriveJsonDecoder.gen[RecommendationSeed]
 }

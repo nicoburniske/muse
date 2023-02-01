@@ -24,4 +24,3 @@ final case class UserSession(
     refreshToken: String,
     spotifyService: SpotifyService
 )
-
