@@ -99,8 +99,7 @@ trait DatabaseService {
    * Returns whether a record was deleted.
    */
   def deleteReview(d: DeleteReview): IO[Throwable, Boolean]
-  // TODO: fix delete to mark boolean field as deleted.
-  def deleteComment(d: DeleteComment): IO[SQLException, Boolean]
+  def deleteComment(d: DeleteComment): IO[Throwable, Boolean]
   def deleteReviewLink(link: DeleteReviewLink): IO[Throwable, Boolean]
   def deleteUserSession(sessionId: String): IO[SQLException, Boolean]
 
@@ -664,24 +663,43 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .filter(_.parentCommentId.contains(lift(d.commentId)))
       .size
   }.map(_ > 0).flatMap {
-    case true =>
-      run {
-        comment
-          .filter(_.id == lift(d.commentId))
-          .filter(_.reviewId == lift(d.reviewId))
-          .update(
-            _.deleted -> true,
-            _.comment -> None
-          )
-      }
-    case false =>
-      run {
-        comment
-          .filter(_.id == lift(d.commentId))
-          .filter(_.reviewId == lift(d.reviewId))
-          .delete
-      }
-  }.provide(layer)
+      case true  =>
+        run {
+          comment
+            .filter(_.id == lift(d.commentId))
+            .filter(_.reviewId == lift(d.reviewId))
+            .update(
+              _.deleted -> true,
+              _.comment -> None
+            )
+        }
+      case false =>
+        transaction {
+          for {
+            parentCommentIds <- run {
+                                  comment
+                                    .filter(_.reviewId == lift(d.reviewId))
+                                    .filter(_.id == lift(d.commentId))
+                                    .map(_.parentCommentId)
+                                }
+                                  .map(_.flatten)
+            deleted          <- run {
+                                  comment
+                                    .filter(_.id == lift(d.commentId))
+                                    .filter(_.reviewId == lift(d.reviewId))
+                                    .delete
+                                }
+            // Delete all parent comments that are dangling (have no children and are themselves deleted).
+            _                <- run(
+                                  comment
+                                    .filter(_.reviewId == lift(d.reviewId))
+                                    .filter(_.deleted)
+                                    .filter(comment => liftQuery(parentCommentIds).contains(comment.id))
+                                    .delete
+                                )
+          } yield deleted
+        }
+    }.provide(layer)
     .map(_ > 0)
 
   override def deleteReviewLink(link: DeleteReviewLink) = transaction {
