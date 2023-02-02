@@ -5,7 +5,7 @@ import muse.domain.error.{Forbidden, Unauthorized}
 import muse.domain.session.UserSession
 import muse.domain.table
 import muse.domain.table.AccessLevel
-import muse.server.graphql.resolver.{GetCollaborators, GetEntity, GetReviewComments, GetUser}
+import muse.server.graphql.resolver.{GetChildReviews, GetCollaborators, GetEntity, GetReview, GetReviewComments, GetUser}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
@@ -15,37 +15,35 @@ import zio.query.ZQuery
 import java.time.Instant
 import java.util.UUID
 
-// TODO: Add list of collaborators
 final case class Review(
     id: UUID,
     createdAt: Instant,
-    creator: ZQuery[DatabaseService & RequestSession[UserSession], Unauthorized, User],
+    creator: User,
     reviewName: String,
     isPublic: Boolean,
     comments: ZQuery[DatabaseService, Throwable, List[Comment]],
-    entityId: String,
-    entityType: EntityType,
-    entity: ZQuery[RequestSession[SpotifyService], Throwable, ReviewEntity],
+    entity: ZQuery[RequestSession[SpotifyService], Throwable, Option[ReviewEntity]],
+    childReviews: ZQuery[DatabaseService, Throwable, List[Review]],
     // TODO: this can be forbidden.
     collaborators: ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Collaborator]]
 )
 
-case class Collaborator(user: User, accessLevel: AccessLevel)
+case class Collaborator(
+    user: User,
+    accessLevel: AccessLevel,
+    review: ZQuery[DatabaseService & RequestSession[UserSession], Throwable, Review])
+
+object Collaborator {
+  def fromTable(r: table.ReviewAccess) = Collaborator(
+    GetUser.queryByUserId(r.userId),
+    r.accessLevel,
+    GetReview.query(r.reviewId).map(_.get)
+  )
+}
 
 object Review {
-  def fromTable(r: table.Review) = {
-    val collaborators = for {
-      reviewAccess <- GetCollaborators.query(r.id)
-      user         <- ZQuery.fromZIO(RequestSession.get[UserSession]).map(_.userId)
-      _            <- ZQuery.fromZIO(
-                        ZIO
-                          .fail(Forbidden("You are not allowed to view this review"))
-                          .when(r.creatorId != user && !reviewAccess.exists(_.userId == user)))
-      subQueries    = reviewAccess.map { reviewAccess =>
-                        GetUser.queryByUserId(reviewAccess.userId).map(user => Collaborator(user, reviewAccess.accessLevel))
-                      }
-      allUsers     <- ZQuery.collectAll(subQueries)
-    } yield allUsers
+  def fromTable(r: table.Review, entity: Option[table.ReviewEntity]) = {
+    val maybeEntity = entity.fold(ZQuery.succeed(None))(r => GetEntity.query(r.entityId, r.entityType).map(Some(_)))
 
     Review(
       r.id,
@@ -54,13 +52,12 @@ object Review {
       r.reviewName,
       r.isPublic,
       GetReviewComments.query(r.id),
-      r.entityId,
-      r.entityType,
-      // TODO: ensure this is ok
-      // This can't be 'orDie' because there are cases when people make playlists private.
-      // Or delete things from spotify.
-      GetEntity.query(r.entityId, r.entityType),
-      collaborators
+      // This can't be 'orDie' because there are cases when:
+      // People make playlists private.
+      // Things are deleted from Spotify.
+      maybeEntity,
+      GetChildReviews.query(r.id),
+      GetCollaborators.query(r.id)
     )
   }
 }

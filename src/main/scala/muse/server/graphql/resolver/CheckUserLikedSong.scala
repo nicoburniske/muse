@@ -1,38 +1,52 @@
 package muse.server.graphql.resolver
 
-import muse.domain.error.Unauthorized
+import muse.domain.common.EntityType
+import muse.domain.error.InvalidEntity
 import muse.domain.session.UserSession
 import muse.server.graphql.subgraph.User
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
+import muse.utils.Utils
 import muse.utils.Utils.*
-import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 import zio.ZIO
+import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
+
+import java.time.temporal.ChronoUnit
 
 case class CheckUserLikedSong(trackId: String) extends Request[Nothing, Boolean]
 
 object CheckUserLikedSong {
-  val MAX_PER_REQUEST = 50
+  val MAX_PER_REQUEST        = 50
   def query(trackId: String) =
     ZQuery.fromRequest(CheckUserLikedSong(trackId))(dataSource)
 
+  def metric = Utils.timer("GetPlaylist", ChronoUnit.MILLIS)
+
   val dataSource: DataSource[RequestSession[SpotifyService], CheckUserLikedSong] =
     DataSource.Batched.make("CheckUserLikedSong") { req =>
-        ZIO
-          .foreachPar(req.distinct.map(_.trackId).toVector.grouped(MAX_PER_REQUEST).toVector) { trackIds =>
-            RequestSession
-              .get[SpotifyService]
-              .flatMap(_.checkUserSavedTracks(trackIds))
-              .either.map(trackIds -> _)
-          }.map {
-            _.foldLeft(CompletedRequestMap.empty) {
-              case (map, (requests, result)) =>
-                result match
-                  case error @ Left(_)  =>
-                    requests.foldLeft(map)((map, req) => map.insert(CheckUserLikedSong(req))(error))
-                  case Right(songLikes) =>
-                    songLikes.foldLeft(map) { (map, req) => map.insert(CheckUserLikedSong(req._1))(Right(req._2)) }
-            }
-          }.addTimeLog(s"Retrieved user likes for ${req.size} track(s)")
+      ZIO
+        .foreachPar(req.toVector.grouped(MAX_PER_REQUEST).toVector) { batch =>
+          RequestSession
+            .get[SpotifyService]
+            .flatMap(_.checkUserSavedTracks(batch.map(_.trackId)))
+            .either.map(batch -> _)
+        }.map { results =>
+          val processed = results.flatMap {
+            case (reqs, Left(error))  => reqs.map(_ -> Left(error))
+            case (reqs, Right(likes)) =>
+              val grouped = likes
+                .groupMap(_._1)(_._2)
+                .filter(_._2.nonEmpty)
+                .map(entry => entry._1 -> entry._2.head)
+              reqs.map { req =>
+                req ->
+                  grouped
+                    .get(req.trackId)
+                    .fold(Left(InvalidEntity(req.trackId, EntityType.Track)))(Right(_))
+              }
+          }
+
+        processed.foldLeft(CompletedRequestMap.empty) { case (acc, (req, result)) => acc.insert(req)(result) }
+        } @@ metric.trackDuration
     }
 }

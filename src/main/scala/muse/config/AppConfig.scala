@@ -18,7 +18,8 @@ object AppConfig {
     spotify      <- ZLayer.succeed(appConfigEnv.get.spotify)
     sql          <- ZLayer.succeed(appConfigEnv.get.sqlConfig)
     server       <- ZLayer.succeed(appConfigEnv.get.serverConfig)
-  } yield spotify ++ sql ++ server ++ appConfigEnv
+    spotifyService <- ZLayer.succeed(appConfigEnv.get.spotify.service)
+  } yield appConfigEnv ++ spotify ++ sql ++ server ++ spotifyService
 
   lazy val layer = appConfigLayer >>> flattened
 
@@ -29,10 +30,18 @@ object AppConfig {
       nested("db")(sqlDescriptor) zip
       nested("server")(serverDescriptor)).to[AppConfig]
 
+  lazy val spotifyServiceDescriptor: ConfigDescriptor[SpotifyServiceConfig] =
+    (int("artist_cache_size") zip
+      int("album_cache_size") zip
+      int("user_cache_size") zip
+      int("playlist_cache_size") zip
+      int("liked_songs_cache_size")).to[SpotifyServiceConfig]
+
   lazy val spotifyDescriptor: ConfigDescriptor[SpotifyConfig] =
     (string("client_id") zip
       string("client_secret") zip
-      string("redirect_uri")).to[SpotifyConfig]
+      string("redirect_uri") zip
+      nested("service")(spotifyServiceDescriptor)).to[SpotifyConfig]
 
   lazy val sqlDescriptor: ConfigDescriptor[SqlConfig] =
     (string("database") zip
@@ -42,9 +51,9 @@ object AppConfig {
       string("password")).to[SqlConfig]
 
   lazy val serverDescriptor: ConfigDescriptor[ServerConfig] =
-    (string("frontend_url") zip
+    (string("domain").optional zip
+      string("frontend_url") zip
       int("port") zip
       string("schema_file") zip
-      string("user_sessions_file") zip
       int("n_threads")).to[ServerConfig]
 }

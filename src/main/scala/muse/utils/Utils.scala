@@ -2,6 +2,9 @@ package muse.utils
 
 import zio.*
 import zio.ZIO.ifZIO
+import zio.metrics.Metric.histogram
+import zio.metrics.MetricKeyType.Histogram
+import zio.metrics.{Metric, MetricKeyType, MetricLabel, MetricState}
 import zio.nio.Buffer
 import zio.nio.channels.*
 import zio.nio.file.*
@@ -16,6 +19,22 @@ import scala.util.Try
 
 object Utils {
 
+  def timer(
+      name: String,
+      chronoUnit: ChronoUnit
+  ): Metric[MetricKeyType.Histogram, Duration, MetricState.Histogram] = {
+    val boundaries = Histogram.Boundaries.exponential(1.0, 2.0, 100)
+    val base       = histogram(name, boundaries).tagged(MetricLabel("time_unit", chronoUnit.toString.toLowerCase()))
+
+    base.contramap[Duration] { (duration: Duration) =>
+      val unit = chronoUnit match
+        case ChronoUnit.MILLIS  => duration.toMillis
+        case ChronoUnit.MINUTES => duration.toMinutes
+        case ChronoUnit.HOURS   => duration.toHours
+        case _                  => duration.get(chronoUnit)
+      unit.toDouble
+    }
+  }
 
   extension [R, E, A](z: ZIO[R, E, A]) {
     def addTimeLog(message: String) = z.timed.flatMap {

@@ -4,12 +4,10 @@ import zio.json.*
 
 import java.time.Instant
 
+@jsonMemberNames(SnakeCase)
 final case class PlaylistTrack(
-    @jsonField("added_at")
     addedAt: Instant,
-    @jsonField("added_by")
     addedBy: User,
-    @jsonField("is_local")
     isLocal: Boolean,
     track: Track
 )

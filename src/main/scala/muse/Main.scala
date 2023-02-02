@@ -23,6 +23,7 @@ import zio.Duration.*
 import zio.config.typesafe.TypesafeConfig
 import zio.logging.*
 import zio.logging.backend.SLF4J
+import zio.metrics.connectors.MetricsConfig
 import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, durationInt}
 
 object Main extends ZIOAppDefault {
@@ -43,10 +44,17 @@ object Main extends ZIOAppDefault {
       ReviewUpdates.hub,
       RequestSession.userSessionLayer,
       RequestSession.spotifySessionLayer,
-      QuillContext.dataSourceLayer
+      QuillContext.dataSourceLayer,
+      // Metrics.
+      zio.metrics.connectors.prometheus.publisherLayer,
+      zio.metrics.connectors.prometheus.prometheusLayer,
+      metricsConfig,
+      Runtime.enableRuntimeMetrics
     )
     .tapErrorCause(e => ZIO.logErrorCause(s"Failed to start server ${e.toString}", e))
     .exitCode
+
+  val metricsConfig = ZLayer.succeed(MetricsConfig(5.seconds))
 
   val eventLoopGroupLayer = for {
     serverConfig <- ZLayer.environment[ServerConfig]

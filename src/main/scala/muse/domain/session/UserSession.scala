@@ -1,10 +1,8 @@
 package muse.domain.session
 
-import muse.domain.session.UserSession.instantString
-import zio.json.{DeriveJsonCodec, JsonCodec}
 import muse.service.spotify.SpotifyService
 
-import java.time.{Instant, ZoneId}
+import java.time.Instant
 
 /**
  * @param sessionId
@@ -26,8 +24,3 @@ final case class UserSession(
     refreshToken: String,
     spotifyService: SpotifyService
 )
-
-object UserSession {
-  private val z = ZoneId.of("America/New_York")
-  private def instantString(i: Instant) = i.atZone(z).toLocalTime.toString
-}

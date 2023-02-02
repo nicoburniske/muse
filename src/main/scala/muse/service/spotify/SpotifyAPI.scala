@@ -27,7 +27,11 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
 
   def getUserProfile(userId: String): F[User] =
     val uri = uri"${SpotifyAPI.API_BASE}/users/$userId"
-    execute(uri, Method.GET)
+    if (userId.isBlank) {
+      SpotifyError.HttpError(Left(List("No User Found")), uri, Method.GET, StatusCode.NotFound).raiseError
+    } else {
+      execute(uri, Method.GET)
+    }
 
   def isValidEntity(entityId: String, entityType: EntityType): F[Boolean] =
     entityType match
@@ -80,6 +84,10 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       execute[MultiAlbum](uri, Method.GET).map(_.albums)
     }
 
+  def getCurrentUserPlaylists(limit: Int = 50, offset: Int = 0): F[Paging[UserPlaylist]] =
+    val uri = uri"${SpotifyAPI.API_BASE}/me/playlists?limit=$limit&offset=$offset"
+    execute(uri, Method.GET)
+
   def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None): F[Paging[UserPlaylist]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/users/$userId/playlists?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
@@ -100,11 +108,11 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val request         = (offset: Int) => getSomePlaylistTracks(playlistId, MAX_PER_REQUEST, Some(offset))
     getAllPaging(request, MAX_PER_REQUEST)
 
-  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): F[Paging[Track]] =
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): F[Paging[AlbumTrack]] =
     val uri = uri"${SpotifyAPI.API_BASE}/albums/$album/tracks?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
 
-  def getAllAlbumTracks(albumId: String): F[Vector[Track]] =
+  def getAllAlbumTracks(albumId: String): F[Vector[AlbumTrack]] =
     val MAX_PER_REQUEST = 20
     val request         = (offset: Int) => getSomeAlbumTracks(albumId, Some(MAX_PER_REQUEST), Some(offset))
     getAllPaging(request, MAX_PER_REQUEST)
@@ -140,7 +148,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
   // device id must be active!
   def transferPlayback(deviceId: String): F[Boolean] =
     val uri  = uri"${SpotifyAPI.API_BASE}/me/player"
-    val body = PlaybackDeviceIds(List(deviceId)).toJson
+    val body = TransferPlaybackBody(List(deviceId)).toJson
     executeAndIgnoreResponse(uri, Method.PUT, Some(body)).as(true)
 
   def seekPlayback(deviceId: Option[String], positionMs: Int): F[Boolean] =
@@ -186,6 +194,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     go(Vector.empty, 0)
   }
 
+  // TODO: handle 429 error.
   private def executeMaybeNoContent[T: JsonDecoder](uri: Uri, method: Method): F[Option[T]] =
     basicRequest
       .auth.bearer(accessToken)

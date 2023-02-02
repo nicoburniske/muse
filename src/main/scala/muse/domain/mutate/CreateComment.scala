@@ -1,5 +1,6 @@
 package muse.domain.mutate
 
+import caliban.schema.Annotations.GQLInputName
 import muse.domain.common.EntityType
 import zio.json.*
 
@@ -9,8 +10,8 @@ final case class CreateComment(
     reviewId: UUID,
     // If none, then it is root comment.
     parentCommentId: Option[Int],
-    comment: Option[String],
-    rating: Option[Int],
-    entityType: EntityType,
-    entityId: String
+    comment: String,
+    entities: List[ReviewEntityInput],
+    // If none, will be added to the end of the list.
+    commentIndex: Option[Int]
 )

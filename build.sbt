@@ -4,10 +4,10 @@ ThisBuild / name         := "muse"
 ThisBuild / scalaVersion := "3.1.0"
 
 val zio          = "2.0.0"
-val zioJson      = "0.3.0-RC10"
+val zioJson      = "0.4.2"
 val zioConfig    = "3.0.1"
 val zhttp        = "2.0.0-RC10"
-val protoQuill   = "4.0.0"
+val protoQuill   = "4.6.0"
 val postgresql   = "42.3.6"
 val flyway       = "8.5.12"
 val sttp         = "3.7.0"
@@ -42,6 +42,8 @@ lazy val root = (project in file("."))
       "dev.zio"                       %% "zio-json"                      % zioJson,
       "dev.zio"                       %% "zio-nio"                       % zio,
       "dev.zio"                       %% "zio-cache"                     % "0.2.0",
+      "dev.zio"                       %% "zio-metrics-prometheus"        % zio,
+      "dev.zio"                       %% "zio-metrics-connectors"        % zio,
       "com.stuart"                    %% "zcaffeine"                     % "1.0.0-M2",
       // ZIO Config.
       "dev.zio"                       %% "zio-config"                    % zioConfig,
@@ -87,13 +89,9 @@ lazy val root = (project in file("."))
 lazy val dockerSettings = Seq(
   Docker / packageName := "muse_server",
   Docker / maintainer  := "Nico Burniske",
-//  dockerRepository     := Some("nicoburniske"),
-  // TODO: figure this out?
-//  dockerUsername := sys.props.get("docker.username"),
-//    dockerRepository := sys.props.get("docker.registry")
   dockerUpdateLatest   := false,
   // TODO: Can this be read from config?
-  dockerExposedPorts   := Seq(8883),
+  dockerExposedPorts   := Seq(8883, 9091),
   dockerBaseImage      := "azul/zulu-openjdk:17",
   Universal / javaOptions ++= Seq(
     "-J-XX:ActiveProcessorCount=4", // Overrides the automatic detection mechanism of the JVM that doesn't work very well in k8s.

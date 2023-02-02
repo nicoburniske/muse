@@ -32,8 +32,8 @@ trait SpotifyService {
   def getAllUserPlaylists(userId: String): Task[Vector[UserPlaylist]]
   def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): Task[Paging[PlaylistTrack]]
   def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]]
-  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Track]]
-  def getAllAlbumTracks(albumId: String): Task[Vector[Track]]
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[AlbumTrack]]
+  def getAllAlbumTracks(albumId: String): Task[Vector[AlbumTrack]]
   def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Album]]
   def getAllArtistAlbums(artistId: String): Task[Vector[Album]]
   def getArtistTopTracks(artistId: String, country: String = "US"): Task[Vector[Track]]
@@ -58,15 +58,12 @@ object SpotifyService {
     spotify        = SpotifyAPI(backend, accessToken)
     // Given permissions vary, we want to create cache per instance to avoid conflicts.
     likeCache     <- SpotifyCache.savedSongsCache
-    playlistCache <- Cache.make(
-                       1000,
-                       5.minutes,
-                       Lookup((input: PlaylistInput) => spotify.getPlaylist(input.playlistId, input.market, input.fields))
-                     )
-    // These are global caches that we can share them across instances.
+    playlistCache <- SpotifyCache.playlistCache(spotify)
+    // These are global caches that we can share across instances.
     artistCache   <- ZIO.service[zcaffeine.Cache[Any, String, Artist]]
     albumCache    <- ZIO.service[zcaffeine.Cache[Any, String, Album]]
-  } yield SpotifyServiceLive(spotify, likeCache, playlistCache, artistCache, albumCache)
+    userCache     <- ZIO.service[zcaffeine.Cache[Any, String, User]]
+  } yield SpotifyServiceLive(spotify, likeCache, playlistCache, artistCache, albumCache, userCache)
 
   def getCurrentUserProfile = ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserProfile)
 
@@ -153,30 +150,27 @@ object SpotifyService {
     ZIO.serviceWithZIO[SpotifyService](_.seekPlayback(deviceId, positionMs))
 }
 
-case class PlaylistInput(playlistId: String, fields: Option[String], market: Option[String])
-
 case class SpotifyServiceLive(
     s: SpotifyAPI[Task],
     likeCache: zcaffeine.Cache[Any, String, Boolean],
     playlistCache: Cache[PlaylistInput, Throwable, UserPlaylist],
     artistCache: zcaffeine.Cache[Any, String, Artist],
-    albumCache: zcaffeine.Cache[Any, String, Album]
+    albumCache: zcaffeine.Cache[Any, String, Album],
+    userCache: zcaffeine.Cache[Any, String, User]
 ) extends SpotifyService {
-  def getCurrentUserProfile = s.getCurrentUserProfile
+  def getCurrentUserProfile                          = s.getCurrentUserProfile
   def getTrackRecommendations(input: TrackRecsInput) = s.getTrackRecommendations(input).map(_.tracks)
 
   def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None) =
     s.search(query, entityTypes, limit, offset)
 
-  def getUserProfile(userId: String) =
-    s.getUserProfile(userId)
+  def getUserProfile(userId: String) = userCache.get(userId)(userId => s.getUserProfile(userId))
 
   def isValidEntity(entityId: String, entityType: EntityType) =
     s.isValidEntity(entityId, entityType)
 
   def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None) =
     playlistCache.get(PlaylistInput(playlistId, fields, market))
-      <* playlistCache.cacheStats.flatMap { stats => ZIO.logInfo(s"GetPlaylist stats: $stats") }
 
   def getTrack(id: String, market: Option[String] = None) =
     s.getTrack(id, market)
@@ -210,25 +204,25 @@ case class SpotifyServiceLive(
         } yield albums.map(a => a.id -> a).toMap
       }.map(_.values.toVector)
 
-  def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None): Task[Paging[UserPlaylist]] =
+  def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None) =
     s.getUserPlaylists(userId, limit, offset)
 
   def getAllUserPlaylists(userId: String): Task[Vector[UserPlaylist]] =
     s.getAllUserPlaylists(userId)
 
-  def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): Task[Paging[PlaylistTrack]] =
+  def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None) =
     s.getSomePlaylistTracks(playlistId, limit, offset)
 
   def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]] =
     s.getAllPlaylistTracks(playlistId)
 
-  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Track]] =
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None) =
     s.getSomeAlbumTracks(album, limit, offset)
 
-  def getAllAlbumTracks(albumId: String): Task[Vector[Track]] =
+  def getAllAlbumTracks(albumId: String) =
     s.getAllAlbumTracks(albumId)
 
-  def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Album]] =
+  def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None) =
     s.getSomeArtistAlbums(artistId, limit, offset)
 
   def getAllArtistAlbums(artistId: String): Task[Vector[Album]] = s.getAllArtistAlbums(artistId)
@@ -250,11 +244,17 @@ case class SpotifyServiceLive(
   def getAvailableDevices                                     = s.getAvailableDevices
   def transferPlayback(deviceId: String)                      = s.transferPlayback(deviceId)
   def seekPlayback(deviceId: Option[String], positionMs: Int) = s.seekPlayback(deviceId, positionMs)
-  def saveTracks(trackIds: Vector[String])                    = s.saveTracks(trackIds)
-  def removeSavedTracks(trackIds: Vector[String])             = s.removeSavedTracks(trackIds)
-  def currentPlaybackState                                    = s.getPlaybackState
-  def pausePlayback(deviceId: Option[String])                 = s.pausePlayback(deviceId)
-  def skipToNext(deviceId: Option[String])                    = s.skipToNext(deviceId)
-  def skipToPrevious(deviceId: Option[String])                = s.skipToPrevious(deviceId)
-  def toggleShuffle(shuffleState: Boolean)                    = s.toggleShuffle(shuffleState)
+
+  def saveTracks(trackIds: Vector[String])                              =
+    s.saveTracks(trackIds) <* toggleSaveTracks(trackIds, true)
+  def removeSavedTracks(trackIds: Vector[String])                       =
+    s.removeSavedTracks(trackIds) <* toggleSaveTracks(trackIds, false)
+  private def toggleSaveTracks(trackIds: Vector[String], save: Boolean) =
+    ZIO.foreachPar(trackIds)(id => likeCache.put(id, ZIO.succeed(save)))
+
+  def currentPlaybackState                     = s.getPlaybackState
+  def pausePlayback(deviceId: Option[String])  = s.pausePlayback(deviceId)
+  def skipToNext(deviceId: Option[String])     = s.skipToNext(deviceId)
+  def skipToPrevious(deviceId: Option[String]) = s.skipToPrevious(deviceId)
+  def toggleShuffle(shuffleState: Boolean)     = s.toggleShuffle(shuffleState)
 }

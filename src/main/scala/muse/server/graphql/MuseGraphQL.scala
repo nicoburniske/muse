@@ -10,12 +10,24 @@ import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
 import muse.domain.error.{Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
 import muse.domain.event.ReviewUpdate
-import muse.domain.mutate.{CreateComment, CreateReview, PlaybackContext, UpdateComment, UpdateReview}
+import muse.domain.mutate.{CreateComment, CreateReview, UpdateComment, UpdateReview}
 import muse.domain.session.UserSession
 import muse.domain.spotify
 import muse.domain.spotify.AlbumType
 import muse.domain.table.ReviewComment
-import muse.server.graphql.subgraph.{Album, Artist, Comment, PlaybackState, Playlist, PlaylistTrack, Review, ReviewEntity, SearchResult, Track, User}
+import muse.server.graphql.subgraph.{
+  Album,
+  Artist,
+  Comment,
+  PlaybackState,
+  Playlist,
+  PlaylistTrack,
+  Review,
+  ReviewEntity,
+  SearchResult,
+  Track,
+  User
+}
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyError, SpotifyService}
 import muse.service.{RequestSession, UserSessions}
@@ -29,7 +41,8 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & Hub[ReviewUpdate] & Scope
+  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & Hub[ReviewUpdate] &
+    Scope
 
   given userSchema: Schema[Env, User] = Schema.gen
 

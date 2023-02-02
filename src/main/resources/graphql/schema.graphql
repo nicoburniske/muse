@@ -31,17 +31,16 @@ input ContextInput {
 input CreateCommentInput {
   reviewId: ID!
   parentCommentId: Int
-  comment: String
-  rating: Int
-  entityType: EntityType!
-  entityId: String!
+  comment: String!
+  entities: [ReviewEntityInput!]!
+  commentIndex: Int
 }
 
 input CreateReviewInput {
   name: String!
   isPublic: Boolean!
-  entityType: EntityType!
-  entityId: String!
+  entity: ReviewEntityInput
+  link: InitialLinkInput
 }
 
 input DeleteCommentInput {
@@ -51,6 +50,11 @@ input DeleteCommentInput {
 
 input DeleteReviewInput {
   id: ID!
+}
+
+input DeleteReviewLinkInput {
+  parentReviewId: ID!
+  childReviewId: ID!
 }
 
 input EntityOffsetInput {
@@ -63,23 +67,56 @@ input GetPlaylistTracksInput {
   numTracks: Int!
 }
 
-input PaginationInput {
-  first: Int!
-  from: Int! = 0
+input InitialLinkInput {
+  parentReviewId: ID!
 }
 
-input PlaybackContextInput {
-  "If device id is specified, playback will be transferred to that device. Otherwise, playback will be executed on user's active device."
-  deviceId: String
-  uris: [String!]
-  positionOffset: PositionOffsetInput
-  entityOffset: EntityOffsetInput
+input LinkReviewsInput {
+  parentReviewId: ID!
+  childReviewId: ID!
+  linkIndex: Int
+}
+
+input PaginationInput {
+  first: Int!
+  offset: Int! = 0
+}
+
+input PlayEntityContextInput {
+  offset: EntityOffsetInput!
   positionMs: Int
+  deviceId: String
+}
+
+input PlayInput {
+  deviceId: String
+}
+
+input PlayOffsetContextInput {
+  offset: PositionOffsetInput!
+  positionMs: Int
+  deviceId: String
+}
+
+input PlayTracksInput {
+  trackIds: [String!]!
+  positionMs: Int
+  deviceId: String
 }
 
 input PositionOffsetInput {
   context: ContextInput!
   position: Int!
+}
+
+input ReviewEntityInput {
+  entityType: EntityType!
+  entityId: String!
+}
+
+input SearchUserPlaylistsInput {
+  pagination: PaginationInput!
+  search: String
 }
 
 input SeekPlaybackInput {
@@ -94,17 +131,33 @@ input ShareReviewInput {
   accessLevel: AccessLevel
 }
 
+input TransferPlaybackInput {
+  deviceId: String!
+  play: Boolean
+}
+
 input UpdateCommentInput {
   commentId: Int!
   reviewId: ID!
   comment: String
-  rating: Int
+}
+
+input UpdateReviewEntityInput {
+  reviewId: ID!
+  entityType: EntityType!
+  entityId: String!
 }
 
 input UpdateReviewInput {
   reviewId: ID!
   name: String!
   isPublic: Boolean!
+}
+
+input UpdateReviewLinkInput {
+  parentReviewId: ID!
+  childReviewId: ID!
+  linkIndex: Int!
 }
 
 interface ReviewEntity {
@@ -168,21 +221,19 @@ type AudioFeatures {
 type Collaborator {
   user: User!
   accessLevel: AccessLevel!
+  review: Review
 }
 
 type Comment {
   id: Int!
+  commentIndex: Int!
   reviewId: ID!
   createdAt: Instant!
   updatedAt: Instant!
   parentCommentId: Int
-  commenterId: String!
-  commenter: User
+  commenter: User!
   comment: String
-  rating: Int
-  entityId: String!
-  entityType: EntityType!
-  entity: ReviewEntity
+  entities: [ReviewEntity!]
 }
 
 type CreatedComment {
@@ -205,12 +256,20 @@ type KVStringString {
 type Mutations {
   createReview(input: CreateReviewInput!): Review
   createComment(input: CreateCommentInput!): Comment
+  linkReviews(input: LinkReviewsInput!): Boolean
+  updateReviewLink(input: UpdateReviewLinkInput!): Boolean
   updateReview(input: UpdateReviewInput!): Review
+  updateReviewEntity(input: UpdateReviewEntityInput!): Review
   updateComment(input: UpdateCommentInput!): Comment
   deleteReview(input: DeleteReviewInput!): Boolean
   deleteComment(input: DeleteCommentInput!): Boolean
+  deleteReviewLink(input: DeleteReviewLinkInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
-  startPlayback(input: PlaybackContextInput!): Boolean
+  play(input: PlayInput!): Boolean
+  transferPlayback(input: TransferPlaybackInput!): Boolean
+  playTracks(input: PlayTracksInput!): Boolean
+  playOffsetContext(input: PlayOffsetContextInput!): Boolean
+  playEntityContext(input: PlayEntityContextInput!): Boolean
   seekPlayback(input: SeekPlaybackInput!): Boolean
   pausePlayback(deviceId: String): Boolean
   skipToNext(deviceId: String): Boolean
@@ -218,6 +277,34 @@ type Mutations {
   toggleShuffle(input: Boolean!): Boolean
   saveTracks(input: [String!]!): Boolean
   removeSavedTracks(input: [String!]!): Boolean
+}
+
+type PaginationResultAlbum {
+  limit: Int!
+  nextOffset: Int
+  itemsLeft: Int!
+  items: [Album!]!
+}
+
+type PaginationResultArtist {
+  limit: Int!
+  nextOffset: Int
+  itemsLeft: Int!
+  items: [Artist!]!
+}
+
+type PaginationResultPlaylist {
+  limit: Int!
+  nextOffset: Int
+  itemsLeft: Int!
+  items: [Playlist!]!
+}
+
+type PaginationResultTrack {
+  limit: Int!
+  nextOffset: Int
+  itemsLeft: Int!
+  items: [Track!]!
 }
 
 type PlaybackContext {
@@ -269,33 +356,37 @@ type PlaylistTrack {
   addedBy: User!
   isLocal: Boolean!
   track: Track!
+  playlist: Playlist!
 }
 
 type Queries {
   user(id: String): User
   review(id: ID!): Review
-  search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, from: 0}): SearchResult
+  reviews(reviewIds: [ID!]!): [Review!]
+  search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, offset: 0}): SearchResult
   availableDevices: [PlaybackDevice!]
+  getPlaylist(id: String!): Playlist
+  getAlbum(id: String!): Album
+  getTrack(id: String!): Track
 }
 
 type Review {
   id: ID!
   createdAt: Instant!
-  creator: User
+  creator: User!
   reviewName: String!
   isPublic: Boolean!
   comments: [Comment!]
-  entityId: String!
-  entityType: EntityType!
   entity: ReviewEntity
+  childReviews: [Review!]
   collaborators: [Collaborator!]
 }
 
 type SearchResult {
-  albums: [Album!]!
-  artists: [Artist!]!
-  playlists: [Playlist!]!
-  tracks: [Track!]!
+  albums: PaginationResultAlbum
+  artists: PaginationResultArtist
+  playlists: PaginationResultPlaylist
+  tracks: PaginationResultTrack
 }
 
 type SpotifyProfile {
@@ -312,7 +403,7 @@ type Subscriptions {
   nowPlaying(tickInterval: Int!): PlaybackState
   availableDevices: [PlaybackDevice!]
   playlistTracks(input: GetPlaylistTracksInput!): PlaylistTrack
-  reviewUpdates(reviewId: ID!): ReviewUpdate
+  reviewUpdates(reviewIds: [ID!]!): ReviewUpdate
 }
 
 type Track implements ReviewEntity {
@@ -329,7 +420,7 @@ type Track implements ReviewEntity {
   popularity: Int
   previewUrl: String
   trackNumber: Int!
-  isLocal: Boolean!
+  isLocal: Boolean
   uri: String!
   isLiked: Boolean
   audioFeatures: AudioFeatures
@@ -343,4 +434,5 @@ type User {
   id: String!
   reviews: [Review!]
   spotifyProfile: SpotifyProfile
+  playlists(input: SearchUserPlaylistsInput!): [Playlist!]
 }

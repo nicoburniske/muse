@@ -3,23 +3,17 @@ package muse.server.graphql
 import muse.domain.common.EntityType
 import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
 import muse.domain.event.{CreatedComment, DeletedComment, ReviewUpdate, UpdatedComment}
-import muse.domain.mutate.{
-  AlterPlayback,
-  Context,
-  CreateComment,
-  CreateReview,
-  DeleteComment,
-  DeleteReview,
-  EntityOffset,
-  PlaybackContext,
-  PositionOffset,
-  SeekPlayback,
-  ShareReview,
-  UpdateComment,
-  UpdateReview
-}
+import muse.domain.mutate.*
 import muse.domain.session.UserSession
-import muse.domain.spotify.{ErrorReason, ErrorResponse, StartPlaybackBody, UriOffset, PositionOffset as SpotifyPostionOffset}
+import muse.domain.spotify.{
+  ErrorReason,
+  ErrorResponse,
+  StartPlaybackBody,
+  TransferPlaybackBody,
+  UriOffset,
+  PositionOffset as SpotifyPostionOffset
+}
+import muse.domain.{spotify, table}
 import muse.server.graphql.subgraph.{Comment, Review}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
@@ -40,12 +34,21 @@ type MutationError = Throwable | MuseError
 final case class Mutations(
     createReview: Input[CreateReview] => ZIO[MutationEnv, MutationError, Review],
     createComment: Input[CreateComment] => ZIO[MutationEnv, MutationError, Comment],
+    linkReviews: Input[LinkReviews] => ZIO[MutationEnv, MutationError, Boolean],
+    updateReviewLink: Input[UpdateReviewLink] => ZIO[MutationEnv, MutationError, Boolean],
     updateReview: Input[UpdateReview] => ZIO[MutationEnv, MutationError, Review],
+    updateReviewEntity: Input[table.ReviewEntity] => ZIO[MutationEnv, MutationError, Review],
     updateComment: Input[UpdateComment] => ZIO[MutationEnv, MutationError, Comment],
     deleteReview: Input[DeleteReview] => ZIO[MutationEnv, MutationError, Boolean],
     deleteComment: Input[DeleteComment] => ZIO[MutationEnv, MutationError, Boolean],
+    deleteReviewLink: Input[DeleteReviewLink] => ZIO[MutationEnv, MutationError, Boolean],
     shareReview: Input[ShareReview] => ZIO[MutationEnv, MutationError, Boolean],
-    startPlayback: Input[PlaybackContext] => ZIO[MutationEnv, MutationError, Boolean],
+    // Consider separating these mutations out.
+    play: Input[Play] => ZIO[MutationEnv, MutationError, Boolean],
+    transferPlayback: Input[TransferPlayback] => ZIO[MutationEnv, MutationError, Boolean],
+    playTracks: Input[PlayTracks] => ZIO[MutationEnv, MutationError, Boolean],
+    playOffsetContext: Input[PlayOffsetContext] => ZIO[MutationEnv, MutationError, Boolean],
+    playEntityContext: Input[PlayEntityContext] => ZIO[MutationEnv, MutationError, Boolean],
     seekPlayback: Input[SeekPlayback] => ZIO[MutationEnv, MutationError, Boolean],
     pausePlayback: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
     skipToNext: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
@@ -55,19 +58,25 @@ final case class Mutations(
     removeSavedTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean]
 )
 
-final case class Input[T](input: T)
-
 object Mutations {
 
   val live = Mutations(
     i => createReview(i.input),
     i => createComment(i.input),
+    i => linkReviews(i.input),
+    i => updateReviewLink(i.input),
     i => updateReview(i.input),
+    i => updateReviewEntity(i.input),
     i => updateComment(i.input),
     i => deleteReview(i.input),
     i => deleteComment(i.input),
+    i => deleteReviewLink(i.input),
     i => shareReview(i.input),
-    i => startPlayback(i.input),
+    i => play(i.input),
+    i => transferPlayback(i.input),
+    i => playTracks(i.input),
+    i => playOffsetContext(i.input),
+    i => playEntityContext(i.input),
     i => seekPlayback(i.input),
     i => pausePlayback(i.deviceId),
     i => skipToNext(i.deviceId),
@@ -79,40 +88,80 @@ object Mutations {
 
   type Mutation[A] = ZIO[MutationEnv, MutationError, A]
 
+  // TODO: Wrap this in a single transaction.
   def createReview(create: CreateReview) = for {
-    user <- RequestSession.get[UserSession]
-    _    <- validateEntity(create.entityId, create.entityType)
-    r    <- DatabaseService.createReview(user.userId, create)
-  } yield Review.fromTable(r)
+    user       <- RequestSession.get[UserSession].map(_.userId)
+    r          <- DatabaseService.createReview(user, create)
+    _          <- ZIO.logInfo(s"Successfully created review! ${r.reviewName}")
+    maybeEntity = create.entity.map(e => table.ReviewEntity(r.id, e.entityType, e.entityId))
+    _          <- ZIO.fromOption(maybeEntity).flatMap(updateReviewEntityFromTable).orElse(ZIO.logInfo("No entity included!"))
+    _          <- ZIO
+                    .fromOption(create.link).flatMap { l =>
+                      DatabaseService.linkReviews(LinkReviews(l.parentReviewId, r.id, None)) *>
+                        ZIO.logInfo(s"Successfully linked review ${r.id} to ${l.parentReviewId}")
+                    }.orElse(ZIO.logInfo("No link included!"))
+  } yield Review.fromTable(r, maybeEntity)
+
+  private def updateReviewEntityFromTable(r: table.ReviewEntity) =
+    DatabaseService
+      .updateReviewEntity(r).fold(
+        sqlException => ZIO.logError(s"Failed to update review entity $r! ${sqlException.getMessage}"),
+        _ => ZIO.logInfo(s"Successfully updated review entity! ${r.reviewId}")
+      ).unit
 
   def createComment(create: CreateComment) = for {
     user      <- RequestSession.get[UserSession]
     _         <- ZIO
-                   .fail(BadRequest(Some("Comment must have a body or rating")))
-                   .when(create.comment.exists(_.isEmpty) && create.rating.isEmpty)
-    _         <- validateEntity(create.entityId, create.entityType) <&> validateCommentPermissions(user.userId, create.reviewId)
+                   .fail(BadRequest(Some("Comment must have a non-empty body")))
+                   .when(create.comment.isEmpty)
+    _         <- ZIO.foreachPar(create.entities)(e => validateEntity(e._2, e._1)) <&> validateCommentPermissions(
+                   user.userId,
+                   create.reviewId)
     result    <- DatabaseService.createReviewComment(user.userId, create)
-    comment    = Comment.fromTable(result)
+    comment    = Comment.fromTable(result._1, result._2)
     published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(CreatedComment(comment)))
     _         <- ZIO.logError("Failed to publish comment creation").unless(published)
   } yield comment
 
-  def updateReview(update: UpdateReview) = for {
+  def linkReviews(link: LinkReviews) = for {
     user   <- RequestSession.get[UserSession]
-    _      <- validateReviewPermissions(user.userId, update.reviewId)
-    result <- DatabaseService.updateReview(update)
-  } yield Review.fromTable(result)
+    _      <- ZIO.fail(BadRequest(Some("Can't link a review to itself"))).when(link.parentReviewId == link.childReviewId)
+    _      <- validateReviewPermissions(user.userId, link.parentReviewId)
+    result <- DatabaseService.linkReviews(link)
+  } yield result
+
+  def updateReviewLink(link: UpdateReviewLink) = for {
+    user   <- RequestSession.get[UserSession]
+    _      <- ZIO.fail(BadRequest(Some("Can't link a review to itself"))).when(link.parentReviewId == link.childReviewId)
+    _      <- validateReviewPermissions(user.userId, link.parentReviewId)
+    result <- DatabaseService.updateReviewLink(link)
+  } yield result
+
+  def updateReview(update: UpdateReview) = for {
+    user    <- RequestSession.get[UserSession]
+    _       <- validateReviewPermissions(user.userId, update.reviewId)
+    review  <- DatabaseService.updateReview(update)
+    details <- DatabaseService.getReviewEntity(update.reviewId)
+  } yield Review.fromTable(review, details)
+
+  def updateReviewEntity(update: table.ReviewEntity) = for {
+    user        <- RequestSession.get[UserSession]
+    _           <- validateReviewPermissions(user.userId, update.reviewId)
+    maybeReview <- DatabaseService.getReview(update.reviewId) <&> updateReviewEntityFromTable(update)
+    review      <- ZIO.fromOption(maybeReview).orElseFail(BadRequest(Some("Review not found.")))
+  } yield Review.fromTable(review, Some(update))
 
   def updateComment(update: UpdateComment) = for {
-    user      <- RequestSession.get[UserSession]
-    _         <- ZIO
-                   .fail(BadRequest(Some("Comment must have a body or rating")))
-                   .when(update.comment.exists(_.isEmpty) && update.rating.isEmpty)
-    _         <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
-    result    <- DatabaseService.updateComment(update)
-    comment    = Comment.fromTable(result)
-    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
-    _         <- ZIO.logError("Failed to publish comment update").unless(published)
+    user                  <- RequestSession.get[UserSession]
+    _                     <- ZIO
+                               .fail(BadRequest(Some("Comment must have a body.")))
+                               .when(update.comment.exists(_.isEmpty))
+    _                     <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
+    bothResults           <- DatabaseService.updateComment(update) <&> DatabaseService.getComment(update.commentId)
+    (result, maybeComment) = bothResults
+    comment                = Comment.fromTable(result, maybeComment.fold(Nil)(_._2))
+    published             <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
+    _                     <- ZIO.logError("Failed to publish comment update").unless(published)
   } yield comment
 
   def deleteComment(d: DeleteComment): Mutation[Boolean] = for {
@@ -129,6 +178,12 @@ object Mutations {
     result <- DatabaseService.deleteReview(d)
   } yield result
 
+  def deleteReviewLink(link: DeleteReviewLink) = for {
+    user   <- RequestSession.get[UserSession]
+    _      <- validateReviewPermissions(user.userId, link.parentReviewId)
+    result <- DatabaseService.deleteReviewLink(link)
+  } yield result
+
   def shareReview(s: ShareReview): ZIO[MutationEnv, MutationError | InvalidUser, Boolean] = for {
     userId <- RequestSession.get[UserSession].map(_.userId)
     _      <- ZIO.fail(InvalidUser("You cannot share a review you own with yourself")).when(userId == s.userId)
@@ -136,42 +191,38 @@ object Mutations {
     result <- DatabaseService.shareReview(s)
   } yield result
 
-  def startPlayback(playback: PlaybackContext) =
-    val startPlayback = for {
-      context                    <- spotifyPlaybackBody(playback)
-      (deviceId, playbackContext) = context
-      playback                   <- RequestSession.get[SpotifyService].flatMap(_.startPlayback(deviceId, playbackContext))
-    } yield playback
+  def play(play: Play) = for {
+    spotify <- RequestSession.get[SpotifyService]
+    res     <- spotify.startPlayback(play.deviceId, None)
+  } yield res
 
-    playback
-      .deviceId
-      .fold(startPlayback) { deviceId =>
-        RequestSession
-          .get[SpotifyService].flatMap(_.transferPlayback(deviceId)).foldZIO(
-            _ => ZIO.logInfo("Failed to transfer playback, starting playback on any device") *> startPlayback,
-            _ => ZIO.logInfo("Succeeded transferring playback") *> startPlayback
-          )
-      }.addTimeLog("Playback started")
+  def transferPlayback(transferPlayback: TransferPlayback) = for {
+    spotify <- RequestSession.get[SpotifyService]
+    res     <- spotify.transferPlayback(transferPlayback.deviceId)
+  } yield res
 
-  private def spotifyPlaybackBody(playback: PlaybackContext) =
-    playback match
-      case PlaybackContext(_, _, Some(_), Some(_), _)                                                            =>
-        ZIO.fail(BadRequest(Some("Playback can only use one kind of offset (Position, Entity).")))
-      case PlaybackContext(
-            deviceId,
-            uris,
-            None,
-            Some(EntityOffset(Context(outerType, outerId), Context(innerType, innerId))),
-            positionMs) =>
-        val outerUri = Some(toUri(outerType, outerId))
-        val innerUri = Some(UriOffset(toUri(innerType, innerId)))
-        ZIO.succeed(deviceId -> Some(StartPlaybackBody(outerUri, uris, innerUri, positionMs)))
-      case PlaybackContext(deviceId, uris, Some(PositionOffset(Context(eType, id), position)), None, positionMs) =>
-        val outerUri = Some(toUri(eType, id))
-        val innerUri = Some(SpotifyPostionOffset(position))
-        ZIO.succeed(deviceId -> Some(StartPlaybackBody(outerUri, uris, innerUri, positionMs)))
-      case PlaybackContext(None, None, None, None, None)                                                         =>
-        ZIO.succeed(None -> None)
+  def playTracks(play: PlayTracks) = for {
+    spotify <- RequestSession.get[SpotifyService]
+    uris     = play.trackIds.map(toUri(EntityType.Track, _))
+    body     = StartPlaybackBody(None, Some(uris), None, play.positionMs)
+    res     <- spotify.startPlayback(play.deviceId, Some(body))
+  } yield res
+
+  def playOffsetContext(play: PlayOffsetContext) = for {
+    spotifyService <- RequestSession.get[SpotifyService]
+    offset          = spotify.PositionOffset(play.offset.position)
+    contextUri      = toUri(play.offset.context)
+    body            = StartPlaybackBody(Some(contextUri), None, Some(offset), play.positionMs)
+    res            <- spotifyService.startPlayback(play.deviceId, Some(body))
+  } yield res
+
+  def playEntityContext(play: PlayEntityContext) = for {
+    spotify <- RequestSession.get[SpotifyService]
+    outerUri = toUri(play.offset.outer)
+    innerUri = toUri(play.offset.inner)
+    body     = StartPlaybackBody(Some(outerUri), None, Some(UriOffset(innerUri)), play.positionMs)
+    res     <- spotify.startPlayback(play.deviceId, Some(body))
+  } yield res
 
   def seekPlayback(playback: SeekPlayback) = for {
     _       <- ZIO.fail(BadRequest(Some("Playback offset cannot be negative"))).when(playback.positionMs < 0)
@@ -206,6 +257,7 @@ object Mutations {
   def removeSavedTracks(trackIds: List[String]) =
     RequestSession.get[SpotifyService].flatMap(_.removeSavedTracks(trackIds.toVector)).addTimeLog("Removed tracks")
 
+  private def toUri(e: Context): String                       = toUri(e.entityType, e.entityId)
   private def toUri(entityType: EntityType, entityId: String) = entityType match
     case EntityType.Album    => s"spotify:album:$entityId"
     case EntityType.Artist   => s"spotify:artist:$entityId"

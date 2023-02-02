@@ -1,3 +1,3 @@
 package muse.config
 
-case class ServerConfig(frontendUrl: String, port: Int, schemaFile: String, userSessionsFile: String, nThreads: Int)
+case class ServerConfig(domain: Option[String], frontendUrl: String, port: Int, schemaFile: String, nThreads: Int)

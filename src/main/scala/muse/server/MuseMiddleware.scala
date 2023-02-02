@@ -18,7 +18,6 @@ import zio.stream.ZStream
 
 import java.time.Instant
 
-// TODO: add Username log annotation?
 object MuseMiddleware {
   def checkAuthAddSession[R](app: Http[R, Throwable, Request, Response]) =
     Http
@@ -32,7 +31,7 @@ object MuseMiddleware {
         } { auth =>
           for {
             session <- UserSessions.getUserSession(auth)
-            _       <- ZIO.logInfo(s"Found session: $session")
+            _       <- ZIO.logInfo(s"Found session for ${session.userId} with session ${session.sessionId}")
             _       <- RequestSession.set[UserSession](Some(session))
             _       <- RequestSession.set[SpotifyService](Some(session.spotifyService))
           } yield app

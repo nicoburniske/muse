@@ -55,7 +55,7 @@ case class TrackRecsInput(
     targetValence: Option[Double]
 ) {
   // This is why I love co-pilot.
-  lazy val toUriString: String= {
+  lazy val toUriString: String = {
     val sb = new mutable.StringBuilder
     sb.append("limit=" + limit)
     sb.append("&market=" + market)

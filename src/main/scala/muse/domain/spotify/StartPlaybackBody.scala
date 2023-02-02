@@ -1,12 +1,11 @@
 package muse.domain.spotify
 import zio.json.*
 
+@jsonMemberNames(SnakeCase)
 case class StartPlaybackBody(
-    @jsonField("context_uri")
     contextUri: Option[String],
     uris: Option[List[String]],
     offset: Option[PlaybackOffset],
-    @jsonField("position_ms")
     positionMs: Option[Int])
 
 object StartPlaybackBody {

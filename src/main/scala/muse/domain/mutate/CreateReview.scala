@@ -1,6 +1,8 @@
 package muse.domain.mutate
 
-import muse.domain.common.EntityType
 import zio.json.*
 
-final case class CreateReview(name: String, isPublic: Boolean, entityType: EntityType, entityId: String)
+import java.util.UUID
+
+final case class InitialLink(parentReviewId: UUID)
+final case class CreateReview(name: String, isPublic: Boolean, entity: Option[ReviewEntityInput], link: Option[InitialLink])

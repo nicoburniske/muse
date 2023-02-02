@@ -3,18 +3,14 @@ package muse.domain.spotify
 import muse.domain.common.{Entity, EntityType}
 import zio.json.*
 
+@jsonMemberNames(SnakeCase)
 final case class Album(
-    @jsonField("album_group")
     albumGroup: Option[String],
-    @jsonField("album_type")
     albumType: AlbumType,
     artists: List[Artist],
-    @jsonField("available_markets")
     availableMarkets: Option[List[String]],
     // copyrights: Option[List[Copyright]] = None,
-    @jsonField("external_ids")
     externalIds: Option[Map[String, String]],
-    @jsonField("external_urls")
     externalUrls: Map[String, String],
     genres: Option[List[String]],
     href: String,
@@ -23,13 +19,11 @@ final case class Album(
     label: Option[String],
     name: String,
     popularity: Option[Int],
-    @jsonField("release_date")
     releaseDate: String,
     //                 releaseDatePrecision: ReleaseDatePrecision,
     //                 restrictions: Option[Restrictions] ,
-    tracks: Option[Paging[Track]],
-    @jsonField("type")
-    entityType: String,
+    tracks: Option[Paging[AlbumTrack]],
+    `type`: String,
     uri: String)
     extends Entity(id, EntityType.Album)
 

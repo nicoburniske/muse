@@ -3,8 +3,8 @@ package muse.domain.spotify
 import muse.domain.common.{Entity, EntityType}
 import zio.json.*
 
+@jsonMemberNames(SnakeCase)
 final case class Artist(
-    @jsonField("external_urls")
     externalUrls: Map[String, String],
     followers: Option[Followers],
     genres: Option[List[String]],
@@ -14,7 +14,6 @@ final case class Artist(
     images: Option[List[Image]],
     name: String,
     popularity: Option[Int],
-    @jsonField("type")
     `type`: String,
     uri: String
 ) extends Entity(id, EntityType.Artist)

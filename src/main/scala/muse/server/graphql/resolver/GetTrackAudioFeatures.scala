@@ -5,14 +5,18 @@ import muse.domain.error.InvalidEntity
 import muse.domain.spotify.AudioFeatures
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
-import muse.utils.Utils.addTimeLog
+import muse.utils.Utils
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 import zio.{Chunk, ZIO}
+
+import java.time.temporal.ChronoUnit
 
 case class GetTrackAudioFeatures(trackId: String) extends Request[Throwable, AudioFeatures]
 
 object GetTrackAudioFeatures {
   val MAX_PER_REQUEST = 100
+
+  def metric = Utils.timer("GetTrackAudioFeatures", ChronoUnit.MILLIS)
 
   def query(trackId: String) = ZQuery.fromRequest(GetTrackAudioFeatures(trackId))(AudioFeatureDataSource)
 
@@ -26,8 +30,8 @@ object GetTrackAudioFeatures {
           reqs => RequestSession.get[SpotifyService].flatMap(_.getTracksAudioFeatures(reqs.map(_.trackId))),
           identity,
           _.trackId,
-            _.id
-        ).addTimeLog(s"Retrieved audio analysis for ${reqs.size} tracks")
+          _.id
+        ) @@ metric.trackDuration
     }
 
 }

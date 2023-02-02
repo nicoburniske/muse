@@ -4,24 +4,24 @@ import zio.query.{CompletedRequestMap, Request}
 import zio.{Chunk, ZIO}
 
 object DatasourceUtils {
-  def createBatchedDataSource[Env, Error, SpotifyResult, Result, Req <: Request[Error, Result], K](
+  def createBatchedDataSource[Env, Error, ResourceResult, Result, Req <: Request[Error, Result], K](
       requests: Chunk[Req],
       maxPerRequest: Int,
-      singleReq: Req => ZIO[Env, Error, SpotifyResult],
-      multiReq: Vector[Req] => ZIO[Env, Error, Vector[SpotifyResult]],
-      spotifyResultToResult: SpotifyResult => Result,
+      singleReq: Req => ZIO[Env, Error, ResourceResult],
+      multiReq: Vector[Req] => ZIO[Env, Error, Vector[ResourceResult]],
+      transformResourceResult: ResourceResult => Result,
       requestKey: Req => K,
       responseKey: Result => K
   ): ZIO[Env, Nothing, CompletedRequestMap] =
     if (requests.length == 1) {
       val firstReq = requests.head
       singleReq(firstReq)
-        .map(spotifyResultToResult)
+        .map(transformResourceResult)
         .either.map { result => CompletedRequestMap.empty.insert(firstReq)(result) }
     } else {
       ZIO
         .foreachPar(requests.grouped(maxPerRequest).toVector) { batch =>
-          multiReq(batch.toVector).map(_.map(spotifyResultToResult)).either.map(batch -> _)
+          multiReq(batch.toVector).map(_.map(transformResourceResult)).either.map(batch -> _)
         }
         .map { (res: Vector[(Chunk[Req], Either[Error, Vector[Result]])]) =>
           res.foldLeft(CompletedRequestMap.empty) {

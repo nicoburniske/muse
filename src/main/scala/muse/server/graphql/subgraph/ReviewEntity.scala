@@ -10,6 +10,7 @@ import muse.server.graphql.resolver.{
   GetArtistAlbums,
   GetArtistTopTracks,
   GetPlaylistTracks,
+  GetTrack,
   GetTrackAudioFeatures
 }
 import muse.server.graphql.subgraph
@@ -124,25 +125,25 @@ case class Track(
     externalUrls: Map[String, String],
     href: String,
     override val id: String,
-    isPlayable: Option[Boolean],
+    isPlayable: ZQuery[RequestSession[SpotifyService], Throwable, Option[Boolean]],
     override val name: String,
-    popularity: Option[Int],
+    popularity: ZQuery[RequestSession[SpotifyService], Throwable, Int],
     previewUrl: Option[String],
     trackNumber: Int,
-    isLocal: Boolean,
+    isLocal: ZQuery[RequestSession[SpotifyService], Throwable, Boolean],
     uri: String,
     isLiked: ZQuery[RequestSession[SpotifyService], Throwable, Boolean],
     audioFeatures: ZQuery[RequestSession[SpotifyService], Throwable, spotify.AudioFeatures]
 ) extends ReviewEntity
 
 object Track {
-  def fromPlaybackState(t: spotify.Track)                           = {
+  def fromPlaybackState(t: spotify.Track) = {
     val artists = Some(t.artists)
       .filter(_.nonEmpty)
       .fold(ZQuery.foreachPar(t.artists.map(_.id))(GetArtist.query))(artists =>
         ZQuery.succeed(artists.map(Artist.fromPlaybackState)))
     Track(
-      ZQuery.succeed(Album.fromSpotify(t.album.get)),
+      ZQuery.succeed(Album.fromSpotify(t.album)),
       artists,
       t.discNumber,
       t.durationMs,
@@ -150,20 +151,21 @@ object Track {
       t.externalUrls,
       t.href,
       t.id,
-      t.isPlayable,
+      ZQuery.succeed(t.isPlayable),
       t.name,
-      t.popularity,
+      ZQuery.succeed(t.popularity),
       t.previewUrl,
       t.trackNumber,
-      t.isLocal,
+      ZQuery.succeed(t.isLocal),
       t.uri,
       CheckUserLikedSong.query(t.id),
       GetTrackAudioFeatures.query(t.id)
     )
+
   }
-  def fromSpotify(t: spotify.Track, albumId: Option[String] = None) = {
+  def fromSpotify(t: spotify.Track) = {
     Track(
-      GetAlbum.query(t.album.map(_.id).orElse(albumId).get),
+      GetAlbum.query(t.album.id),
       ZQuery.foreachPar(t.artists.map(_.id))(GetArtist.query),
       t.discNumber,
       t.durationMs,
@@ -171,12 +173,35 @@ object Track {
       t.externalUrls,
       t.href,
       t.id,
-      t.isPlayable,
+      ZQuery.succeed(t.isPlayable),
       t.name,
-      t.popularity,
+      ZQuery.succeed(t.popularity),
       t.previewUrl,
       t.trackNumber,
-      t.isLocal,
+      ZQuery.succeed(t.isLocal),
+      t.uri,
+      CheckUserLikedSong.query(t.id),
+      GetTrackAudioFeatures.query(t.id)
+    )
+  }
+
+  def fromAlbum(t: spotify.AlbumTrack, albumId: String) = {
+    val fullTrack = GetTrack.query(t.id)
+    Track(
+      GetAlbum.query(albumId),
+      ZQuery.foreachPar(t.artists.map(_.id))(GetArtist.query),
+      t.discNumber,
+      t.durationMs,
+      t.explicit,
+      t.externalUrls,
+      t.href,
+      t.id,
+      fullTrack.flatMap(_.isPlayable),
+      t.name,
+      fullTrack.flatMap(_.popularity),
+      t.previewUrl,
+      t.trackNumber,
+      fullTrack.flatMap(_.isLocal),
       t.uri,
       CheckUserLikedSong.query(t.id),
       GetTrackAudioFeatures.query(t.id)
