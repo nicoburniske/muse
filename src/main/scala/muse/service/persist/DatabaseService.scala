@@ -656,14 +656,31 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     .provide(layer)
     .map(_ > 0)
 
+  // If the comment is a parent to another comment, then mark the comment as deleted.
+  // Otherwise full delete the comment.
   override def deleteComment(d: DeleteComment) = run {
     comment
-      .filter(_.id == lift(d.commentId))
       .filter(_.reviewId == lift(d.reviewId))
-      .update(
-        _.deleted -> true,
-        _.comment -> None
-      )
+      .filter(_.parentCommentId.contains(lift(d.commentId)))
+      .size
+  }.map(_ > 0).flatMap {
+    case true =>
+      run {
+        comment
+          .filter(_.id == lift(d.commentId))
+          .filter(_.reviewId == lift(d.reviewId))
+          .update(
+            _.deleted -> true,
+            _.comment -> None
+          )
+      }
+    case false =>
+      run {
+        comment
+          .filter(_.id == lift(d.commentId))
+          .filter(_.reviewId == lift(d.reviewId))
+          .delete
+      }
   }.provide(layer)
     .map(_ > 0)
 
