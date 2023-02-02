@@ -221,6 +221,7 @@ type AudioFeatures {
 type Collaborator {
   user: User!
   accessLevel: AccessLevel!
+  review: Review
 }
 
 type Comment {
@@ -361,6 +362,7 @@ type PlaylistTrack {
 type Queries {
   user(id: String): User
   review(id: ID!): Review
+  reviews(reviewIds: [ID!]!): [Review!]
   search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, offset: 0}): SearchResult
   availableDevices: [PlaybackDevice!]
   getPlaylist(id: String!): Playlist
