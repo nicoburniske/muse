@@ -24,8 +24,6 @@ object Auth {
     "user-read-currently-playing",
     "user-library-modify",
     // Streaming permissions!
-    "user-read-email",
-    "user-read-private",
     "streaming",
     // Playlist editing permissions!
     "playlist-modify-public",
