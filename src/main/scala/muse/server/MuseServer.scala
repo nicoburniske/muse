@@ -55,10 +55,12 @@ object MuseServer {
 
   val endpointsGraphQL = for {
     interpreter <- MuseGraphQL.interpreter
-  } yield Http.collectHttp[Request] {
-    case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter, queryExecution = QueryExecution.Batched)
-  }
-    -> Http.collectHttp[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
+  } yield (
+    Http.collectHttp[Request] {
+      case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter, queryExecution = QueryExecution.Batched)
+    },
+    Http.collectHttp[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
+  )
 
   val metricsRouter = Http.collectZIO[Request] {
     case Method.GET -> !! / "metrics" => ZIO.serviceWithZIO[PrometheusPublisher](_.get.map(Response.text))

@@ -22,10 +22,8 @@ object MuseMiddleware {
   def checkAuthAddSession[R](app: Http[R, Throwable, Request, Response]) =
     Http
       .fromFunctionZIO[Request] { request =>
-        val maybeAuth = request
-          .cookieValue(COOKIE_KEY)
-          .orElse(request.authorization)
-          .map(_.toString)
+        val maybeAuth = extractRequestAuth(request)
+
         maybeAuth.fold {
           ZIO.logInfo("Missing Auth") *> ZIO.fail(Unauthorized("Missing Auth"))
         } { auth =>
@@ -38,6 +36,11 @@ object MuseMiddleware {
         }
       }
       .flatten
+
+  private def extractRequestAuth(request: Request) = request
+    .cookieValue(COOKIE_KEY)
+    .orElse(request.authorization)
+    .map(_.toString)
 
   val handleErrors: HttpMiddleware[Any, Throwable] = new HttpMiddleware[Any, Throwable] {
     override def apply[R1 <: Any, E1 >: Throwable](http: Http[R1, E1, Request, Response]) = {
@@ -73,65 +76,76 @@ object MuseMiddleware {
   }
 
   object Websockets {
-    private val session = Http.fromZIO {
-      for {
-        ws <- Ref.make[Option[UserSession]](None)
-      } yield ws
+
+    private val makeSessionRef = Ref.make[Option[UserSession]](None)
+
+    def live[R](interpreter: GraphQLInterpreter[R, CalibanError]) = Http
+      .fromFunctionZIO[Request] { request =>
+        val maybeAuth = extractRequestAuth(request)
+        MuseMiddleware.Websockets.configure(interpreter, maybeAuth)
+      }.flatten
+
+    def configure[R](interpreter: GraphQLInterpreter[R, CalibanError], maybeUserSessionId: Option[String]) = for {
+      ref        <- makeSessionRef
+      authSession = createSession[UserSession](ref)
+      // Authorize with cookie!
+      _          <- initSession(authSession, maybeUserSessionId).ignore
+    } yield {
+      // Authorize with input value!
+      val connectionInit = WebSocketHooks.init { payload =>
+        val maybeSessionId = payload match
+          case InputValue.ObjectValue(fields) =>
+            fields.get("Authorization").flatMap {
+              case StringValue(s) => Some(s)
+              case _              => None
+            }
+          case _                              => None
+        initSession(authSession, maybeSessionId)
+      }
+
+      type Env = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]
+      // Ensure that each message has latest sessions in environment.
+      val transformService = WebSocketHooks.message(new StreamTransformer[Env, Throwable] {
+        def transform[R1 <: Env, E1 >: Throwable](
+            stream: ZStream[R1, E1, GraphQLWSOutput]
+        ): ZStream[R1, E1, GraphQLWSOutput] =
+          ZStream.fromZIO(
+            for {
+              sessionId     <- authSession.get.map(_.sessionId)
+              latestSession <- UserSessions.getUserSession(sessionId)
+              _             <- authSession.set(Some(latestSession)) <&>
+                                 RequestSession.set[UserSession](Some(latestSession)) <&>
+                                 RequestSession.set[SpotifyService](Some(latestSession.spotifyService))
+            } yield ()
+          ) *> stream
+      })
+
+      ZHttpAdapter.makeWebSocketService(
+        interpreter,
+        webSocketHooks = connectionInit ++ transformService
+      )
     }
 
-    def live[R <: UserSessions](interpreter: GraphQLInterpreter[R, CalibanError]) =
-      session.flatMap { ref =>
-        val authSession = createSession[UserSession](ref)
+    // If the session is already set, do nothing. Otherwise, attempt to initialize UserSession.
+    private def initSession(ref: RequestSession[UserSession], maybeUserSessionId: Option[String]) = ref.get.isSuccess.flatMap {
+      case true => ZIO.unit
+      case false =>
+        ZIO
+          .fromOption(maybeUserSessionId).orElseFail(Unauthorized("Missing Auth: Unable to decode payload"))
+          .flatMap(auth => UserSessions.getUserSession(auth))
+          .flatMap(session => ref.set(Some(session)))
+    }
 
-        val connectionInit = WebSocketHooks.init { payload =>
-          ZIO
-            .fromOption {
-              payload match
-                case InputValue.ObjectValue(fields) =>
-                  fields.get("Authorization").flatMap {
-                    case StringValue(s) => Some(s)
-                    case _              => None
-                  }
-                case _                              => None
-            }.orElseFail(Unauthorized("Missing Auth: Unable to decode payload"))
-            .flatMap(auth => UserSessions.getUserSession(auth))
-            .flatMap(session => authSession.set(Some(session)))
-            .unit
-        }
+    private def createSession[R: Tag](ref: Ref[Option[R]]) = {
+      new RequestSession[R] {
+        def get: IO[Unauthorized, R] =
+          ref.get.flatMap {
+            case Some(v) => ZIO.succeed(v)
+            case None    => ZIO.fail(Unauthorized("Missing Websocket Auth"))
+          }
 
-        type Env = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]
-        // Ensure that each message has latest sessions in environment.
-        val transformService = WebSocketHooks.message(new StreamTransformer[Env, Throwable] {
-          def transform[R1 <: Env, E1 >: Throwable](
-              stream: ZStream[R1, E1, GraphQLWSOutput]
-          ): ZStream[R1, E1, GraphQLWSOutput] =
-            ZStream.fromZIO(
-              for {
-                sessionId     <- authSession.get.map(_.sessionId)
-                latestSession <- UserSessions.getUserSession(sessionId)
-                _             <- authSession.set(Some(latestSession)) <&>
-                                   RequestSession.set[UserSession](Some(latestSession)) <&>
-                                   RequestSession.set[SpotifyService](Some(latestSession.spotifyService))
-              } yield ()
-            ) *> stream
-        })
-
-        ZHttpAdapter.makeWebSocketService(
-          interpreter,
-          webSocketHooks = connectionInit ++ transformService
-        )
+        def set(session: Option[R]): UIO[Unit] = ref.set(session)
       }
-  }
-
-  private def createSession[R: Tag](ref: Ref[Option[R]]) = {
-    new RequestSession[R] {
-      def get: IO[Unauthorized, R] =
-        ref.get.flatMap {
-          case Some(v) => ZIO.succeed(v)
-          case None    => ZIO.fail(Unauthorized("Missing Websocket Auth"))
-        }
-
-      def set(session: Option[R]): UIO[Unit] = ref.set(session)
     }
   }
 
