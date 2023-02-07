@@ -9,7 +9,7 @@ scalar Instant
 
 scalar Long
 
-union ReviewUpdate = CreatedComment | DeletedComment | UpdatedComment
+union ReviewUpdate = CreatedComment | DeletedComment | UpdatedComment | UpdatedCommentIndex
 
 enum AccessLevel {
   Collaborator
@@ -221,11 +221,16 @@ type Mutations {
   updateReview(input: UpdateReviewInput!): Review
   updateReviewEntity(input: UpdateReviewEntityInput!): Review
   updateComment(input: UpdateCommentInput!): Comment
-  updateCommentIndex(input: UpdateCommentIndexInput!): Comment
+  updateCommentIndex(input: UpdateCommentIndexInput!): Boolean
   deleteReview(input: DeleteReviewInput!): Boolean
   deleteComment(input: DeleteCommentInput!): Boolean
   deleteReviewLink(input: DeleteReviewLinkInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
+}
+
+type NewCommentIndex {
+  commentId: Int!
+  commentIndex: Int!
 }
 
 type PaginationResultAlbum {
@@ -378,6 +383,11 @@ type Track implements ReviewEntity {
 
 type UpdatedComment {
   comment: Comment!
+}
+
+type UpdatedCommentIndex {
+  reviewId: ID!
+  updatedIndices: [NewCommentIndex!]!
 }
 
 type User {

@@ -39,7 +39,7 @@ final case class Mutations(
     updateReview: Input[UpdateReview] => ZIO[MutationEnv, MutationError, Review],
     updateReviewEntity: Input[table.ReviewEntity] => ZIO[MutationEnv, MutationError, Review],
     updateComment: Input[UpdateComment] => ZIO[MutationEnv, MutationError, Comment],
-    updateCommentIndex: Input[UpdateCommentIndex] => ZIO[MutationEnv, MutationError, Comment],
+    updateCommentIndex: Input[UpdateCommentIndex] => ZIO[MutationEnv, MutationError, Boolean],
     deleteReview: Input[DeleteReview] => ZIO[MutationEnv, MutationError, Boolean],
     deleteComment: Input[DeleteComment] => ZIO[MutationEnv, MutationError, Boolean],
     deleteReviewLink: Input[DeleteReviewLink] => ZIO[MutationEnv, MutationError, Boolean],
@@ -141,25 +141,45 @@ object Mutations {
   } yield comment
 
   def updateCommentIndex(update: UpdateCommentIndex) = for {
-    user              <- RequestSession.get[UserSession]
-    _                 <- ZIO.fail(BadRequest(Some("Can't have negative index"))).when(update.index < 0)
-    _                 <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
-    bothResults       <-
-      DatabaseService.updateCommentIndex(update.commentId, update.index) <&>
-        DatabaseService.getCommentEntities(update.commentId)
-    (result, entities) = bothResults
-    comment            = Comment.fromTable(result, entities)
-    published         <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
-    _                 <- ZIO.logError("Failed to publish comment update").unless(published)
-  } yield comment
+    user <- RequestSession.get[UserSession]
+    _    <- ZIO.fail(BadRequest(Some("Can't have negative index"))).when(update.index < 0)
+    _    <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
+
+    // ID -> Index
+    updatedCommentIndices: List[(Int, Int)] <- DatabaseService.updateCommentIndex(update.commentId, update.index)
+
+    result <- updatedCommentIndices match
+                case Nil     => ZIO.succeed(false)
+                case updated =>
+                  (for {
+                    comments  <- DatabaseService.getComments(updated.map(_._1)).map(_.map(Comment.fromTable))
+                    hub       <- ZIO.service[Hub[ReviewUpdate]]
+                    published <- ZIO.foreachPar(comments)(c => hub.publish(UpdatedComment(c))).map(_.forall(identity))
+                    _         <- ZIO.logError("Failed to publish comment update").unless(published)
+                    _         <- ZIO.logInfo("Successfully published update messages")
+                  } yield ()).forkDaemon.as(true)
+  } yield result
 
   def deleteComment(d: DeleteComment): Mutation[Boolean] = for {
-    user      <- RequestSession.get[UserSession]
-    _         <- validateCommentEditingPermissions(user.userId, d.reviewId, d.commentId)
-    result    <- DatabaseService.deleteComment(d)
-    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(DeletedComment(d.reviewId, d.commentId)))
-    _         <- ZIO.logError("Failed to publish comment deletion").unless(published)
-  } yield result
+    user              <- RequestSession.get[UserSession]
+    _                 <- validateCommentEditingPermissions(user.userId, d.reviewId, d.commentId)
+    result            <- DatabaseService.deleteComment(d)
+    (deleted, updated) = result
+    // TODO: Is there a better way to do this?
+    _                 <- publishDeletedComments(d.reviewId, deleted, updated).forkDaemon
+  } yield deleted.nonEmpty || updated.nonEmpty
+
+  def publishDeletedComments(reviewId: UUID, deletedCommentIds: List[Int], updatedCommentIds: List[Int]) = for {
+    updatedComments             <- DatabaseService.getComments(updatedCommentIds)
+    fromTable                    = updatedComments.map(Comment.fromTable)
+    hub                         <- ZIO.service[Hub[ReviewUpdate]]
+    updates                      = ZIO.foreachPar(fromTable)(c => hub.publish(UpdatedComment(c)))
+    deletes                      = ZIO.foreachPar(deletedCommentIds)(id => hub.publish(DeletedComment(reviewId, id)))
+    published                   <- updates <&> deletes
+    (updateResult, deleteResult) = published
+    allSuccess                   = updateResult.forall(identity) && deleteResult.forall(identity)
+    _                           <- ZIO.logError("Failed to publish comment deletion").unless(allSuccess)
+  } yield ()
 
   def deleteReview(d: DeleteReview): Mutation[Boolean] = for {
     user   <- RequestSession.get[UserSession]
