@@ -30,7 +30,7 @@ import muse.domain.table.{
   UserSession
 }
 import zio.ZLayer.*
-import zio.{IO, Schedule, TaskLayer, ZIO, ZLayer, durationInt}
+import zio.{Clock, IO, Schedule, TaskLayer, ZIO, ZLayer, durationInt}
 
 import java.sql.{SQLException, Timestamp, Types}
 import java.time.Instant
@@ -83,6 +83,7 @@ trait DatabaseService {
   def getUsersWithAccess(reviewId: UUID): IO[SQLException, List[ReviewAccess]]
   def getAllUsersWithAccess(reviewIds: List[UUID]): IO[SQLException, List[ReviewAccess]]
   def getComment(commentId: Int): IO[SQLException, Option[(ReviewComment, List[ReviewCommentEntity])]]
+  def getCommentEntities(commentId: Int): IO[SQLException, List[ReviewCommentEntity]]
 
   /**
    * Update!
@@ -90,6 +91,7 @@ trait DatabaseService {
   def updateReview(review: UpdateReview): IO[SQLException, Review]
   def updateReviewEntity(review: ReviewEntity): IO[SQLException, Boolean]
   def updateComment(comment: UpdateComment): IO[SQLException, ReviewComment]
+  def updateCommentIndex(commentId: Int, commentIndex: Int): IO[Throwable, ReviewComment]
   def shareReview(share: ShareReview): IO[SQLException, Boolean]
   def updateReviewLink(link: UpdateReviewLink): IO[Throwable, Boolean]
 
@@ -159,7 +161,8 @@ object DatabaseService {
 
   def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewComments(reviewId))
 
-  def getComment(id: Int) = ZIO.serviceWithZIO[DatabaseService](_.getComment(id))
+  def getComment(id: Int)         = ZIO.serviceWithZIO[DatabaseService](_.getComment(id))
+  def getCommentEntities(id: Int) = ZIO.serviceWithZIO[DatabaseService](_.getCommentEntities(id))
 
   def getAllReviewComments(reviewIds: List[UUID]) = ???
 
@@ -177,6 +180,9 @@ object DatabaseService {
 
   def updateComment(comment: UpdateComment) =
     ZIO.serviceWithZIO[DatabaseService](_.updateComment(comment))
+
+  def updateCommentIndex(commentId: Int, commentIndex: Int) =
+    ZIO.serviceWithZIO[DatabaseService](_.updateCommentIndex(commentId, commentIndex))
 
   def updateReviewLink(link: UpdateReviewLink) =
     ZIO.serviceWithZIO[DatabaseService](_.updateReviewLink(link))
@@ -384,6 +390,11 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provideLayer(layer)
     .map { found => found.headOption.map(_._1 -> found.flatMap(_._2)) }
 
+  override def getCommentEntities(commentId: Int) = run {
+    commentEntity
+      .filter(entity => entity.commentId == lift(commentId))
+  }.provideLayer(layer)
+
   /**
    * Create!
    */
@@ -459,6 +470,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
           Some(create.comment))
     }
 
+    // INDEX IS ONLY UNIQUE PER PARENT COMMENT.
     create.commentIndex match {
       // Insert the comment at the end of the list.
       case None              =>
@@ -466,6 +478,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
           topIndex   <- run {
                           comment
                             .filter(_.reviewId == lift(create.reviewId))
+                            .filter(_.parentCommentId == lift(create.parentCommentId))
                             .map(_.commentIndex)
                             .max
                         }
@@ -480,6 +493,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
             _       <- run {
                          comment
                            .filter(_.reviewId == lift(create.reviewId))
+                           .filter(_.parentCommentId == lift(create.parentCommentId))
                            .filter(_.commentIndex >= lift(insertIndex))
                            .update(comment => comment.commentIndex -> (comment.commentIndex + 1))
                        }
@@ -514,20 +528,59 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
     .map(_ > 0)
 
-  override def updateComment(c: UpdateComment) = ZIO
-    .succeed(Instant.now()).flatMap { now =>
+  override def updateComment(c: UpdateComment) = Clock
+    .instant.flatMap { now =>
       run {
         comment
           .filter(_.id == lift(c.commentId))
           .filter(_.reviewId == lift(c.reviewId))
           .update(
-            _.comment   -> lift(c.comment),
+            _.comment   -> lift(Option.apply(c.comment)),
             _.updatedAt -> lift(now)
           ).returning(r => r)
       }
     }.provide(layer)
 
-  def updateCommentIndex(c: UpdateCommentIndex) = ???
+  override def updateCommentIndex(commentId: Int, commentIndex: Int) = Clock
+    .instant.flatMap { now =>
+      transaction {
+        for {
+          currentComment     <- run {
+                                  comment
+                                    .filter(_.id == lift(commentIndex))
+                                    .take(1)
+                                }.map(_.headOption)
+          currentCommentIndex = currentComment.map(_.commentIndex)
+          reviewId            = currentComment.map(_.reviewId)
+          parentCommentId     = currentComment.flatMap(_.parentCommentId)
+          // Move entries above current placement down.
+          _                  <- run {
+                                  comment
+                                    .filter(comment => lift(reviewId).contains(comment.reviewId))
+                                    .filter(_.parentCommentId == lift(parentCommentId))
+                                    .filter(comment => lift(currentCommentIndex).exists(comment.commentIndex >= _))
+                                    .update(comment => comment.commentIndex -> (comment.commentIndex - 1))
+                                }
+          // Move entries below new placement up.
+          _                  <- run {
+                                  comment
+                                    .filter(comment => lift(reviewId).contains(comment.reviewId))
+                                    .filter(_.parentCommentId == lift(parentCommentId))
+                                    .filter(_.commentIndex >= lift(commentIndex))
+                                    .update(c => c.commentIndex -> (c.commentIndex + 1))
+                                }
+          // Update index.
+          updatedComment     <- run {
+                                  comment
+                                    .filter(_.id == lift(commentId))
+                                    .update(
+                                      _.commentIndex -> lift(commentIndex),
+                                      _.updatedAt    -> lift(now)
+                                    ).returning(r => r)
+                                }
+        } yield updatedComment
+      }
+    }.provide(layer)
 
   override def shareReview(share: ShareReview) =
     (share.accessLevel match
@@ -674,31 +727,56 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
             )
         }
       case false =>
-        transaction {
+        val value: ZIO[DataSource, Throwable, Long] = transaction {
           for {
-            parentCommentIds <- run {
-                                  comment
-                                    .filter(_.reviewId == lift(d.reviewId))
-                                    .filter(_.id == lift(d.commentId))
-                                    .map(_.parentCommentId)
-                                }
-                                  .map(_.flatten)
-            deleted          <- run {
-                                  comment
-                                    .filter(_.id == lift(d.commentId))
-                                    .filter(_.reviewId == lift(d.reviewId))
-                                    .delete
-                                }
-            // Delete all parent comments that are dangling (have no children and are themselves deleted).
-            _                <- run(
-                                  comment
-                                    .filter(_.reviewId == lift(d.reviewId))
-                                    .filter(_.deleted)
-                                    .filter(comment => liftQuery(parentCommentIds).contains(comment.id))
-                                    .delete
-                                )
-          } yield deleted
+            parentCommentId <- run {
+                                 comment
+                                   .filter(_.reviewId == lift(d.reviewId))
+                                   .filter(_.id == lift(d.commentId))
+                                   .map(_.parentCommentId)
+                                   .take(1)
+                               }.map(_.headOption.flatten)
+            deletedIndex    <- run {
+                                 comment
+                                   .filter(_.id == lift(d.commentId))
+                                   .filter(_.reviewId == lift(d.reviewId))
+                                   .delete
+                                   .returning(comment => comment.commentIndex)
+                               }
+            // Move all comments (with same parent  &&  above the deleted comment) down.
+            _               <- run {
+                                 comment
+                                   .filter(_.parentCommentId == lift(parentCommentId))
+                                   .filter(_.commentIndex >= lift(deletedIndex))
+                                   .update(comment => comment.commentIndex -> (comment.commentIndex - 1))
+                               }
+
+            // Delete parent comment that is dangling (no children and is marked as deleted).
+            deletedParents  <- run {
+                                 comment
+                                   .filter(_.reviewId == lift(d.reviewId))
+                                   .filter(_.deleted)
+                                   .filter(comment => lift(parentCommentId).contains(comment.id))
+                                   .delete
+                                   // This needs to be returningMany because returning doesn't account for nothing being deleted.
+                                   // Should only ever be one being deleted.
+                                   .returningMany(comment => comment.commentIndex -> comment.parentCommentId)
+                               }
+
+            // Move all comments on parent level down if it was deleted (dangling).
+            _               <- run {
+                                 liftQuery(deletedParents).foreach {
+                                   case (deletedParentIndex, deleteGrandparentId) =>
+                                     comment
+                                       .filter(_.parentCommentId == deleteGrandparentId)
+                                       .filter(_.commentIndex >= deletedParentIndex)
+                                       .update(comment => comment.commentIndex -> (comment.commentIndex - 1))
+                                 }
+                               }
+            // Need long for same return type between branches.
+          } yield deletedIndex.toLong
         }
+        value
     }.provide(layer)
     .map(_ > 0)
 

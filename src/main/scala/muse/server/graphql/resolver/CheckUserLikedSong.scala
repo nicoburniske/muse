@@ -46,7 +46,7 @@ object CheckUserLikedSong {
               }
           }
 
-        processed.foldLeft(CompletedRequestMap.empty) { case (acc, (req, result)) => acc.insert(req)(result) }
+          processed.foldLeft(CompletedRequestMap.empty) { case (acc, (req, result)) => acc.insert(req)(result) }
         } @@ metric.trackDuration
     }
 }

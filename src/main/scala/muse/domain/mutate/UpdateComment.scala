@@ -8,5 +8,5 @@ import java.util.UUID
 final case class UpdateComment(
     commentId: Int,
     reviewId: UUID,
-    comment: Option[String]
+    comment: String
 )

@@ -1,0 +1,1 @@
+sbt -v -J -Xmx4G -XX:+UseG1GC

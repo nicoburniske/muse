@@ -39,23 +39,11 @@ final case class Mutations(
     updateReview: Input[UpdateReview] => ZIO[MutationEnv, MutationError, Review],
     updateReviewEntity: Input[table.ReviewEntity] => ZIO[MutationEnv, MutationError, Review],
     updateComment: Input[UpdateComment] => ZIO[MutationEnv, MutationError, Comment],
+    updateCommentIndex: Input[UpdateCommentIndex] => ZIO[MutationEnv, MutationError, Comment],
     deleteReview: Input[DeleteReview] => ZIO[MutationEnv, MutationError, Boolean],
     deleteComment: Input[DeleteComment] => ZIO[MutationEnv, MutationError, Boolean],
     deleteReviewLink: Input[DeleteReviewLink] => ZIO[MutationEnv, MutationError, Boolean],
-    shareReview: Input[ShareReview] => ZIO[MutationEnv, MutationError, Boolean],
-    // Consider separating these mutations out.
-    play: Input[Play] => ZIO[MutationEnv, MutationError, Boolean],
-    transferPlayback: Input[TransferPlayback] => ZIO[MutationEnv, MutationError, Boolean],
-    playTracks: Input[PlayTracks] => ZIO[MutationEnv, MutationError, Boolean],
-    playOffsetContext: Input[PlayOffsetContext] => ZIO[MutationEnv, MutationError, Boolean],
-    playEntityContext: Input[PlayEntityContext] => ZIO[MutationEnv, MutationError, Boolean],
-    seekPlayback: Input[SeekPlayback] => ZIO[MutationEnv, MutationError, Boolean],
-    pausePlayback: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
-    skipToNext: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
-    skipToPrevious: AlterPlayback => ZIO[MutationEnv, MutationError, Boolean],
-    toggleShuffle: Input[Boolean] => ZIO[MutationEnv, MutationError, Boolean],
-    saveTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean],
-    removeSavedTracks: Input[List[String]] => ZIO[MutationEnv, MutationError, Boolean]
+    shareReview: Input[ShareReview] => ZIO[MutationEnv, MutationError, Boolean]
 )
 
 object Mutations {
@@ -68,22 +56,11 @@ object Mutations {
     i => updateReview(i.input),
     i => updateReviewEntity(i.input),
     i => updateComment(i.input),
+    i => updateCommentIndex(i.input),
     i => deleteReview(i.input),
     i => deleteComment(i.input),
     i => deleteReviewLink(i.input),
-    i => shareReview(i.input),
-    i => play(i.input),
-    i => transferPlayback(i.input),
-    i => playTracks(i.input),
-    i => playOffsetContext(i.input),
-    i => playEntityContext(i.input),
-    i => seekPlayback(i.input),
-    i => pausePlayback(i.deviceId),
-    i => skipToNext(i.deviceId),
-    i => skipToPrevious(i.deviceId),
-    i => toggleShuffle(i.input),
-    i => saveTracks(i.input),
-    i => removeSavedTracks(i.input)
+    i => shareReview(i.input)
   )
 
   type Mutation[A] = ZIO[MutationEnv, MutationError, A]
@@ -133,6 +110,7 @@ object Mutations {
   def updateReviewLink(link: UpdateReviewLink) = for {
     user   <- RequestSession.get[UserSession]
     _      <- ZIO.fail(BadRequest(Some("Can't link a review to itself"))).when(link.parentReviewId == link.childReviewId)
+    _      <- ZIO.fail(BadRequest(Some("Can't have negative index"))).when(link.linkIndex < 0)
     _      <- validateReviewPermissions(user.userId, link.parentReviewId)
     result <- DatabaseService.updateReviewLink(link)
   } yield result
@@ -152,16 +130,27 @@ object Mutations {
   } yield Review.fromTable(review, Some(update))
 
   def updateComment(update: UpdateComment) = for {
-    user                  <- RequestSession.get[UserSession]
-    _                     <- ZIO
-                               .fail(BadRequest(Some("Comment must have a body.")))
-                               .when(update.comment.exists(_.isEmpty))
-    _                     <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
-    bothResults           <- DatabaseService.updateComment(update) <&> DatabaseService.getComment(update.commentId)
-    (result, maybeComment) = bothResults
-    comment                = Comment.fromTable(result, maybeComment.fold(Nil)(_._2))
-    published             <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
-    _                     <- ZIO.logError("Failed to publish comment update").unless(published)
+    user              <- RequestSession.get[UserSession]
+    _                 <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
+    bothResults       <- DatabaseService.updateComment(update)
+                           <&> DatabaseService.getCommentEntities(update.commentId)
+    (result, entities) = bothResults
+    comment            = Comment.fromTable(result, entities)
+    published         <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
+    _                 <- ZIO.logError("Failed to publish comment update").unless(published)
+  } yield comment
+
+  def updateCommentIndex(update: UpdateCommentIndex) = for {
+    user              <- RequestSession.get[UserSession]
+    _                 <- ZIO.fail(BadRequest(Some("Can't have negative index"))).when(update.index < 0)
+    _                 <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
+    bothResults       <-
+      DatabaseService.updateCommentIndex(update.commentId, update.index) <&>
+        DatabaseService.getCommentEntities(update.commentId)
+    (result, entities) = bothResults
+    comment            = Comment.fromTable(result, entities)
+    published         <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
+    _                 <- ZIO.logError("Failed to publish comment update").unless(published)
   } yield comment
 
   def deleteComment(d: DeleteComment): Mutation[Boolean] = for {
@@ -190,79 +179,6 @@ object Mutations {
     _      <- validateReviewPermissions(userId, s.reviewId) <&> validateUser(s.userId)
     result <- DatabaseService.shareReview(s)
   } yield result
-
-  def play(play: Play) = for {
-    spotify <- RequestSession.get[SpotifyService]
-    res     <- spotify.startPlayback(play.deviceId, None)
-  } yield res
-
-  def transferPlayback(transferPlayback: TransferPlayback) = for {
-    spotify <- RequestSession.get[SpotifyService]
-    res     <- spotify.transferPlayback(transferPlayback.deviceId)
-  } yield res
-
-  def playTracks(play: PlayTracks) = for {
-    spotify <- RequestSession.get[SpotifyService]
-    uris     = play.trackIds.map(toUri(EntityType.Track, _))
-    body     = StartPlaybackBody(None, Some(uris), None, play.positionMs)
-    res     <- spotify.startPlayback(play.deviceId, Some(body))
-  } yield res
-
-  def playOffsetContext(play: PlayOffsetContext) = for {
-    spotifyService <- RequestSession.get[SpotifyService]
-    offset          = spotify.PositionOffset(play.offset.position)
-    contextUri      = toUri(play.offset.context)
-    body            = StartPlaybackBody(Some(contextUri), None, Some(offset), play.positionMs)
-    res            <- spotifyService.startPlayback(play.deviceId, Some(body))
-  } yield res
-
-  def playEntityContext(play: PlayEntityContext) = for {
-    spotify <- RequestSession.get[SpotifyService]
-    outerUri = toUri(play.offset.outer)
-    innerUri = toUri(play.offset.inner)
-    body     = StartPlaybackBody(Some(outerUri), None, Some(UriOffset(innerUri)), play.positionMs)
-    res     <- spotify.startPlayback(play.deviceId, Some(body))
-  } yield res
-
-  def seekPlayback(playback: SeekPlayback) = for {
-    _       <- ZIO.fail(BadRequest(Some("Playback offset cannot be negative"))).when(playback.positionMs < 0)
-    _       <- ZIO.logInfo(s"Seeking playback to ${playback.positionMs}ms")
-    spotify <- RequestSession.get[SpotifyService]
-    res     <- spotify.seekPlayback(playback.deviceId, playback.positionMs)
-  } yield res
-
-  def pausePlayback(deviceId: Option[String]) = for {
-    spotify <- RequestSession.get[SpotifyService]
-    res     <- spotify.pausePlayback(deviceId)
-  } yield res
-
-  def skipToNext(deviceId: Option[String]) = for {
-    spotify <- RequestSession.get[SpotifyService]
-    res     <- spotify.skipToNext(deviceId)
-  } yield res
-
-  def skipToPrevious(deviceId: Option[String]) = for {
-    spotify <- RequestSession.get[SpotifyService]
-    res     <- spotify.skipToPrevious(deviceId)
-  } yield res
-
-  def toggleShuffle(shuffleState: Boolean) = for {
-    spotify <- RequestSession.get[SpotifyService]
-    res     <- spotify.toggleShuffle(shuffleState)
-  } yield res
-
-  def saveTracks(trackIds: List[String]) =
-    RequestSession.get[SpotifyService].flatMap(_.saveTracks(trackIds.toVector)).addTimeLog("Tracks saved")
-
-  def removeSavedTracks(trackIds: List[String]) =
-    RequestSession.get[SpotifyService].flatMap(_.removeSavedTracks(trackIds.toVector)).addTimeLog("Removed tracks")
-
-  private def toUri(e: Context): String                       = toUri(e.entityType, e.entityId)
-  private def toUri(entityType: EntityType, entityId: String) = entityType match
-    case EntityType.Album    => s"spotify:album:$entityId"
-    case EntityType.Artist   => s"spotify:artist:$entityId"
-    case EntityType.Track    => s"spotify:track:$entityId"
-    case EntityType.Playlist => s"spotify:playlist:$entityId"
 
   private def validateEntity(
       entityId: String,

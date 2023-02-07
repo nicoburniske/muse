@@ -30,7 +30,8 @@ final case class SearchArgs(
 final case class EntityId(id: String)
 // TODO: Integrate "Input" for arguments.
 final case class Queries(
-    user: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, User],
+    user: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Nothing, User],
+    userMaybe: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, User],
     review: ReviewArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, Option[Review]],
     reviews: ReviewsArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]],
     search: SearchArgs => ZQuery[RequestSession[SpotifyService], Throwable, SearchResult],
@@ -42,6 +43,7 @@ final case class Queries(
 
 object Queries {
   val live = Queries(
+    args => GetUser.query(args.id).orDie,
     args => GetUser.query(args.id),
     args => GetReview.query(args.id),
     args => GetReview.multiQuery(args.reviewIds),

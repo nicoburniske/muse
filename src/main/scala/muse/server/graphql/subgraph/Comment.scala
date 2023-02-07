@@ -18,6 +18,7 @@ final case class Comment(
     reviewId: UUID,
     createdAt: Instant,
     updatedAt: Instant,
+    deleted: Boolean,
     // If none, then it is root comment.
     parentCommentId: Option[Int],
     commenter: User,
@@ -32,6 +33,7 @@ object Comment {
     r.reviewId,
     r.createdAt,
     r.updatedAt,
+    r.deleted,
     r.parentCommentId,
     GetUser.queryByUserId(r.commenter),
     r.comment,
