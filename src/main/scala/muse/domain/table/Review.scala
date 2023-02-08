@@ -7,7 +7,7 @@ import java.time.Instant
 import java.util.UUID
 
 final case class Review(
-    id: UUID,
+    reviewId: UUID,
     createdAt: Instant,
     creatorId: String,
     reviewName: String,

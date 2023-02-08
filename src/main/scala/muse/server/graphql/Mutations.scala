@@ -70,12 +70,12 @@ object Mutations {
     user       <- RequestSession.get[UserSession].map(_.userId)
     r          <- DatabaseService.createReview(user, create)
     _          <- ZIO.logInfo(s"Successfully created review! ${r.reviewName}")
-    maybeEntity = create.entity.map(e => table.ReviewEntity(r.id, e.entityType, e.entityId))
+    maybeEntity = create.entity.map(e => table.ReviewEntity(r.reviewId, e.entityType, e.entityId))
     _          <- ZIO.fromOption(maybeEntity).flatMap(updateReviewEntityFromTable).orElse(ZIO.logInfo("No entity included!"))
     _          <- ZIO
                     .fromOption(create.link).flatMap { l =>
-                      DatabaseService.linkReviews(LinkReviews(l.parentReviewId, r.id, None)) *>
-                        ZIO.logInfo(s"Successfully linked review ${r.id} to ${l.parentReviewId}")
+                      DatabaseService.linkReviews(LinkReviews(l.parentReviewId, r.reviewId, None)) *>
+                        ZIO.logInfo(s"Successfully linked review ${r.reviewId} to ${l.parentReviewId}")
                     }.orElse(ZIO.logInfo("No link included!"))
   } yield Review.fromTable(r, maybeEntity)
 
@@ -94,8 +94,10 @@ object Mutations {
     _         <- ZIO.foreachPar(create.entities)(e => validateEntity(e._2, e._1)) <&> validateCommentPermissions(
                    user.userId,
                    create.reviewId)
-    result    <- DatabaseService.createReviewComment(user.userId, create)
-    comment    = Comment.fromTable(result._1, result._2)
+    result    <- DatabaseService.createReviewComment(user.userId, create).map {
+                   case (comment, index, parentChild, entities) => (comment, index, parentChild.fold(Nil)(List(_)), entities)
+                 }
+    comment    = Comment.fromTable.tupled(result)
     published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(CreatedComment(comment)))
     _         <- ZIO.logError("Failed to publish comment creation").unless(published)
   } yield comment
@@ -130,14 +132,15 @@ object Mutations {
   } yield Review.fromTable(review, Some(update))
 
   def updateComment(update: UpdateComment) = for {
-    user              <- RequestSession.get[UserSession]
-    _                 <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
-    bothResults       <- DatabaseService.updateComment(update)
-                           <&> DatabaseService.getCommentEntities(update.commentId)
-    (result, entities) = bothResults
-    comment            = Comment.fromTable(result, entities)
-    published         <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
-    _                 <- ZIO.logError("Failed to publish comment update").unless(published)
+    user      <- RequestSession.get[UserSession]
+    _         <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
+    _         <- DatabaseService.updateComment(update)
+    comment   <- DatabaseService
+                   .getComment(update.commentId)
+                   .someOrFail(BadRequest(Some("Comment does not exist")))
+                   .map(Comment.fromTable.tupled)
+    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
+    _         <- ZIO.logError("Failed to publish comment update").unless(published)
   } yield comment
 
   def updateCommentIndex(update: UpdateCommentIndex) = for {
@@ -146,14 +149,14 @@ object Mutations {
     _    <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
 
     // ID -> Index
-    updatedCommentIndices: List[(Int, Int)] <- DatabaseService.updateCommentIndex(update.commentId, update.index)
+    updatedCommentIndices: List[(Long, Int)] <- DatabaseService.updateCommentIndex(update.commentId, update.index)
 
     result <- updatedCommentIndices match
                 case Nil     => ZIO.succeed(false)
                 case updated =>
                   (for {
-                    comments  <- DatabaseService.getComments(updated.map(_._1)).map(_.map(Comment.fromTable))
                     hub       <- ZIO.service[Hub[ReviewUpdate]]
+                    comments  <- DatabaseService.getComments(updated.map(_._1)).map(Comment.fromTableRows)
                     published <- ZIO.foreachPar(comments)(c => hub.publish(UpdatedComment(c))).map(_.forall(identity))
                     _         <- ZIO.logError("Failed to publish comment update").unless(published)
                     _         <- ZIO.logInfo("Successfully published update messages")
@@ -169,16 +172,16 @@ object Mutations {
     _                 <- publishDeletedComments(d.reviewId, deleted, updated).forkDaemon
   } yield deleted.nonEmpty || updated.nonEmpty
 
-  def publishDeletedComments(reviewId: UUID, deletedCommentIds: List[Int], updatedCommentIds: List[Int]) = for {
+  def publishDeletedComments(reviewId: UUID, deletedCommentIds: List[Long], updatedCommentIds: List[Long]) = for {
     updatedComments             <- DatabaseService.getComments(updatedCommentIds)
-    fromTable                    = updatedComments.map(Comment.fromTable)
+    fromTable                    = Comment.fromTableRows(updatedComments)
     hub                         <- ZIO.service[Hub[ReviewUpdate]]
     updates                      = ZIO.foreachPar(fromTable)(c => hub.publish(UpdatedComment(c)))
     deletes                      = ZIO.foreachPar(deletedCommentIds)(id => hub.publish(DeletedComment(reviewId, id)))
     published                   <- updates <&> deletes
     (updateResult, deleteResult) = published
     allSuccess                   = updateResult.forall(identity) && deleteResult.forall(identity)
-    _                           <- ZIO.logError("Failed to publish comment deletion").unless(allSuccess)
+    _                           <- ZIO.logError("Failed to publish comment delete events").unless(allSuccess)
   } yield ()
 
   def deleteReview(d: DeleteReview): Mutation[Boolean] = for {
@@ -217,7 +220,7 @@ object Mutations {
   private def validateCommentEditingPermissions(
       userId: String,
       reviewId: UUID,
-      commentId: Int): ZIO[DatabaseService, Throwable | Forbidden, Unit] =
+      commentId: Long): ZIO[DatabaseService, Throwable | Forbidden, Unit] =
     DatabaseService.canModifyComment(userId, reviewId, commentId).flatMap {
       case true  => ZIO.unit
       case false => ZIO.fail(Forbidden(s"User $userId cannot modify comment $commentId"))

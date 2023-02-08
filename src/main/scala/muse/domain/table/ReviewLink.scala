@@ -2,4 +2,4 @@ package muse.domain.table
 
 import java.util.UUID
 
-case class ReviewLink(parentReviewId: UUID, childReviewId: UUID, linkIndex: Int)
+final case class ReviewLink(linkId: Int, linkIndex: Int, parentReviewId: UUID, childReviewId: UUID)

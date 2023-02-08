@@ -25,7 +25,7 @@ enum EntityType {
 
 input CreateCommentInput {
   reviewId: ID!
-  parentCommentId: Int
+  parentCommentId: Long
   comment: String!
   entities: [ReviewEntityInput!]!
   commentIndex: Int
@@ -40,7 +40,7 @@ input CreateReviewInput {
 
 input DeleteCommentInput {
   reviewId: ID!
-  commentId: Int!
+  commentId: Long!
 }
 
 input DeleteReviewInput {
@@ -96,7 +96,7 @@ input UpdateCommentIndexInput {
 }
 
 input UpdateCommentInput {
-  commentId: Int!
+  commentId: Long!
   reviewId: ID!
   comment: String!
 }
@@ -184,13 +184,14 @@ type Collaborator {
 }
 
 type Comment {
-  id: Int!
+  id: Long!
   commentIndex: Int!
   reviewId: ID!
   createdAt: Instant!
   updatedAt: Instant!
   deleted: Boolean!
-  parentCommentId: Int
+  parentCommentId: Long
+  childCommentIds: [Long!]!
   commenter: User!
   comment: String
   entities: [ReviewEntity!]
@@ -202,7 +203,7 @@ type CreatedComment {
 
 type DeletedComment {
   reviewId: ID!
-  commentId: Int!
+  commentId: Long!
 }
 
 "A key-value pair of String and String"
@@ -229,7 +230,7 @@ type Mutations {
 }
 
 type NewCommentIndex {
-  commentId: Int!
+  commentId: Long!
   commentIndex: Int!
 }
 
