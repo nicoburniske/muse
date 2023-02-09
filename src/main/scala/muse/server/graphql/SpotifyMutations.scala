@@ -22,7 +22,6 @@ import muse.utils.Utils.addTimeLog
 
 type SpotifyMutationEnv = RequestSession[UserSession] & RequestSession[SpotifyService]
 case class SpotifyMutations(
-    // Consider separating these mutations out.
     play: Input[Play] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     transferPlayback: Input[TransferPlayback] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     playTracks: Input[PlayTracks] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
@@ -120,7 +119,7 @@ object SpotifyMutations {
   def removeSavedTracks(trackIds: List[String]) =
     RequestSession.get[SpotifyService].flatMap(_.removeSavedTracks(trackIds.toVector)).addTimeLog("Removed tracks")
 
-  private def toUri(e: Context): String = toUri(e.entityType, e.entityId)
+  private def toUri(e: Context): String                       = toUri(e.entityType, e.entityId)
   private def toUri(entityType: EntityType, entityId: String) = entityType match
     case EntityType.Album    => s"spotify:album:$entityId"
     case EntityType.Artist   => s"spotify:artist:$entityId"
