@@ -573,24 +573,22 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
           current <- run {
                        commentIndex
                          .filter(_.commentId == lift(commentId))
-                         .take(1)
                      }.map(_.headOption) <&> run {
                        commentParentChild
                          .filter(_.childCommentId == lift(commentId))
                          .map(_.parentCommentId)
-                         .take(1)
                      }.map(_.headOption)
 
-          (currentIndex, parentCommentId) = current
-          currentCommentIndex             = currentIndex.map(_.commentIndex)
-          reviewId                        = currentIndex.map(_.reviewId)
+          (currentIndex, parentCommentId: Option[Long]) = current
+          currentCommentIndex: Option[Int]              = currentIndex.map(_.commentIndex)
+          reviewId: Option[UUID]                        = currentIndex.map(_.reviewId)
 
           // Move entries above current placement down.
           movedDownComments <- run {
                                  commentIndex
                                    .filter(comment => lift(reviewId).contains(comment.reviewId))
                                    .filter(_.parentCommentId == lift(parentCommentId))
-                                   .filter(comment => lift(currentCommentIndex).exists(comment.commentIndex >= _))
+                                   .filter(comment => lift(currentCommentIndex).exists(comment.commentIndex > _))
                                    .update(comment => comment.commentIndex -> (comment.commentIndex - 1))
                                    .returningMany(c => c.commentId -> c.commentIndex)
                                }
@@ -651,13 +649,12 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       currentLinkIndex <- run {
                             getReviewLink(update.parentReviewId, update.childReviewId)
                               .map(_.linkIndex)
-                              .take(1)
                           }.map(_.headOption)
       // Move entries above current placement down.
       _                <- run {
                             reviewLink
                               .filter(_.parentReviewId == lift(update.parentReviewId))
-                              .filter(link => lift(currentLinkIndex).exists(link.linkIndex >= _))
+                              .filter(link => lift(currentLinkIndex).exists(link.linkIndex > _))
                               .update(link => link.linkIndex -> (link.linkIndex - 1))
                           }
       // Move entries below new placement up.
@@ -769,7 +766,6 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
                                                commentParentChild
                                                  .filter(_.childCommentId == lift(d.commentId))
                                                  .map(_.parentCommentId)
-                                                 .take(1)
                                              }.map(_.headOption)
 
             // Save comment index.
@@ -809,22 +805,22 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
             maybeParentIdToDelete          = maybeParentIndexToDelete.map(_.commentId)
 
             // Delete dangling parent.
-            _                             <- run {
-                                               comment
-                                                 .filter(c => lift(maybeParentIdToDelete).contains(c.commentId))
-                                                 .delete
-                                             }
+            _ <- run {
+                   comment
+                     .filter(c => lift(maybeParentIdToDelete).contains(c.commentId))
+                     .delete
+                 }
 
-            maybeGrandparentId             = maybeParentIndexToDelete.flatMap(_.parentCommentId)
-            maybeParentIndex               = maybeParentIndexToDelete.map(_.commentIndex)
+            maybeGrandparentId           = maybeParentIndexToDelete.flatMap(_.parentCommentId)
+            maybeParentIndex             = maybeParentIndexToDelete.map(_.commentIndex)
             // Move all comments on parent level down if it was deleted.
             adjustedParents: List[Long] <- run {
-                                               commentIndex
-                                                 .filter(index => lift(maybeGrandparentId) == index.parentCommentId)
-                                                 .filter(index => lift(maybeParentIndex).exists(_ <= index.commentIndex))
-                                                 .update(index => index.commentIndex -> (index.commentIndex - 1))
-                                                 .returningMany(_.commentId)
-                                             }
+                                             commentIndex
+                                               .filter(index => lift(maybeGrandparentId) == index.parentCommentId)
+                                               .filter(index => lift(maybeParentIndex).exists(_ <= index.commentIndex))
+                                               .update(index => index.commentIndex -> (index.commentIndex - 1))
+                                               .returningMany(_.commentId)
+                                           }
           } yield (deletedCommentId :: maybeParentIdToDelete.fold(Nil)(List(_))) -> (movedDownIds ++ adjustedParents)
         }
     }.provide(layer)
