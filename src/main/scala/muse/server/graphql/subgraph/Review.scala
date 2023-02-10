@@ -46,18 +46,18 @@ object Review {
     val maybeEntity = entity.fold(ZQuery.succeed(None))(r => GetEntity.query(r.entityId, r.entityType).map(Some(_)))
 
     Review(
-      r.id,
+      r.reviewId,
       r.createdAt,
       GetUser.queryByUserId(r.creatorId),
       r.reviewName,
       r.isPublic,
-      GetReviewComments.query(r.id),
+      GetReviewComments.query(r.reviewId),
       // This can't be 'orDie' because there are cases when:
       // People make playlists private.
       // Things are deleted from Spotify.
       maybeEntity,
-      GetChildReviews.query(r.id),
-      GetCollaborators.query(r.id)
+      GetChildReviews.query(r.reviewId),
+      GetCollaborators.query(r.reviewId)
     )
   }
 }

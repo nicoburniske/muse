@@ -15,8 +15,7 @@ object GetComment {
 
   val commentDataSource: DataSource[DatabaseService, CommentRequest] =
     DataSource.fromFunctionZIO("GetCommentEntities")(req =>
-      DatabaseService.getComment(req.id).map { maybeTuple =>
-        val comment: Option[Comment] = maybeTuple.map { case (comment, entities) => Comment.fromTable(comment, entities) }
-        comment
+      DatabaseService.getComment(req.id).map { maybeCommentTuple =>
+         maybeCommentTuple.map(Comment.fromTable.tupled)
       })
 }

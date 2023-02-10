@@ -9,7 +9,7 @@ import java.util.UUID
 final case class CreateComment(
     reviewId: UUID,
     // If none, then it is root comment.
-    parentCommentId: Option[Int],
+    parentCommentId: Option[Long],
     comment: String,
     entities: List[ReviewEntityInput],
     // If none, will be added to the end of the list.

@@ -26,7 +26,6 @@ val COOKIE_KEY = "XSESSION"
 object MuseServer {
   val live = for {
     port               <- ZIO.serviceWith[ServerConfig](_.port)
-    _                  <- ZIO.serviceWithZIO[AppConfig](c => ZIO.logInfo(s"Starting server with config $c"))
     _                  <- MigrationService.runMigrations
     protectedEndpoints <- createProtectedEndpoints
     corsConfig         <- getCorsConfig
@@ -50,7 +49,7 @@ object MuseServer {
   def createProtectedEndpoints = endpointsGraphQL.map {
     case (rest, websocket) =>
       (MuseMiddleware.checkAuthAddSession(Auth.logoutEndpoint ++ rest) ++ websocket) @@
-        (MuseMiddleware.requestLoggingTrace)
+        MuseMiddleware.requestLoggingTrace
   }
 
   val endpointsGraphQL = for {

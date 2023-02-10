@@ -2,4 +2,4 @@ package muse.domain.table
 
 import muse.domain.common.EntityType
 
-case class ReviewCommentEntity(commentId: Int, entityType: EntityType, entityId: String)
+final case class ReviewCommentEntity(commentId: Long, entityType: EntityType, entityId: String)

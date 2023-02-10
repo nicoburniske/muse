@@ -9,7 +9,7 @@ scalar Instant
 
 scalar Long
 
-union ReviewUpdate = CreatedComment | DeletedComment | UpdatedComment
+union ReviewUpdate = CreatedComment | DeletedComment | UpdatedComment | UpdatedCommentIndex
 
 enum AccessLevel {
   Collaborator
@@ -23,14 +23,9 @@ enum EntityType {
   Track
 }
 
-input ContextInput {
-  entityType: EntityType!
-  entityId: String!
-}
-
 input CreateCommentInput {
   reviewId: ID!
-  parentCommentId: Int
+  parentCommentId: Long
   comment: String!
   entities: [ReviewEntityInput!]!
   commentIndex: Int
@@ -45,7 +40,7 @@ input CreateReviewInput {
 
 input DeleteCommentInput {
   reviewId: ID!
-  commentId: Int!
+  commentId: Long!
 }
 
 input DeleteReviewInput {
@@ -55,11 +50,6 @@ input DeleteReviewInput {
 input DeleteReviewLinkInput {
   parentReviewId: ID!
   childReviewId: ID!
-}
-
-input EntityOffsetInput {
-  outer: ContextInput!
-  inner: ContextInput!
 }
 
 input GetPlaylistTracksInput {
@@ -82,33 +72,6 @@ input PaginationInput {
   offset: Int! = 0
 }
 
-input PlayEntityContextInput {
-  offset: EntityOffsetInput!
-  positionMs: Int
-  deviceId: String
-}
-
-input PlayInput {
-  deviceId: String
-}
-
-input PlayOffsetContextInput {
-  offset: PositionOffsetInput!
-  positionMs: Int
-  deviceId: String
-}
-
-input PlayTracksInput {
-  trackIds: [String!]!
-  positionMs: Int
-  deviceId: String
-}
-
-input PositionOffsetInput {
-  context: ContextInput!
-  position: Int!
-}
-
 input ReviewEntityInput {
   entityType: EntityType!
   entityId: String!
@@ -119,11 +82,6 @@ input SearchUserPlaylistsInput {
   search: String
 }
 
-input SeekPlaybackInput {
-  deviceId: String
-  positionMs: Int!
-}
-
 input ShareReviewInput {
   reviewId: ID!
   userId: String!
@@ -131,15 +89,16 @@ input ShareReviewInput {
   accessLevel: AccessLevel
 }
 
-input TransferPlaybackInput {
-  deviceId: String!
-  play: Boolean
+input UpdateCommentIndexInput {
+  commentId: Int!
+  reviewId: ID!
+  index: Int!
 }
 
 input UpdateCommentInput {
-  commentId: Int!
+  commentId: Long!
   reviewId: ID!
-  comment: String
+  comment: String!
 }
 
 input UpdateReviewEntityInput {
@@ -225,12 +184,14 @@ type Collaborator {
 }
 
 type Comment {
-  id: Int!
+  id: Long!
   commentIndex: Int!
   reviewId: ID!
   createdAt: Instant!
   updatedAt: Instant!
-  parentCommentId: Int
+  deleted: Boolean!
+  parentCommentId: Long
+  childCommentIds: [Long!]!
   commenter: User!
   comment: String
   entities: [ReviewEntity!]
@@ -242,7 +203,7 @@ type CreatedComment {
 
 type DeletedComment {
   reviewId: ID!
-  commentId: Int!
+  commentId: Long!
 }
 
 "A key-value pair of String and String"
@@ -261,22 +222,16 @@ type Mutations {
   updateReview(input: UpdateReviewInput!): Review
   updateReviewEntity(input: UpdateReviewEntityInput!): Review
   updateComment(input: UpdateCommentInput!): Comment
+  updateCommentIndex(input: UpdateCommentIndexInput!): Boolean
   deleteReview(input: DeleteReviewInput!): Boolean
   deleteComment(input: DeleteCommentInput!): Boolean
   deleteReviewLink(input: DeleteReviewLinkInput!): Boolean
   shareReview(input: ShareReviewInput!): Boolean
-  play(input: PlayInput!): Boolean
-  transferPlayback(input: TransferPlaybackInput!): Boolean
-  playTracks(input: PlayTracksInput!): Boolean
-  playOffsetContext(input: PlayOffsetContextInput!): Boolean
-  playEntityContext(input: PlayEntityContextInput!): Boolean
-  seekPlayback(input: SeekPlaybackInput!): Boolean
-  pausePlayback(deviceId: String): Boolean
-  skipToNext(deviceId: String): Boolean
-  skipToPrevious(deviceId: String): Boolean
-  toggleShuffle(input: Boolean!): Boolean
-  saveTracks(input: [String!]!): Boolean
-  removeSavedTracks(input: [String!]!): Boolean
+}
+
+type NewCommentIndex {
+  commentId: Long!
+  commentIndex: Int!
 }
 
 type PaginationResultAlbum {
@@ -360,7 +315,8 @@ type PlaylistTrack {
 }
 
 type Queries {
-  user(id: String): User
+  user(id: String): User!
+  userMaybe(id: String): User
   review(id: ID!): Review
   reviews(reviewIds: [ID!]!): [Review!]
   search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, offset: 0}): SearchResult
@@ -428,6 +384,11 @@ type Track implements ReviewEntity {
 
 type UpdatedComment {
   comment: Comment!
+}
+
+type UpdatedCommentIndex {
+  reviewId: ID!
+  updatedIndices: [NewCommentIndex!]!
 }
 
 type User {

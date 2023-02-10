@@ -1,5 +1,6 @@
 package muse.server.graphql.resolver
 
+import muse.domain.table.{ReviewComment, ReviewCommentEntity, ReviewCommentIndex, ReviewCommentParentChild}
 import muse.server.graphql.subgraph.Comment
 import muse.service.persist.DatabaseService
 import muse.utils.Utils.*
@@ -19,14 +20,7 @@ object GetReviewComments {
   val CommentDataSource: DataSource[DatabaseService, GetReviewComments] =
     DataSource.fromFunctionZIO("ReviewCommentsDataSource") { (req: GetReviewComments) =>
       DatabaseService
-        .getReviewComments(req.reviewId).map { comments =>
-          val grouped = comments.groupBy(_._1.id)
-          grouped.map { (_, comments) =>
-            val comment  = comments.map(_._1).head
-            val entities = comments.map(_._2).flatten
-            Comment.fromTable(comment, entities)
-          }
-        }.addTimeLog("GetReviewComments")
+        .getReviewComments(req.reviewId).map { comments => Comment.fromTableRows(comments) }.addTimeLog("GetReviewComments")
     }
 
 }

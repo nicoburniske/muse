@@ -6,7 +6,7 @@ import zio.json.*
 import java.util.UUID
 
 final case class UpdateComment(
-    commentId: Int,
+    commentId: Long,
     reviewId: UUID,
-    comment: Option[String]
+    comment: String
 )

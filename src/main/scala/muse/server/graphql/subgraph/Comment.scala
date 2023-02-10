@@ -13,28 +13,58 @@ import java.time.Instant
 import java.util.UUID
 
 final case class Comment(
-    id: Int,
+    id: Long,
     commentIndex: Int,
     reviewId: UUID,
     createdAt: Instant,
     updatedAt: Instant,
+    deleted: Boolean,
     // If none, then it is root comment.
-    parentCommentId: Option[Int],
+    parentCommentId: Option[Long],
+    childCommentIds: List[Long],
     commenter: User,
     comment: Option[String],
     entities: ZQuery[RequestSession[SpotifyService], Throwable, List[ReviewEntity]]
 )
 
 object Comment {
-  def fromTable(r: table.ReviewComment, entities: List[table.ReviewCommentEntity]) = Comment(
-    r.id,
-    r.commentIndex,
-    r.reviewId,
-    r.createdAt,
-    r.updatedAt,
-    r.parentCommentId,
-    GetUser.queryByUserId(r.commenter),
-    r.comment,
-    ZQuery.foreachPar(entities)(e => GetEntity.query(e.entityId, e.entityType))
-  )
+  def fromTable(
+      r: table.ReviewComment,
+      index: table.ReviewCommentIndex,
+      parentChild: List[table.ReviewCommentParentChild],
+      entities: List[table.ReviewCommentEntity]
+  ) =
+    Comment(
+      r.commentId,
+      index.commentIndex,
+      r.reviewId,
+      r.createdAt,
+      r.updatedAt,
+      r.deleted,
+      parentChild.map(_.parentCommentId).find(_ != r.commentId),
+      parentChild.filter(_.parentCommentId == r.commentId).map(_.childCommentId),
+      GetUser.queryByUserId(r.commenter),
+      r.comment,
+      ZQuery.foreachPar(entities)(e => GetEntity.query(e.entityId, e.entityType))
+    )
+
+  def fromTableRows(
+      comments: List[(
+          table.ReviewComment,
+          table.ReviewCommentIndex,
+          Option[table.ReviewCommentParentChild],
+          Option[table.ReviewCommentEntity])]) = {
+    val grouped = comments.groupBy(_._1.commentId)
+    grouped.map { (_, comments) =>
+      val comment     = comments.map(_._1).head
+      val index       = comments.head._2
+      val parentChild = comments
+        .filter {
+          case (_, _, pc, _) => pc.exists(pc => pc.parentCommentId == comment.commentId || pc.childCommentId == comment.commentId)
+        }.map(_._3).flatten
+      val entities    = comments.map(_._4).flatten
+      Comment.fromTable(comment, index, parentChild, entities)
+    }
+  }
+
 }
