@@ -785,6 +785,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
             // Move all comments (with same parent  &&  above the deleted comment) down.
             movedDownIds                  <- run {
                                                commentIndex
+                                                 .filter(_.reviewId == lift(d.reviewId))
                                                  .filter(_.parentCommentId == lift(parentCommentId))
                                                  .filter(index => lift(deletedIndex).exists(_ <= index.commentIndex))
                                                  .update(comment => comment.commentIndex -> (comment.commentIndex - 1))
@@ -811,11 +812,13 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
                      .delete
                  }
 
+            maybeReviewId = maybeParentIndexToDelete.map(_.reviewId)
             maybeGrandparentId           = maybeParentIndexToDelete.flatMap(_.parentCommentId)
             maybeParentIndex             = maybeParentIndexToDelete.map(_.commentIndex)
             // Move all comments on parent level down if it was deleted.
             adjustedParents: List[Long] <- run {
                                              commentIndex
+                                               .filter(index => lift(maybeReviewId).contains(index.reviewId))
                                                .filter(index => lift(maybeGrandparentId) == index.parentCommentId)
                                                .filter(index => lift(maybeParentIndex).exists(_ <= index.commentIndex))
                                                .update(index => index.commentIndex -> (index.commentIndex - 1))

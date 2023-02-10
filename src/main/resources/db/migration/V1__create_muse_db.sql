@@ -108,7 +108,7 @@ CREATE TABLE muse.review_comment_index
 
     -- Comments are ordered by level.
     comment_index     INT    NOT NULL,
-    parent_comment_id BIGINT,
+    parent_comment_id BIGINT NULL,
 
     PRIMARY KEY (review_id, comment_id),
     CONSTRAINT commentID
