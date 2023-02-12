@@ -221,7 +221,9 @@ case class Playlist(
     owner: User,
     primaryColor: Option[String],
     public: Option[Boolean],
-    tracks: ZQuery[RequestSession[SpotifyService], Throwable, List[PlaylistTrack]]
+    tracks: ZQuery[RequestSession[SpotifyService], Throwable, List[PlaylistTrack]],
+    numberOfTracks: Int,
+    numberOfFollowers: Option[Int]
 ) extends ReviewEntity
 
 object Playlist {
@@ -237,6 +239,8 @@ object Playlist {
       User.missingSome(p.owner.id, p.owner.displayName, p.owner.href, p.owner.uri, p.owner.externalUrls),
       p.primaryColor,
       p.public,
-      GetPlaylistTracks.query(p.id, p.tracks.total)
+      GetPlaylistTracks.query(p.id, p.tracks.total),
+      p.tracks.total,
+      p.followers.map(_.total)
     )
 }

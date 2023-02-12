@@ -29,6 +29,7 @@ trait SpotifyService {
   def getAlbum(id: String): Task[Album]
   def getAlbums(ids: Seq[String]): Task[Vector[Album]]
   def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None): Task[Paging[UserPlaylist]]
+  def getCurrentUserPlaylists(limit: Int, offset: Option[Int] = None): Task[Paging[UserPlaylist]]
   def getAllUserPlaylists(userId: String): Task[Vector[UserPlaylist]]
   def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): Task[Paging[PlaylistTrack]]
   def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]]
@@ -112,6 +113,9 @@ object SpotifyService {
 
   def getAllPlaylistTracks(playlistId: String) =
     ZIO.serviceWithZIO[SpotifyService](_.getAllPlaylistTracks(playlistId))
+
+  def getCurrentUserPlaylists(limit: Int, offset: Option[Int] = None) =
+    ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserPlaylists(limit, offset))
 
   def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None) =
     ZIO.serviceWithZIO[SpotifyService](_.getSomeAlbumTracks(album, limit, offset))
@@ -215,6 +219,9 @@ case class SpotifyServiceLive(
 
   def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]] =
     s.getAllPlaylistTracks(playlistId)
+
+  def getCurrentUserPlaylists(limit: Int, offset: Option[Int] = None) =
+    s.getCurrentUserPlaylists(limit, offset)
 
   def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None) =
     s.getSomeAlbumTracks(album, limit, offset)
