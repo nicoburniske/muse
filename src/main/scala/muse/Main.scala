@@ -10,7 +10,7 @@ import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
 import muse.server.{Auth, MuseMiddleware, MuseServer}
 import muse.service.persist.{DatabaseService, MigrationService, QuillContext}
-import muse.service.spotify.{SpotifyAuthService, SpotifyCache}
+import muse.service.spotify.{SpotifyAuthService, SpotifyCache, RateLimitRef}
 import muse.service.{RequestSession, ReviewUpdates, UserSessions}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
@@ -38,7 +38,7 @@ object Main extends ZIOAppDefault {
       // Spotify layers
       SpotifyAuthService.layer,
       SpotifyCache.layer,
-      ZLayer.fromZIO(Ref.make(Option.empty[Long])),
+      RateLimitRef.layer,
       // Muse layers.
       AppConfig.layer,
       DatabaseService.layer,
