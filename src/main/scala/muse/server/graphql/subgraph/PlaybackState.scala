@@ -23,7 +23,7 @@ object PlaybackState {
       playbackState.timestamp,
       playbackState.context,
       playbackState.progressMs,
-      playbackState.item.fold(None)(t => Some(Track.fromPlaybackState(t))),
+      playbackState.item.map(t => Track.fromSpotifySimple(t, None)),
       playbackState.currentlyPlayingType,
       playbackState.isPlaying
     )

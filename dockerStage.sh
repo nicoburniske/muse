@@ -1,1 +1,1 @@
-sbt -v -J -Xmx4G -XX:+UseG1GC
+sbt -mem 2048 "docker:stage"

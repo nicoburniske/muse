@@ -1,7 +1,7 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.session.UserSession
-import muse.server.graphql.resolver.{GetUser, GetUserReviews, GetUserPlaylists, UserPlaylistsInput}
+import muse.server.graphql.resolver.{GetSpotifyProfile, GetUser, GetUserPlaylists, GetUserReviews, UserPlaylistsInput}
 import muse.server.graphql.{Input, Pagination, subgraph}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
@@ -24,7 +24,7 @@ object User {
     User(
       userId,
       GetUserReviews.query(userId),
-      ZQuery.succeed(SpotifyProfile.missingSome(userId, displayName, href, uri, externalUrls)),
+      GetSpotifyProfile.query(userId),
       GetUserPlaylists.boxedQuery(userId)
     )
 

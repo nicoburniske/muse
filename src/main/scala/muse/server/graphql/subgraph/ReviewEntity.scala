@@ -11,7 +11,10 @@ import muse.server.graphql.resolver.{
   GetArtistTopTracks,
   GetPlaylistTracks,
   GetTrack,
-  GetTrackAudioFeatures
+  GetTrackAudioAnalysis,
+  GetTrackAudioFeatures,
+  GetPlaylist,
+  GetUser
 }
 import muse.server.graphql.subgraph
 import muse.service.RequestSession
@@ -23,57 +26,59 @@ import zio.query.ZQuery
  */
 @GQLInterface
 sealed trait ReviewEntity {
-  // TODO: incorporate id into each type.
-  def name: String
   def id: String
   def uri: String
+  def href: String
+  def name: String
 }
 
 type SpotQuery[T] = ZQuery[RequestSession[SpotifyService], Throwable, T]
 
 case class Artist(
-    externalUrls: Map[String, String],
+    href: String,
+    id: String,
+    uri: String,
+    name: String,
+//    externalUrls: Map[String, String],
+    // From full artist.
     numFollowers: SpotQuery[Int],
     genres: SpotQuery[List[String]],
-    href: String,
-    override val id: String,
     images: SpotQuery[List[String]],
-    override val name: String,
-    override val uri: String,
     popularity: SpotQuery[Int],
     // TODO: pagination.
+    // Different queries.
     albums: SpotQuery[List[Album]],
     topTracks: SpotQuery[List[Track]]
 ) extends ReviewEntity
 
 object Artist {
-  def fromPlaybackState(a: spotify.Artist) = {
+  def fromSpotifySimple(a: spotify.SimpleArtist): Artist = {
     val artist = GetArtist.query(a.id)
     Artist(
-      a.externalUrls,
-      artist.flatMap(_.numFollowers),
-      artist.flatMap(_.genres),
       a.href,
       a.id,
-      artist.flatMap(_.images),
-      a.name,
       a.uri,
+      a.name,
+//      a.externalUrls,
+      artist.flatMap(_.numFollowers),
+      artist.flatMap(_.genres),
+      artist.flatMap(_.images),
       artist.flatMap(_.popularity),
       GetArtistAlbums.query(a.id),
       GetArtistTopTracks.query(a.id)
     )
   }
-  def fromSpotify(a: spotify.Artist)       = {
+  def fromSpotify(a: spotify.Artist)                     = {
     Artist(
-      a.externalUrls,
-      ZQuery.succeed(a.followers.get.total),
-      ZQuery.succeed(a.genres.getOrElse(Nil)),
       a.href,
       a.id,
-      ZQuery.succeed(a.images.fold(Nil)(_.map(_.url))),
-      a.name,
       a.uri,
-      ZQuery.succeed(a.popularity.get),
+      a.name,
+//      a.externalUrls,
+      ZQuery.succeed(a.followers.total),
+      ZQuery.succeed(a.genres),
+      ZQuery.succeed(a.images.map(_.url)),
+      ZQuery.succeed(a.popularity),
       GetArtistAlbums.query(a.id),
       GetArtistTopTracks.query(a.id)
     )
@@ -81,166 +86,227 @@ object Artist {
 }
 
 case class Album(
-    albumGroup: Option[String],
-    albumType: String,
-    externalUrls: Map[String, String],
-    genres: List[String],
-    override val id: String,
-    images: List[String],
-    label: Option[String],
-    override val name: String,
-    popularity: Option[Int],
+    href: String,
+    id: String,
+    uri: String,
+    name: String,
+    albumType: spotify.AlbumType,
+    availableMarkets: List[String],
     releaseDate: String,
-    override val uri: String,
-    artists: ZQuery[RequestSession[SpotifyService], Throwable, List[Artist]],
-    tracks: ZQuery[RequestSession[SpotifyService], Throwable, List[Track]]
+    releaseDatePrecision: spotify.ReleaseDatePrecision,
+    images: List[String],
+    // From full album.
+    externalUrls: SpotQuery[Map[String, String]],
+    externalIds: SpotQuery[spotify.ExternalIds],
+    copyrights: SpotQuery[List[spotify.Copyright]],
+    genres: SpotQuery[List[String]],
+    label: SpotQuery[String],
+    popularity: SpotQuery[Int],
+    // Distinct queries.
+    artists: SpotQuery[List[Artist]],
+    tracks: SpotQuery[List[Track]]
 ) extends ReviewEntity
 
 object Album {
   def fromSpotify(a: spotify.Album) =
-    val album = Album(
-      a.albumGroup,
-      a.albumType.toString.dropRight(1),
-      a.externalUrls,
-      a.genres.getOrElse(Nil),
+    Album(
+      a.href,
       a.id,
-      a.images.map(_.url),
-      a.label,
-      a.name,
-      a.popularity,
-      a.releaseDate,
       a.uri,
-      ZQuery.foreachPar(a.artists.map(_.id))(GetArtist.query),
-      GetAlbumTracks.query(a.id, a.tracks.map(_.total))
+      a.name,
+      a.albumType,
+      a.availableMarkets,
+      a.releaseDate,
+      a.releaseDatePrecision,
+      a.images.map(_.url),
+      ZQuery.succeed(a.externalUrls),
+      ZQuery.succeed(a.externalIds),
+      ZQuery.succeed(a.copyrights),
+      ZQuery.succeed(a.genres),
+      ZQuery.succeed(a.label),
+      ZQuery.succeed(a.popularity),
+      ZQuery.succeed(a.artists.map(Artist.fromSpotifySimple)),
+      GetAlbumTracks.query(a.id, Some(a.tracks.total))
     )
-    album
+
+  def fromSpotifySimple(a: spotify.SimpleAlbum): Album = {
+    val query   = GetAlbum.query(a.id)
+    val artists = a.artists.fold(query.flatMap(_.artists)) { artists => ZQuery.succeed(artists.map(Artist.fromSpotifySimple)) }
+    Album(
+      a.href,
+      a.id,
+      a.uri,
+      a.name,
+      a.albumType,
+      a.availableMarkets,
+      a.releaseDate,
+      a.releaseDatePrecision,
+      a.images.map(_.url),
+      query.flatMap(_.externalUrls),
+      query.flatMap(_.externalIds),
+      query.flatMap(_.copyrights),
+      query.flatMap(_.genres),
+      query.flatMap(_.label),
+      query.flatMap(_.popularity),
+      artists,
+      query.flatMap(_.tracks)
+    )
+  }
 }
 
 case class Track(
-    album: ZQuery[RequestSession[SpotifyService], Throwable, Album],
-    artists: ZQuery[RequestSession[SpotifyService], Throwable, List[Artist]],
-    discNumber: Int,
-    durationMs: Int,
-    explicit: Boolean,
-    externalUrls: Map[String, String],
     href: String,
-    override val id: String,
-    isPlayable: ZQuery[RequestSession[SpotifyService], Throwable, Option[Boolean]],
-    override val name: String,
-    popularity: ZQuery[RequestSession[SpotifyService], Throwable, Int],
-    previewUrl: Option[String],
-    trackNumber: Int,
-    isLocal: ZQuery[RequestSession[SpotifyService], Throwable, Boolean],
+    id: String,
     uri: String,
-    isLiked: ZQuery[RequestSession[SpotifyService], Throwable, Boolean],
-    audioFeatures: ZQuery[RequestSession[SpotifyService], Throwable, spotify.AudioFeatures]
+    name: String,
+    durationMs: Int,
+    discNumber: Int,
+    trackNumber: Int,
+    explicit: Boolean,
+    isLocal: Boolean,
+    isPlayable: Option[Boolean],
+    previewUrl: Option[String],
+    externalIds: Option[spotify.ExternalIds],
+    restrictions: Option[spotify.Restrictions],
+    artists: List[Artist],
+    // From full track.
+    externalUrls: SpotQuery[Map[String, String]],
+    availableMarkets: SpotQuery[List[String]],
+    popularity: SpotQuery[Int],
+    // Distinct queries.
+    album: SpotQuery[Album],
+    isLiked: SpotQuery[Boolean],
+    audioAnalysis: SpotQuery[spotify.AudioAnalysis],
+    audioFeatures: SpotQuery[spotify.AudioFeatures]
 ) extends ReviewEntity
 
 object Track {
-  def fromPlaybackState(t: spotify.Track) = {
-    val artists = Some(t.artists)
-      .filter(_.nonEmpty)
-      .fold(ZQuery.foreachPar(t.artists.map(_.id))(GetArtist.query))(artists =>
-        ZQuery.succeed(artists.map(Artist.fromPlaybackState)))
+  def fromSpotifySimple(t: spotify.SimpleTrack, albumId: Option[String]) = {
+    val query        = GetTrack.query(t.id)
+    val album        = albumId.fold(query.flatMap(_.album))(GetAlbum.query)
+    val externalUrls = t.externalUrls.fold(query.flatMap(_.externalUrls))(ZQuery.succeed)
+
     Track(
-      ZQuery.succeed(Album.fromSpotify(t.album)),
-      artists,
-      t.discNumber,
-      t.durationMs,
-      t.explicit,
-      t.externalUrls,
       t.href,
       t.id,
-      ZQuery.succeed(t.isPlayable),
-      t.name,
-      ZQuery.succeed(t.popularity),
-      t.previewUrl,
-      t.trackNumber,
-      ZQuery.succeed(t.isLocal),
       t.uri,
+      t.name,
+      t.durationMs,
+      t.discNumber,
+      t.trackNumber,
+      t.explicit,
+      t.isLocal,
+      t.isPlayable,
+      t.previewUrl,
+      t.externalIds,
+      t.restrictions,
+      t.artists.map(Artist.fromSpotifySimple),
+      externalUrls,
+      query.flatMap(_.availableMarkets),
+      query.flatMap(_.popularity),
+      album,
       CheckUserLikedSong.query(t.id),
+      GetTrackAudioAnalysis.query(t.id),
       GetTrackAudioFeatures.query(t.id)
     )
 
   }
   def fromSpotify(t: spotify.Track) = {
     Track(
-      GetAlbum.query(t.album.id),
-      ZQuery.foreachPar(t.artists.map(_.id))(GetArtist.query),
-      t.discNumber,
-      t.durationMs,
-      t.explicit,
-      t.externalUrls,
       t.href,
       t.id,
-      ZQuery.succeed(t.isPlayable),
+      t.uri,
       t.name,
+      t.durationMs,
+      t.discNumber,
+      t.trackNumber,
+      t.explicit,
+      t.isLocal,
+      t.isPlayable,
+      t.previewUrl,
+      t.externalIds,
+      t.restrictions,
+      t.artists.map(Artist.fromSpotifySimple),
+      ZQuery.succeed(t.externalUrls),
+      ZQuery.succeed(t.availableMarkets),
       ZQuery.succeed(t.popularity),
-      t.previewUrl,
-      t.trackNumber,
-      ZQuery.succeed(t.isLocal),
-      t.uri,
+      ZQuery.succeed(Album.fromSpotifySimple(t.album)),
       CheckUserLikedSong.query(t.id),
-      GetTrackAudioFeatures.query(t.id)
-    )
-  }
-
-  def fromAlbum(t: spotify.AlbumTrack, albumId: String) = {
-    val fullTrack = GetTrack.query(t.id)
-    Track(
-      GetAlbum.query(albumId),
-      ZQuery.foreachPar(t.artists.map(_.id))(GetArtist.query),
-      t.discNumber,
-      t.durationMs,
-      t.explicit,
-      t.externalUrls,
-      t.href,
-      t.id,
-      fullTrack.flatMap(_.isPlayable),
-      t.name,
-      fullTrack.flatMap(_.popularity),
-      t.previewUrl,
-      t.trackNumber,
-      fullTrack.flatMap(_.isLocal),
-      t.uri,
-      CheckUserLikedSong.query(t.id),
+      GetTrackAudioAnalysis.query(t.id),
       GetTrackAudioFeatures.query(t.id)
     )
   }
 }
 
-// TODO: include followers?
 case class Playlist(
+    href: String,
+    id: String,
+    uri: String,
+    name: String,
     collaborative: Boolean,
-    description: String,
-    externalUrls: Map[String, String],
-    override val id: String,
-    images: List[String],
-    override val name: String,
-    override val uri: String,
-    owner: User,
-    primaryColor: Option[String],
     public: Option[Boolean],
-    tracks: ZQuery[RequestSession[SpotifyService], Throwable, List[PlaylistTrack]],
+    description: Option[String],
     numberOfTracks: Int,
-    numberOfFollowers: Option[Int]
+    externalUrls: Map[String, String],
+    images: List[String],
+    owner: User,
+    snapshotId: SpotQuery[String],
+    numberOfFollowers: SpotQuery[Int],
+    tracks: SpotQuery[List[PlaylistTrack]]
 ) extends ReviewEntity
 
 object Playlist {
-  def fromSpotify(p: spotify.UserPlaylist) =
+  def fromSpotify(p: spotify.SinglePlaylist) = Playlist(
+    p.href,
+    p.id,
+    p.uri,
+    p.name,
+    p.collaborative,
+    p.public,
+    p.description,
+    p.tracks.total,
+    p.externalUrls,
+    p.images.map(_.url),
+    GetUser.queryByUserId(p.owner.id),
+    ZQuery.succeed(p.snapshotId),
+    ZQuery.succeed(p.followers.total),
+    GetPlaylistTracks.query(p.id, p.tracks.total)
+  )
+
+  def fromSpotify(p: spotify.BulkPlaylist) =
     Playlist(
-      p.collaborative,
-      p.description,
-      p.externalUrls,
+      p.href,
       p.id,
-      p.images.map(_.url),
-      p.name,
       p.uri,
-      User.missingSome(p.owner.id, p.owner.displayName, p.owner.href, p.owner.uri, p.owner.externalUrls),
-      p.primaryColor,
+      p.name,
+      p.collaborative,
       p.public,
-      GetPlaylistTracks.query(p.id, p.tracks.total),
+      p.description,
       p.tracks.total,
-      p.followers.map(_.total)
+      p.externalUrls,
+      p.images.map(_.url),
+      GetUser.queryByUserId(p.owner.id),
+      ZQuery.succeed(p.snapshotId),
+      GetPlaylist.query(p.id).flatMap(_.numberOfFollowers),
+      GetPlaylistTracks.query(p.id, p.tracks.total)
+    )
+
+  def fromSpotifySimple(p: spotify.SimplePlaylist) =
+    val query = GetPlaylist.query(p.id)
+    Playlist(
+      p.href,
+      p.id,
+      p.uri,
+      p.name,
+      p.collaborative,
+      p.public,
+      p.description,
+      p.tracks.total,
+      p.externalUrls,
+      p.images.map(_.url),
+      GetUser.queryByUserId(p.owner.id),
+      query.flatMap(_.snapshotId),
+      query.flatMap(_.numberOfFollowers),
+      GetPlaylistTracks.query(p.id, p.tracks.total)
     )
 }

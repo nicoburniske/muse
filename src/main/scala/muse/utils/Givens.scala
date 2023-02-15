@@ -1,10 +1,20 @@
 package muse.utils
 
-import zio.{Task, ZIO}
+import zio.{Task, UIO, ZIO, Ref as ZRef}
+import java.time.temporal.ChronoUnit
+import sttp.monad.MonadError as SttpMonadError
 
 object Givens {
   given zioMonadError[R, E]: MonadError[[A] =>> ZIO[R, E, A], E] = new MonadErrorZIO[R, E]
   given taskMonadError: MonadError[Task, Throwable]              = zioMonadError[Any, Throwable]
+
+  given zioClock: Clock[Task] = new Clock[Task]:
+    override def now = zio.Clock.currentTime(ChronoUnit.MILLIS)
+
+  def zioRef[A](zref: ZRef[A]): Ref[Task, A] = new Ref[Task, A] {
+    def get: Task[A]          = zref.get
+    def set(a: A): Task[Unit] = zref.set(a)
+  }
 }
 
 private class MonadErrorZIO[R, E] extends MonadError[[A] =>> ZIO[R, E, A], E] {

@@ -26,6 +26,7 @@ val COOKIE_KEY = "XSESSION"
 object MuseServer {
   val live = for {
     port               <- ZIO.serviceWith[ServerConfig](_.port)
+    _                  <- writeSchemaToFile
     _                  <- MigrationService.runMigrations
     protectedEndpoints <- createProtectedEndpoints
     corsConfig         <- getCorsConfig

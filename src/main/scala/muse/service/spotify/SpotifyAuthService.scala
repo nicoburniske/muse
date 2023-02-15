@@ -68,11 +68,12 @@ case class SpotifyAuthRepo(config: SpotifyConfig, eventLoopGroup: EventLoopGroup
       .flatMap(deserializeBodyOrFail[RefreshAuthData])
       .provideLayer(layer)
 
+  case class SpotifyAuthError(message: String, error: String, body: String) extends Exception(message)
   private def deserializeBodyOrFail[T: JsonDecoder](body: String) =
     body
       .fromJson[T]
       .fold(
-        e => ZIO.fail(SpotifyError.JsonError(e, body, TOKEN_ENDPOINT.toString)),
+        e => ZIO.fail(SpotifyAuthError("Failed to deserialize body", e, body )),
         ZIO.succeed(_)
       )
 

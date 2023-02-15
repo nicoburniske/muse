@@ -12,7 +12,7 @@ final case class PlaybackState(
     context: Option[PlaybackContext],
     progressMs: Long,
     // This can be null sometimes?
-    item: Option[Track],
+    item: Option[SimpleTrack],
     currentlyPlayingType: String,
     isPlaying: Boolean
     // TODO: incorporate actions?

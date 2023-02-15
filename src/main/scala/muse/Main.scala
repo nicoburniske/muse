@@ -24,19 +24,22 @@ import zio.config.typesafe.TypesafeConfig
 import zio.logging.*
 import zio.logging.backend.SLF4J
 import zio.metrics.connectors.MetricsConfig
-import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, durationInt}
+import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task,  ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, durationInt}
 
 object Main extends ZIOAppDefault {
   override def run = MuseServer
     .live
     .provide(
+      ZLayer.Debug.mermaid,
       Scope.default,
       AsyncHttpClientZioBackend.layer(),
       ChannelFactory.auto,
       eventLoopGroupLayer,
-      // Muse layers.
+      // Spotify layers
       SpotifyAuthService.layer,
       SpotifyCache.layer,
+      ZLayer.fromZIO(Ref.make(Option.empty[Long])),
+      // Muse layers.
       AppConfig.layer,
       DatabaseService.layer,
       MigrationService.layer,
@@ -51,7 +54,7 @@ object Main extends ZIOAppDefault {
       metricsConfig,
       Runtime.enableRuntimeMetrics
     )
-    .tapErrorCause(e => ZIO.logErrorCause(s"Failed to start server ${e.toString}", e))
+    .tapErrorCause(e => ZIO.logErrorCause(s"Failed to start server ${e.prettyPrint}", e))
     .exitCode
 
   val metricsConfig = ZLayer.succeed(MetricsConfig(5.seconds))

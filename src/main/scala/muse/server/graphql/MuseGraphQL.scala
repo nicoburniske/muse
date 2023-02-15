@@ -44,23 +44,25 @@ object MuseGraphQL {
   type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & Hub[ReviewUpdate] &
     Scope
 
-  given userSchema: Schema[Env, User] = Schema.gen
+  given Schema[Env, User] = Schema.gen
 
-  given reviewSchema: Schema[Env, Review] = Schema.gen
+  given Schema[Env, Review] = Schema.gen
 
-  given commentsSchema: Schema[Env, Comment] = Schema.gen
+  given Schema[Env, Comment] = Schema.gen
 
-  given entitySchema: Schema[Env, ReviewEntity] = Schema.gen
+  given Schema[Env, ReviewEntity] = Schema.gen
 
-  given playlistSchema: Schema[Env, Playlist] = Schema.gen
+  given Schema[Env, Playlist] = Schema.gen
 
-  given playlistTrackSchema: Schema[Env, PlaylistTrack] = Schema.gen
+  given Schema[Env, PlaylistTrack] = Schema.gen
 
-  given albumSchema: Schema[Env, Album] = Schema.gen
+  given Schema[Env, Album] = Schema.gen
 
-  given artistSchema: Schema[Env, Artist] = Schema.gen
+  given Schema[Env, Artist] = Schema.gen
 
-  given trackSchema: Schema[Env, Track] = Schema.gen
+  given Schema[Env, spotify.AudioAnalysis] = Schema.gen
+  given Schema[Env, spotify.AudioFeatures] = Schema.gen
+  given Schema[Env, Track]                 = Schema.gen
 
   // TODO: give this another shot?
 //  given errorSchema[A](using Schema[Any, A]): Schema[Any, IO[Throwable | MuseError, A]] =

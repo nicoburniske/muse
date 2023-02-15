@@ -7,7 +7,7 @@ import java.time.Instant
 @jsonMemberNames(SnakeCase)
 final case class PlaylistTrack(
     addedAt: Instant,
-    addedBy: User,
+    addedBy: PlaylistUser,
     isLocal: Boolean,
     track: Track
 )

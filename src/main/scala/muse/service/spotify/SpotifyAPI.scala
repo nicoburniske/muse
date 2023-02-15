@@ -3,13 +3,18 @@ package muse.service.spotify
 import muse.domain.common.EntityType
 import muse.domain.spotify.*
 import muse.utils.MonadError
+import muse.utils.Ref
+import muse.utils.Clock
 import sttp.client3.*
 import sttp.client3.ziojson.*
 import sttp.model.{Method, ResponseMetadata, StatusCode, Uri}
+import sttp.client3.ziojson.stringShowError
 import zio.Task
 import zio.json.*
 
-final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: String)(using m: MonadError[F, Throwable]) {
+final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], retryAfterRef: Ref[F, Option[Long]], accessToken: String)(
+    using m: MonadError[F, Throwable],
+    clock: Clock[F]) {
 
   def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None): F[SearchResult] =
     val encodedTypes = entityTypes.map(_.toString.toLowerCase).mkString(",")
@@ -21,26 +26,19 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     execute(uri, Method.GET)
   }
 
-  def getCurrentUserProfile: F[User] =
+  def getCurrentUserProfile: F[PrivateUser] =
     val uri = uri"${SpotifyAPI.API_BASE}/me"
     execute(uri, Method.GET)
 
-  def getUserProfile(userId: String): F[User] =
+  def getUserProfile(userId: String): F[PublicUser] =
     val uri = uri"${SpotifyAPI.API_BASE}/users/$userId"
     if (userId.isBlank) {
-      SpotifyError.HttpError(Left(List("No User Found")), uri, Method.GET, StatusCode.NotFound).raiseError
+      SpotifyError.MalformedRequest("User cannot be empty").raiseError
     } else {
       execute(uri, Method.GET)
     }
 
-  def isValidEntity(entityId: String, entityType: EntityType): F[Boolean] =
-    entityType match
-      case EntityType.Album    => getAlbum(entityId).isSuccess
-      case EntityType.Artist   => getArtist(entityId).isSuccess
-      case EntityType.Playlist => getPlaylist(entityId).isSuccess
-      case EntityType.Track    => getTrack(entityId).isSuccess
-
-  def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None): F[UserPlaylist] =
+  def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None): F[SinglePlaylist] =
     val uri = uri"${SpotifyAPI.API_BASE}/playlists/$playlistId?fields=$fields&market=$market"
     execute(uri, Method.GET)
 
@@ -51,6 +49,10 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
   def getTracks(ids: Vector[String], market: Option[String] = None): F[Vector[Track]] =
     val uri = uri"${SpotifyAPI.API_BASE}/tracks?market=$market&ids=${ids.mkString(",")}"
     execute[MultiTrack](uri, Method.GET).map(_.tracks)
+    
+  def getTrackAudioAnalysis(id: String) =
+    val uri = uri"${SpotifyAPI.API_BASE}/audio-analysis/$id"
+    execute[AudioAnalysis](uri, Method.GET)
 
   def getTrackAudioFeatures(id: String) =
     val uri = uri"${SpotifyAPI.API_BASE}/audio-features?id=$id"
@@ -84,16 +86,16 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       execute[MultiAlbum](uri, Method.GET).map(_.albums)
     }
 
-  def getCurrentUserPlaylists(limit: Int = 50, offset: Option[Int] = None): F[Paging[UserPlaylist]] =
+  def getCurrentUserPlaylists(limit: Int = 50, offset: Option[Int] = None): F[Paging[BulkPlaylist]] =
     val uri = uri"${SpotifyAPI.API_BASE}/me/playlists?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
 
-  def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None): F[Paging[UserPlaylist]] = {
+  def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None): F[Paging[BulkPlaylist]] = {
     val uri = uri"${SpotifyAPI.API_BASE}/users/$userId/playlists?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
   }
 
-  def getAllUserPlaylists(userId: String): F[Vector[UserPlaylist]] =
+  def getAllUserPlaylists(userId: String): F[Vector[BulkPlaylist]] =
     val MAX_PER_REQUEST = 50
     val request         = (offset: Int) => getUserPlaylists(userId, MAX_PER_REQUEST, Some(offset))
     getAllPaging(request, MAX_PER_REQUEST)
@@ -108,11 +110,11 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     val request         = (offset: Int) => getSomePlaylistTracks(playlistId, MAX_PER_REQUEST, Some(offset))
     getAllPaging(request, MAX_PER_REQUEST)
 
-  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): F[Paging[AlbumTrack]] =
+  def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): F[Paging[SimpleTrack]] =
     val uri = uri"${SpotifyAPI.API_BASE}/albums/$album/tracks?limit=$limit&offset=$offset"
     execute(uri, Method.GET)
 
-  def getAllAlbumTracks(albumId: String): F[Vector[AlbumTrack]] =
+  def getAllAlbumTracks(albumId: String): F[Vector[SimpleTrack]] =
     val MAX_PER_REQUEST = 20
     val request         = (offset: Int) => getSomeAlbumTracks(albumId, Some(MAX_PER_REQUEST), Some(offset))
     getAllPaging(request, MAX_PER_REQUEST)
@@ -194,31 +196,31 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
     go(Vector.empty, 0)
   }
 
-  // TODO: handle 429 error.
   private def executeMaybeNoContent[T: JsonDecoder](uri: Uri, method: Method): F[Option[T]] =
-    basicRequest
+    ensureNoRateLimit *> basicRequest
       .auth.bearer(accessToken)
       .response(asString)
       .method(method, uri)
       .send(backend).flatMap { response =>
         (response.body, response.code) match
           // Should only be Status.NoContent, but there are times when 200 + Empty body are used.
-          case (Right(""), statusCode) if statusCode.isSuccess   =>
+          case (Right(""), statusCode) if statusCode.isSuccess                       =>
             None.pure
-          case (Right(body), statusCode) if statusCode.isSuccess =>
+          case (Right(body), statusCode) if statusCode.isSuccess                     =>
             body.fromJson[T] match
               case Left(value)  =>
-                SpotifyError.JsonError(value, body, uri.toString).raiseError
+                SpotifyError.JsonError(value, body, uri.toString, method, response).raiseError
               case Right(value) =>
                 Some(value).pure
-          case (Left(errorBody: String), code)                   =>
-            decodeError(uri, method, errorBody, code).raiseError
+          case (Left(errorBody: String), code) if code == StatusCode.TooManyRequests =>
+            checkRateLimit(response) *>
+              decodeError(uri, method, errorBody, response).raiseError
+          case (Left(errorBody: String), code)                                       =>
+            decodeError(uri, method, errorBody, response).raiseError
       }
 
-  // TODO: Integrate Error 429 into this properly.
-  // TODO: Add ref and clock here. need to enforce timeout.
   def executeAndIgnoreResponse(uri: Uri, method: Method, body: Option[String] = None): F[Unit] =
-    body
+    ensureNoRateLimit *> body
       .fold(basicRequest)(basicRequest.body(_))
       .auth.bearer(accessToken)
       .method(method, uri)
@@ -227,11 +229,12 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       .flatMap { response =>
         response.body match
           case Right(_)        => ().pure
-          case Left(errorBody) => decodeError(uri, method, errorBody, response.code).raiseError
+          case Left(errorBody) =>
+            checkRateLimit(response) *> decodeError(uri, method, errorBody, response).raiseError
       }
 
   def execute[T: JsonDecoder](uri: Uri, method: Method, body: Option[String] = None): F[T] =
-    body
+    ensureNoRateLimit *> body
       .fold(basicRequest)(basicRequest.body(_))
       .auth.bearer(accessToken)
       .response(spotifyResponse(uri, method))
@@ -239,32 +242,80 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], accessToken: Str
       .send(backend)
       .map(_.body)
       .flatMap {
-        case Left(error)  => error.raiseError
-        case Right(value) => value.pure
+        case Left(error @ SpotifyError.TooManyRequests(_, _, _, metadata)) =>
+          checkRateLimit(metadata) *> error.raiseError
+        case Left(error)                                                   => error.raiseError
+        case Right(value)                                                  => value.pure
       }
 
-  // TODO: Is there a case where we can get an HTTP Error with a non-error code?
+  def checkRateLimit(metadata: ResponseMetadata) = {
+    metadata.header("Retry-After").map(_.toInt) match
+      case None                => ().pure
+      case Some(secondsToWait) => clock.now.flatMap { now => retryAfterRef.set(Some(now + secondsToWait)) }
+  }
+
+  def ensureNoRateLimit: F[Unit] =
+    for {
+      limit <- retryAfterRef.get
+      now   <- clock.now
+      _     <- limit.fold(().pure) { limitTime =>
+                 if (limitTime > now) {
+                   SpotifyError.RateLimited(limitTime).raiseError
+                 } else ().pure
+               }
+    } yield ()
+
   def spotifyResponse[B: JsonDecoder](uri: Uri, method: Method): ResponseAs[Either[SpotifyError, B], Any] =
     asJson[B].mapLeft {
-      case HttpError(body, StatusCode.TooManyRequests)                            =>
-        SpotifyError.TooManyRequests(uri, method, Some(body))
-      case HttpError(errorBody, code) if code.isClientError || code.isServerError =>
-        decodeError(uri, method, errorBody, code)
-      case de @ DeserializationException(_, _)                                    =>
+      case SpotifyAPI.HttpError(body, metadata) if metadata.code == StatusCode.TooManyRequests                     =>
+        SpotifyError.TooManyRequests(uri, method, Some(body), metadata)
+      case SpotifyAPI.HttpError(errorBody, metadata) if metadata.code.isClientError || metadata.code.isServerError =>
+        decodeError(uri, method, errorBody, metadata)
+      case de @ SpotifyAPI.DeserializationException(_, _)                                                          =>
         SpotifyError.DeserializationException(uri, method, de)
     }
 
-  private def decodeError(uri: Uri, method: Method, errorBody: String, code: StatusCode) =
+  private def decodeError(uri: Uri, method: Method, errorBody: String, metadata: ResponseMetadata) =
     deserializeJson[ErrorResponse]
       .apply(errorBody)
       .fold(
         // Sometimes response body is not in common format and we only get an error string.
-        message => SpotifyError.HttpError(Left(List(errorBody, message)), uri, method, code),
+        message => SpotifyError.HttpError(Left(List(errorBody, message)), uri, method, metadata),
         // We will mostly get this case.
-        errorResponse => SpotifyError.HttpError(Right(errorResponse), uri, method, code)
+        errorResponse => SpotifyError.HttpError(Right(errorResponse), uri, method, metadata)
       )
+
+  given stringShowError: ShowError[String] = t => t
+
+  def asJson[B: JsonDecoder: IsOption]: ResponseAs[Either[SpotifyAPI.ResponseException[String, String], B], Any] =
+    asString.mapWithMetadata(deserializeRightWithError(deserializeJson))
+
+  def deserializeRightWithError[E: ShowError, T](
+      doDeserialize: String => Either[E, T]
+  ): (Either[String, String], ResponseMetadata) => Either[SpotifyAPI.ResponseException[String, E], T] = {
+    case (Left(s), meta) => Left(SpotifyAPI.HttpError(s, meta))
+    case (Right(s), _)   => deserializeWithError(doDeserialize)(implicitly[ShowError[E]])(s)
+  }
+
+  def deserializeWithError[E: ShowError, T](
+      doDeserialize: String => Either[E, T]
+  ): String => Either[SpotifyAPI.DeserializationException[E], T] =
+    s =>
+      doDeserialize(s) match {
+        case Left(e)  => Left(SpotifyAPI.DeserializationException(s, e))
+        case Right(b) => Right(b)
+      }
+
 }
 
 object SpotifyAPI {
   val API_BASE = "https://api.spotify.com/v1"
+
+  sealed abstract class ResponseException[+HE, +DE](error: String) extends Exception(error)
+
+  case class HttpError[HE](body: HE, metadata: ResponseMetadata)
+      extends ResponseException[HE, Nothing](s"statusCode: ${metadata.code}, response: $body")
+
+  case class DeserializationException[DE: ShowError](body: String, error: DE)
+      extends ResponseException[Nothing, DE](implicitly[ShowError[DE]].show(error))
 }

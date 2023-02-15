@@ -3,26 +3,24 @@ package muse.domain.spotify
 import muse.domain.common.{Entity, EntityType}
 import zio.json.*
 
+// Bulk endpoints don't include followers.
 @jsonMemberNames(SnakeCase)
-final case class UserPlaylist(
+final case class BulkPlaylist(
     collaborative: Boolean,
-    description: String,
+    description: Option[String],
     externalUrls: Map[String, String],
     href: String,
     id: String,
     images: List[Image],
     name: String,
-    owner: User,
-    primaryColor: Option[String],
+    owner: PlaylistUser,
     public: Option[Boolean],
-    snapshotID: String,
+    snapshotId: String,
     tracks: PlaylistTracks,
     `type`: String,
-    uri: String,
-    // Followers is null from search api.
-    followers: Option[Followers]
+    uri: String
 )
 
-object UserPlaylist {
-  given decodeUserPlaylist: JsonDecoder[UserPlaylist] = DeriveJsonDecoder.gen[UserPlaylist]
+object BulkPlaylist {
+  given decodeUserPlaylist: JsonDecoder[BulkPlaylist] = DeriveJsonDecoder.gen[BulkPlaylist]
 }

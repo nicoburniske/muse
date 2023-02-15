@@ -5,7 +5,7 @@ import com.stuart.zcaffeine.ZCaffeine
 import com.stuart.zcaffeine.ZCaffeine.State
 import com.stuart.zcaffeine.types.*
 import muse.config.SpotifyServiceConfig
-import muse.domain.spotify.{Album, Artist, User}
+import muse.domain.spotify.{Album, Artist, PublicUser}
 import muse.service.CacheUtils
 import zio.cache.{Cache, Lookup}
 import zio.metrics.prometheus.Registry
@@ -22,7 +22,7 @@ object SpotifyCache {
   val layer = (albumCacheLayer ++ artistCacheLayer ++ userCacheLayer).tap(env =>
     val albumCache  = env.get[zcaffeine.Cache[Any, String, Album]]
     val artistCache = env.get[zcaffeine.Cache[Any, String, Artist]]
-    val userCache   = env.get[zcaffeine.Cache[Any, String, User]]
+    val userCache   = env.get[zcaffeine.Cache[Any, String, PublicUser]]
 
     val cacheStats = List(
       "album"  -> albumCache,
@@ -48,7 +48,7 @@ object SpotifyCache {
   } yield built
 
   lazy val userCache = for {
-    cache     <- ZCaffeine[Any, String, User]()
+    cache     <- ZCaffeine[Any, String, PublicUser]()
     config    <- ZIO.service[SpotifyServiceConfig]
     configured = configureCache(cache, 1.hour, config.userCacheSize)
     built     <- configured.build()

@@ -3,10 +3,10 @@ package muse.domain.spotify
 import zio.json.{DeriveJsonDecoder, JsonDecoder}
 
 final case class SearchResult(
-    albums: Option[Paging[Album]],
-    artists: Option[Paging[Artist]],
-    playlists: Option[Paging[UserPlaylist]],
-    tracks: Option[Paging[Track]]
+    albums: Option[Paging[SimpleAlbum]],
+    artists: Option[Paging[SimpleArtist]],
+    playlists: Option[Paging[SimplePlaylist]],
+    tracks: Option[Paging[SimpleTrack]]
 )
 
 object SearchResult {

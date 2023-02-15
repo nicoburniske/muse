@@ -16,11 +16,29 @@ enum AccessLevel {
   Viewer
 }
 
+enum AlbumType {
+  Album
+  Compilation
+  Single
+}
+
 enum EntityType {
   Album
   Artist
   Playlist
   Track
+}
+
+enum Modality {
+  Major
+  Minor
+  NoResult
+}
+
+enum ReleaseDatePrecision {
+  Day
+  Month
+  Year
 }
 
 input CreateCommentInput {
@@ -77,11 +95,6 @@ input ReviewEntityInput {
   entityId: String!
 }
 
-input SearchUserPlaylistsInput {
-  pagination: PaginationInput!
-  search: String
-}
-
 input ShareReviewInput {
   reviewId: ID!
   userId: String!
@@ -123,37 +136,48 @@ interface ReviewEntity {
   name: String!
   uri: String!
   id: String!
-  externalUrls: [KVStringString!]!
+  href: String!
 }
 
 type Album implements ReviewEntity {
-  albumGroup: String
-  albumType: String!
-  externalUrls: [KVStringString!]!
-  genres: [String!]!
+  href: String!
   id: String!
-  images: [String!]!
-  label: String
-  name: String!
-  popularity: Int
-  releaseDate: String!
   uri: String!
+  name: String!
+  albumType: AlbumType!
+  availableMarkets: [String!]!
+  releaseDate: String!
+  releaseDatePrecision: ReleaseDatePrecision!
+  images: [String!]!
+  externalUrls: [KVStringString!]
+  externalIds: ExternalIds
+  copyrights: [Copyright!]
+  genres: [String!]
+  label: String
+  popularity: Int
   artists: [Artist!]
   tracks: [Track!]
 }
 
 type Artist implements ReviewEntity {
-  externalUrls: [KVStringString!]!
-  numFollowers: Int
-  genres: [String!]
   href: String!
   id: String!
-  images: [String!]
-  name: String!
   uri: String!
+  name: String!
+  numFollowers: Int
+  genres: [String!]
+  images: [String!]
   popularity: Int
   albums: [Album!]
   topTracks: [Track!]
+}
+
+type AudioAnalysis {
+  bars: [TimeInterval!]!
+  beats: [TimeInterval!]!
+  tatums: [TimeInterval!]!
+  sections: [AudioSection!]!
+  segments: [AudioSegment!]!
 }
 
 type AudioFeatures {
@@ -177,6 +201,30 @@ type AudioFeatures {
   valence: Float!
 }
 
+type AudioSection {
+  start: Float!
+  duration: Float!
+  confidence: Confidence!
+  loudness: Float!
+  tempo: Int!
+  tempoConfidence: Confidence!
+  key: Float!
+  keyConfidence: Confidence!
+  mode: Modality!
+  modeConfidence: Confidence!
+  timeSignature: Float!
+  timeSignatureConfidence: Confidence!
+}
+
+type AudioSegment {
+  start: Float!
+  duration: Float!
+  confidence: Confidence!
+  loudness: Loudness!
+  pitches: [Float!]!
+  timbre: [Float!]!
+}
+
 type Collaborator {
   user: User!
   accessLevel: AccessLevel!
@@ -197,6 +245,15 @@ type Comment {
   entities: [ReviewEntity!]
 }
 
+type Confidence {
+  value: Float!
+}
+
+type Copyright {
+  text: String!
+  type: String!
+}
+
 type CreatedComment {
   comment: Comment!
 }
@@ -206,12 +263,25 @@ type DeletedComment {
   commentId: Long!
 }
 
+type ExternalIds {
+  isrc: String
+  ean: String
+  upc: String
+}
+
 "A key-value pair of String and String"
 type KVStringString {
   "Key"
   key: String!
   "Value"
   value: String!
+}
+
+type Loudness {
+  start: Float!
+  max: Float!
+  maxTime: Float!
+  end: Float
 }
 
 type Mutations {
@@ -293,16 +363,19 @@ type PlaybackState {
 }
 
 type Playlist implements ReviewEntity {
-  collaborative: Boolean!
-  description: String!
-  externalUrls: [KVStringString!]!
+  href: String!
   id: String!
-  images: [String!]!
-  name: String!
   uri: String!
-  owner: User!
-  primaryColor: String
+  name: String!
+  collaborative: Boolean!
   public: Boolean
+  description: String
+  numberOfTracks: Int!
+  externalUrls: [KVStringString!]!
+  images: [String!]!
+  owner: User!
+  snapshotId: String
+  numberOfFollowers: Int
   tracks: [PlaylistTrack!]
 }
 
@@ -320,10 +393,13 @@ type Queries {
   review(id: ID!): Review
   reviews(reviewIds: [ID!]!): [Review!]
   search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, offset: 0}): SearchResult
-  availableDevices: [PlaybackDevice!]
   getPlaylist(id: String!): Playlist
   getAlbum(id: String!): Album
   getTrack(id: String!): Track
+}
+
+type Restrictions {
+  reason: String!
 }
 
 type Review {
@@ -351,7 +427,7 @@ type SpotifyProfile {
   href: String!
   uri: String!
   externalUrls: [KVStringString!]!
-  images: [String!]
+  images: [String!]!
   numFollowers: Int
 }
 
@@ -362,23 +438,33 @@ type Subscriptions {
   reviewUpdates(reviewIds: [ID!]!): ReviewUpdate
 }
 
+type TimeInterval {
+  start: Float!
+  duration: Float!
+  confidence: Confidence!
+}
+
 type Track implements ReviewEntity {
-  album: Album
-  artists: [Artist!]
-  discNumber: Int!
-  durationMs: Int!
-  explicit: Boolean!
-  externalUrls: [KVStringString!]!
   href: String!
   id: String!
-  isPlayable: Boolean
-  name: String!
-  popularity: Int
-  previewUrl: String
-  trackNumber: Int!
-  isLocal: Boolean
   uri: String!
+  name: String!
+  durationMs: Int!
+  discNumber: Int!
+  trackNumber: Int!
+  explicit: Boolean!
+  isLocal: Boolean!
+  isPlayable: Boolean
+  previewUrl: String
+  externalIds: ExternalIds
+  restrictions: Restrictions
+  artists: [Artist!]!
+  externalUrls: [KVStringString!]
+  availableMarkets: [String!]
+  popularity: Int
+  album: Album
   isLiked: Boolean
+  audioAnalysis: AudioAnalysis
   audioFeatures: AudioFeatures
 }
 
@@ -395,5 +481,5 @@ type User {
   id: String!
   reviews: [Review!]
   spotifyProfile: SpotifyProfile
-  playlists(input: SearchUserPlaylistsInput!): [Playlist!]
+  playlists(pagination: PaginationInput): [Playlist!]
 }

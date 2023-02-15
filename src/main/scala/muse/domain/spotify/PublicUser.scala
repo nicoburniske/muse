@@ -3,17 +3,17 @@ package muse.domain.spotify
 import zio.json.*
 
 @jsonMemberNames(SnakeCase)
-final case class User(
+final case class PublicUser(
     displayName: Option[String],
     externalUrls: Map[String, String],
+    followers: Option[Followers],
     href: String,
     id: String,
     `type`: String,
+    images: List[Image],
     uri: String,
-    images: Option[List[Image]],
-    followers: Option[Followers]
 )
 
-object User {
-  given userDecoder: JsonDecoder[User] = DeriveJsonDecoder.gen[User]
+object PublicUser {
+  given userDecoder: JsonDecoder[PublicUser] = DeriveJsonDecoder.gen[PublicUser]
 }

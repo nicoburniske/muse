@@ -4,29 +4,26 @@ import muse.domain.common.{Entity, EntityType}
 import zio.json.*
 
 @jsonMemberNames(SnakeCase)
-final case class Track(
-    album: SimpleAlbum,
+final case class SimpleTrack(
     artists: List[SimpleArtist],
-    availableMarkets: List[String],
+    availableMarkets: Option[List[String]],
     discNumber: Int,
     durationMs: Int,
     explicit: Boolean,
     externalIds: Option[ExternalIds],
-    externalUrls: Map[String, String],
+    externalUrls: Option[Map[String, String]],
     href: String,
     id: String,
     isPlayable: Option[Boolean],
     linkedFrom: Option[LinkedTrack],
     restrictions: Option[Restrictions],
     name: String,
-    popularity: Int,
     previewUrl: Option[String],
     trackNumber: Int,
-    `type`: String,
     uri: String,
     isLocal: Boolean
 )
 
-object Track {
-  given decodeTrack: JsonDecoder[Track] = DeriveJsonDecoder.gen[Track]
+object SimpleTrack {
+  given decodeAlbumTrack: JsonDecoder[SimpleTrack] = DeriveJsonDecoder.gen[SimpleTrack]
 }

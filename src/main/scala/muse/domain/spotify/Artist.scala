@@ -1,22 +1,20 @@
 package muse.domain.spotify
 
-import muse.domain.common.{Entity, EntityType}
 import zio.json.*
 
 @jsonMemberNames(SnakeCase)
 final case class Artist(
     externalUrls: Map[String, String],
-    followers: Option[Followers],
-    genres: Option[List[String]],
+    followers: Followers,
+    genres: List[String],
     href: String,
     id: String,
-    // Is nullable because is references from different entities like Album.
-    images: Option[List[Image]],
+    images: List[Image],
     name: String,
-    popularity: Option[Int],
+    popularity: Int,
     `type`: String,
     uri: String
-) extends Entity(id, EntityType.Artist)
+)
 
 object Artist {
   given decodeArtist: JsonDecoder[Artist] = DeriveJsonDecoder.gen[Artist]

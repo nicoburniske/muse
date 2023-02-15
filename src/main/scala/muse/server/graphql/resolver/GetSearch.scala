@@ -27,10 +27,10 @@ object GetSearch {
     RequestSession.get[SpotifyService].flatMap(_.search(query, entityTypes, first, Some(offset))).map {
       case spotify.SearchResult(albums, artists, playlists, tracks) =>
         SearchResult(
-          albums.flatMap(a => createPaginationResult(a, Album.fromSpotify)),
-          artists.flatMap(a => createPaginationResult(a, Artist.fromSpotify)),
-          playlists.flatMap(p => createPaginationResult(p, Playlist.fromSpotify)),
-          tracks.flatMap(t => createPaginationResult(t, t => Track.fromSpotify(t)))
+          albums.flatMap(a => createPaginationResult(a, Album.fromSpotifySimple)),
+          artists.flatMap(a => createPaginationResult(a, Artist.fromSpotifySimple)),
+          playlists.flatMap(p => createPaginationResult(p, Playlist.fromSpotifySimple)),
+          tracks.flatMap(t => createPaginationResult(t, t => Track.fromSpotifySimple(t, None)))
         )
     }
   }

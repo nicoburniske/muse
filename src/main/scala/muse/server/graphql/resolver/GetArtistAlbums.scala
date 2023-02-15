@@ -9,7 +9,7 @@ case class GetArtistAlbums(artistId: String) extends Request[Throwable, List[Alb
 
 object GetArtistAlbums {
   // TODO: Consider some parallelism
-  def query(artistId: String) =
+  def query(artistId: String): ZQuery[RequestSession[SpotifyService], Throwable, List[Album]] =
     ZQuery
       .fromZIO {
         RequestSession
