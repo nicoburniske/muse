@@ -6,6 +6,7 @@ import muse.domain.spotify.AuthCodeFlowData
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.utils.Utils
+import nl.vroste.rezilience.Bulkhead
 import sttp.client3.SttpBackend
 import zio.*
 import zio.cache.{Cache, Lookup}
@@ -47,8 +48,9 @@ object UserSessions {
     authInfo     <- SpotifyAuthService.requestNewAccessToken(session.refreshToken).retry(Schedule.recurs(2))
     spotify      <- SpotifyService.live(authInfo.accessToken)
     instant      <- Clock.instant
+    bulkhead     <- Bulkhead.make(maxInFlightCalls = 5, maxQueueing = 0)
     expiration    = instant.plus(authInfo.expiresIn, ChronoUnit.SECONDS).minus(1, ChronoUnit.MINUTES)
-  } yield UserSession(sessionId, session.userId, expiration, authInfo.accessToken, session.refreshToken, spotify)
+  } yield UserSession(sessionId, session.userId, expiration, authInfo.accessToken, spotify, bulkhead)
 
   def startCacheReporter(cache: Cache[String, Throwable, UserSession]) = {
     val reporter = CacheUtils.ZioCacheStatReporter("user_sessions", cache)
