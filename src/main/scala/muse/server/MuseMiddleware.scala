@@ -4,7 +4,7 @@ import caliban.Value.StringValue
 import caliban.interop.tapir.{StreamTransformer, WebSocketHooks}
 import caliban.{CalibanError, GraphQLInterpreter, GraphQLWSOutput, InputValue, ZHttpAdapter}
 import io.netty.handler.codec.http.HttpHeaderNames
-import muse.domain.error.Unauthorized
+import muse.domain.error.{MuseError, RateLimited, Unauthorized}
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService}
@@ -33,11 +33,10 @@ object MuseMiddleware {
                 _       <- RequestSession.set[UserSession](Some(session))
                 _       <- RequestSession.set[SpotifyService](Some(session.spotifyService))
                 bulkHead = session.bulkhead
-                res     <- bulkHead(app(request)).either.flatMap {
-                             // When we get an empty error we want to fail with None so that other routers can handle this request.
-                             case Left(Bulkhead.WrappedError(None)) => ZIO.fail(None)
-                             case Left(e)                           => ZIO.fail(Some(e.toException))
-                             case Right(r)                          => ZIO.succeed(r)
+                res     <- bulkHead(app(request)).mapError {
+                             // When maybeError is None other routers can handle the request.
+                             case Bulkhead.WrappedError(maybeError) => maybeError
+                             case Bulkhead.BulkheadRejection        => Some(RateLimited)
                            }
               } yield res
             }
@@ -49,21 +48,19 @@ object MuseMiddleware {
     .map(_.toString)
 
   val handleErrors: HttpMiddleware[Any, Throwable] = new HttpMiddleware[Any, Throwable] {
-    override def apply[R1 <: Any, E1 >: Throwable](http: Http[R1, E1, Request, Response]) = {
-      http
-        .tapErrorZIO {
-          case Bulkhead.BulkheadException(Bulkhead.BulkheadRejection) => ZIO.logInfo(s"Request Rate Limited!")
-          case u: Unauthorized                                        => ZIO.logInfo(u.message)
-          case t: Throwable                                           =>
-            ZIO.logError(s"Something went wrong: ${t.toString}")
-        }
-        .catchAll {
-          case Bulkhead.BulkheadException(Bulkhead.BulkheadRejection) =>
-            Http.response(Response(Status.TooManyRequests, data = HttpData.fromString("Too many concurrent requests.")))
-          case u: Unauthorized                                        => u.http
-          case t: Throwable                                           => Http.error(HttpError.InternalServerError("Something went wrong.", Some(t)))
-        }
-    }
+    override def apply[R1 <: Any, E1 >: Throwable](http: Http[R1, E1, Request, Response]) = http
+      .tapErrorZIO {
+        case u: MuseError => ZIO.logInfo(u.message)
+        case t: Throwable =>
+          val cause   = Option(t.getCause).map(_.toString).getOrElse("")
+          val message = s"Something went wrong!. Exception: ${t.toString}. cause:$cause"
+          ZIO.logError(message)
+      }.catchAll {
+        case u: Unauthorized => u.http
+        case RateLimited     => RateLimited.http
+        case t: Throwable    =>
+          Http.error(HttpError.InternalServerError("Something went wrong.", Some(t)))
+      }
   }
 
   /**
