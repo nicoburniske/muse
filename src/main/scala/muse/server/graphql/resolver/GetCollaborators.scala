@@ -7,7 +7,6 @@ import muse.server.graphql.subgraph.Collaborator
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.utils.Utils
-import muse.utils.Utils.addTimeLog
 import zio.ZIO
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 
@@ -47,6 +46,6 @@ object GetCollaborators {
           }
 
           processed.foldLeft(CompletedRequestMap.empty) { case (acc, (req, result)) => acc.insert(req)(result) }
-        }.addTimeLog("GetCollaborators") @@ metric.trackDuration
+        } @@ metric.trackDuration
     }
 }

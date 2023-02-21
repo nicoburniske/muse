@@ -18,7 +18,6 @@ import muse.domain.spotify.{
   PositionOffset as SpotifyPostionOffset
 }
 import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
-import muse.utils.Utils.addTimeLog
 
 type SpotifyMutationEnv = RequestSession[UserSession] & RequestSession[SpotifyService]
 case class SpotifyMutations(
@@ -114,10 +113,10 @@ object SpotifyMutations {
   } yield res
 
   def saveTracks(trackIds: List[String]) =
-    RequestSession.get[SpotifyService].flatMap(_.saveTracks(trackIds.toVector)).addTimeLog("Tracks saved")
+    RequestSession.get[SpotifyService].flatMap(_.saveTracks(trackIds.toVector))
 
   def removeSavedTracks(trackIds: List[String]) =
-    RequestSession.get[SpotifyService].flatMap(_.removeSavedTracks(trackIds.toVector)).addTimeLog("Removed tracks")
+    RequestSession.get[SpotifyService].flatMap(_.removeSavedTracks(trackIds.toVector))
 
   private def toUri(e: Context): String                       = toUri(e.entityType, e.entityId)
   private def toUri(entityType: EntityType, entityId: String) = entityType match

@@ -20,7 +20,7 @@ object GetReviewComments {
   val CommentDataSource: DataSource[DatabaseService, GetReviewComments] =
     DataSource.fromFunctionZIO("ReviewCommentsDataSource") { (req: GetReviewComments) =>
       DatabaseService
-        .getReviewComments(req.reviewId).map { comments => Comment.fromTableRows(comments) }.addTimeLog("GetReviewComments")
+        .getReviewComments(req.reviewId).map { comments => Comment.fromTableRows(comments) }
     }
 
 }

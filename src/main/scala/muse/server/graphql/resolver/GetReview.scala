@@ -5,7 +5,6 @@ import muse.server.graphql.subgraph.Review
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.utils.Utils
-import muse.utils.Utils.addTimeLog
 import zio.ZIO
 import zio.query.{DataSource, Request, ZQuery}
 
@@ -33,7 +32,6 @@ object GetReview {
             session <- RequestSession.get[UserSession]
             review  <- DatabaseService
                          .getReviewWithPermissions(req.reviewId, session.userId)
-                         .addTimeLog("GetReviewWithPermissions")
           } yield review,
         // We are wrapping in 'Some' because single request returns 'Option' and batched request returns 'List'
         reqs =>
@@ -42,7 +40,6 @@ object GetReview {
             reviews <-
               DatabaseService
                 .getReviewsWithPermissions(reqs.map(_.reviewId).toList, session.userId)
-                .addTimeLog("GetReviewsWithPermissions")
           } yield reviews.map { Some(_) }.toVector,
         maybeReview => maybeReview.map(Review.fromTable),
         _.reviewId.toString,
