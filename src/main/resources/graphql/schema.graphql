@@ -204,23 +204,26 @@ type AudioFeatures {
 type AudioSection {
   start: Float!
   duration: Float!
-  confidence: Confidence!
+  confidence: Float!
   loudness: Float!
   tempo: Int!
-  tempoConfidence: Confidence!
+  tempoConfidence: Float!
   key: Float!
-  keyConfidence: Confidence!
+  keyConfidence: Float!
   mode: Modality!
-  modeConfidence: Confidence!
+  modeConfidence: Float!
   timeSignature: Float!
-  timeSignatureConfidence: Confidence!
+  timeSignatureConfidence: Float!
 }
 
 type AudioSegment {
   start: Float!
   duration: Float!
-  confidence: Confidence!
-  loudness: Loudness!
+  confidence: Float!
+  loudnessStart: Float!
+  loudnessMax: Float!
+  loudnessMaxTime: Float!
+  loudnessEnd: Float
   pitches: [Float!]!
   timbre: [Float!]!
 }
@@ -243,10 +246,6 @@ type Comment {
   commenter: User!
   comment: String
   entities: [ReviewEntity!]
-}
-
-type Confidence {
-  value: Float!
 }
 
 type Copyright {
@@ -275,13 +274,6 @@ type KVStringString {
   key: String!
   "Value"
   value: String!
-}
-
-type Loudness {
-  start: Float!
-  max: Float!
-  maxTime: Float!
-  end: Float
 }
 
 type Mutations {
@@ -390,6 +382,7 @@ type PlaylistTrack {
 type Queries {
   user(id: String): User!
   userMaybe(id: String): User
+  searchUser(displayName: String!): [User!]
   review(id: ID!): Review
   reviews(reviewIds: [ID!]!): [Review!]
   search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, offset: 0}): SearchResult
@@ -441,7 +434,7 @@ type Subscriptions {
 type TimeInterval {
   start: Float!
   duration: Float!
-  confidence: Confidence!
+  confidence: Float!
 }
 
 type Track implements ReviewEntity {

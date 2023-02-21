@@ -17,9 +17,8 @@ import zio.query.ZQuery
 import java.util.UUID
 
 final case class UserArgs(id: Option[String])
-
+final case class SearchUserArgs(displayName: String)
 final case class ReviewArgs(id: UUID)
-
 final case class ReviewsArgs(reviewIds: List[UUID])
 
 final case class SearchArgs(
@@ -32,6 +31,10 @@ final case class EntityId(id: String)
 final case class Queries(
     user: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Nothing, User],
     userMaybe: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, User],
+    searchUser: SearchUserArgs => ZQuery[
+      RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService,
+      Throwable,
+      List[User]],
     review: ReviewArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, Option[Review]],
     reviews: ReviewsArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]],
     search: SearchArgs => ZQuery[RequestSession[SpotifyService], Throwable, SearchResult],
@@ -44,6 +47,7 @@ object Queries {
   val live = Queries(
     args => GetUser.query(args.id).orDie,
     args => GetUser.query(args.id),
+    args => GetUser.fromDisplayName(args.displayName),
     args => GetReview.query(args.id),
     args => GetReview.multiQuery(args.reviewIds),
     args => GetSearch.query(args.query, args.types, args.pagination.getOrElse(Default.Search)),

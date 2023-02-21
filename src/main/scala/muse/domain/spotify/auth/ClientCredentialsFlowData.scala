@@ -1,4 +1,4 @@
-package muse.domain.spotify
+package muse.domain.spotify.auth
 
 import zio.json.{DeriveJsonDecoder, JsonDecoder, SnakeCase, jsonField, jsonMemberNames}
 

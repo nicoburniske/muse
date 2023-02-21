@@ -143,6 +143,7 @@ object DatabaseService {
   def createReviewComment(userId: String, c: CreateComment) =
     ZIO.serviceWithZIO[DatabaseService](_.createReviewComment(userId, c))
 
+  def getUsers                    = ZIO.serviceWithZIO[DatabaseService](_.getUsers)
   def getUserById(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getUserById(userId))
 
   def getUserSession(sessionId: String) =
@@ -812,7 +813,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
                      .delete
                  }
 
-            maybeReviewId = maybeParentIndexToDelete.map(_.reviewId)
+            maybeReviewId                = maybeParentIndexToDelete.map(_.reviewId)
             maybeGrandparentId           = maybeParentIndexToDelete.flatMap(_.parentCommentId)
             maybeParentIndex             = maybeParentIndexToDelete.map(_.commentIndex)
             // Move all comments on parent level down if it was deleted.

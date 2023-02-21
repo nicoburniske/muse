@@ -4,15 +4,17 @@ import caliban.Value.StringValue
 import caliban.interop.tapir.{StreamTransformer, WebSocketHooks}
 import caliban.{CalibanError, GraphQLInterpreter, GraphQLWSOutput, InputValue, ZHttpAdapter}
 import io.netty.handler.codec.http.HttpHeaderNames
-import muse.domain.error.Unauthorized
+import muse.domain.error.{MuseError, RateLimited, Unauthorized}
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService}
 import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils
+import nl.vroste.rezilience.Bulkhead.{BulkheadError, BulkheadException}
+import nl.vroste.rezilience.Bulkhead
 import sttp.client3.SttpBackend
 import zhttp.http.middleware.HttpMiddleware
-import zhttp.http.{Header, Headers, Http, HttpApp, HttpError, Method, Middleware, Request, Response, Status}
+import zhttp.http.{HExit, Header, Headers, Http, HttpApp, HttpData, HttpError, Method, Middleware, Request, Response, Status}
 import zio.*
 import zio.stream.ZStream
 
@@ -21,21 +23,24 @@ import java.time.Instant
 object MuseMiddleware {
   def checkAuthAddSession[R](app: Http[R, Throwable, Request, Response]) =
     Http
-      .fromFunctionZIO[Request] { request =>
-        val maybeAuth = extractRequestAuth(request)
-
-        maybeAuth.fold {
-          ZIO.logInfo("Missing Auth") *> ZIO.fail(Unauthorized("Missing Auth"))
-        } { auth =>
-          for {
-            session <- UserSessions.getUserSession(auth)
-            _       <- ZIO.logInfo(s"Found session for ${session.userId} with session ${session.sessionId}")
-            _       <- RequestSession.set[UserSession](Some(session))
-            _       <- RequestSession.set[SpotifyService](Some(session.spotifyService))
-          } yield app
-        }
+      .fromFunctionHExit[Request] { request =>
+        extractRequestAuth(request) match
+          case None       => HExit.fail(Unauthorized("Missing Auth"))
+          case Some(auth) =>
+            HExit.Effect {
+              for {
+                session <- UserSessions.getUserSession(auth).mapError(Some(_))
+                _       <- RequestSession.set[UserSession](Some(session))
+                _       <- RequestSession.set[SpotifyService](Some(session.spotifyService))
+                bulkHead = session.bulkhead
+                res     <- bulkHead(app(request)).mapError {
+                             // When maybeError is None other routers can handle the request.
+                             case Bulkhead.WrappedError(maybeError) => maybeError
+                             case Bulkhead.BulkheadRejection        => Some(RateLimited)
+                           }
+              } yield res
+            }
       }
-      .flatten
 
   private def extractRequestAuth(request: Request) = request
     .cookieValue(COOKIE_KEY)
@@ -43,17 +48,19 @@ object MuseMiddleware {
     .map(_.toString)
 
   val handleErrors: HttpMiddleware[Any, Throwable] = new HttpMiddleware[Any, Throwable] {
-    override def apply[R1 <: Any, E1 >: Throwable](http: Http[R1, E1, Request, Response]) = {
-      http
-        .tapErrorZIO {
-          case u: Unauthorized => ZIO.logInfo(u.message)
-          case t: Throwable    => ZIO.logError(s"Something went wrong: ${t.getMessage}")
-        }
-        .catchAll {
-          case u: Unauthorized => u.http
-          case t: Throwable    => Http.error(HttpError.InternalServerError("Something went wrong", Some(t)))
-        }
-    }
+    override def apply[R1 <: Any, E1 >: Throwable](http: Http[R1, E1, Request, Response]) = http
+      .tapErrorZIO {
+        case u: MuseError => ZIO.logInfo(u.message)
+        case t: Throwable =>
+          val cause   = Option(t.getCause).map(_.toString).getOrElse("")
+          val message = s"Something went wrong!. Exception: ${t.toString}. cause:$cause"
+          ZIO.logError(message)
+      }.catchAll {
+        case u: Unauthorized => u.http
+        case RateLimited     => RateLimited.http
+        case t: Throwable    =>
+          Http.error(HttpError.InternalServerError("Something went wrong.", Some(t)))
+      }
   }
 
   /**
@@ -128,7 +135,7 @@ object MuseMiddleware {
 
     // If the session is already set, do nothing. Otherwise, attempt to initialize UserSession.
     private def initSession(ref: RequestSession[UserSession], maybeUserSessionId: Option[String]) = ref.get.isSuccess.flatMap {
-      case true => ZIO.unit
+      case true  => ZIO.unit
       case false =>
         ZIO
           .fromOption(maybeUserSessionId).orElseFail(Unauthorized("Missing Auth: Unable to decode payload"))

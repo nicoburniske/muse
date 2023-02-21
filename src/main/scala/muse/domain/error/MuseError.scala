@@ -31,6 +31,11 @@ final case class BadRequest(reason: Option[String]) extends MuseError:
   val code    = "INVALID_REQUEST"
   val message = reason.fold("Invalid Request")(m => s"Invalid Request: $m")
 
+object RateLimited extends MuseError:
+  val code    = "RATE_LIMITED"
+  val message = "Too many concurrent requests"
+  val http    = Http.response(Response(Status.TooManyRequests, data = HttpData.fromString(message)))
+
 object Forbidden:
   val empty                       = Forbidden(None)
   def apply(s: String): Forbidden = Forbidden(Some(s))
