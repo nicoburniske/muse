@@ -160,13 +160,12 @@ object SpotifyService {
 }
 
 case class SpotifyServiceLive(
-                               s: SpotifyAPI[Task],
-                               //    retryAfterRef: Ref[Option[Long]],
-                               likeCache: zcaffeine.Cache[Any, String, Boolean],
-                               playlistCache: Cache[PlaylistInput, Throwable, SinglePlaylist],
-                               artistCache: zcaffeine.Cache[Any, String, Artist],
-                               albumCache: zcaffeine.Cache[Any, String, Album],
-                               userCache: zcaffeine.Cache[Any, String, PublicUser]
+    s: SpotifyAPI[Task],
+    likeCache: zcaffeine.Cache[Any, String, Boolean],
+    playlistCache: Cache[PlaylistInput, Throwable, SinglePlaylist],
+    artistCache: zcaffeine.Cache[Any, String, Artist],
+    albumCache: zcaffeine.Cache[Any, String, Album],
+    userCache: zcaffeine.Cache[Any, String, PublicUser]
 ) extends SpotifyService {
   def getCurrentUserProfile                          = s.getCurrentUserProfile
   def getTrackRecommendations(input: TrackRecsInput) = s.getTrackRecommendations(input).map(_.tracks)
@@ -178,10 +177,10 @@ case class SpotifyServiceLive(
 
   def isValidEntity(entityId: String, entityType: EntityType) =
     entityType match
-      case EntityType.Album => getAlbum(entityId).isSuccess
-      case EntityType.Artist => getArtist(entityId).isSuccess
+      case EntityType.Album    => getAlbum(entityId).isSuccess
+      case EntityType.Artist   => getArtist(entityId).isSuccess
       case EntityType.Playlist => getPlaylist(entityId).isSuccess
-      case EntityType.Track => getTrack(entityId).isSuccess
+      case EntityType.Track    => getTrack(entityId).isSuccess
 
   def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None) =
     playlistCache.get(PlaylistInput(playlistId, fields, market))

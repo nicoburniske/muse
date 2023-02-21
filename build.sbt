@@ -1,7 +1,7 @@
 ThisBuild / version      := "0.1.0"
 ThisBuild / organization := "io.nicoburniske"
 ThisBuild / name         := "muse"
-ThisBuild / scalaVersion := "3.1.0"
+ThisBuild / scalaVersion := "3.2.2"
 
 val zio          = "2.0.0"
 val zioJson      = "0.4.2"
@@ -45,6 +45,7 @@ lazy val root = (project in file("."))
       "dev.zio"                       %% "zio-metrics-prometheus"        % zio,
       "dev.zio"                       %% "zio-metrics-connectors"        % zio,
       "com.stuart"                    %% "zcaffeine"                     % "1.0.0-M2",
+      "nl.vroste"                     %% "rezilience"                    % "0.9.0",
       // ZIO Config.
       "dev.zio"                       %% "zio-config"                    % zioConfig,
       "dev.zio"                       %% "zio-config-typesafe"           % zioConfig,

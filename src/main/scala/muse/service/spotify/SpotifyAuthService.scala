@@ -1,9 +1,9 @@
 package muse.service.spotify
 
 import muse.config.SpotifyConfig
-import muse.domain.spotify.{AuthCodeFlowData, ClientCredentialsFlowData, RefreshAuthData}
+import muse.domain.spotify.auth.{AuthCodeFlowData, ClientCredentialsFlowData, RefreshAuthData, SpotifyAuthDeserializationError, SpotifyAuthError, SpotifyAuthErrorResponse}
 import muse.service.UserSessions
-import zhttp.http.{HeaderValues, Headers, HttpData, Method, Path, Response, Scheme, URL}
+import zhttp.http.{HeaderValues, Headers, HttpData, Method, Path, Response, Scheme, Status, URL}
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.json.*
 import zio.{Task, ZIO, ZLayer}
@@ -19,7 +19,7 @@ object SpotifyAuthService {
     config         <- ZIO.service[SpotifyConfig]
     eventLoopGroup <- ZIO.service[EventLoopGroup]
     channelFactory <- ZIO.service[ChannelFactory]
-  } yield SpotifyAuthRepo(config, eventLoopGroup, channelFactory))
+  } yield SpotifyAuthLive(config, eventLoopGroup, channelFactory))
 
   def getClientCredentials = ZIO.serviceWithZIO[SpotifyAuthService](_.getClientCredentials)
 
@@ -30,7 +30,7 @@ object SpotifyAuthService {
 
 }
 
-case class SpotifyAuthRepo(config: SpotifyConfig, eventLoopGroup: EventLoopGroup, channelFactory: ChannelFactory)
+case class SpotifyAuthLive(config: SpotifyConfig, eventLoopGroup: EventLoopGroup, channelFactory: ChannelFactory)
     extends SpotifyAuthService {
 
   val TOKEN_ENDPOINT = URL(
@@ -40,42 +40,51 @@ case class SpotifyAuthRepo(config: SpotifyConfig, eventLoopGroup: EventLoopGroup
 
   val layer = ZLayer.succeed(eventLoopGroup) ++ ZLayer.succeed(channelFactory)
 
-  override def getClientCredentials =
-    executePost(Map("grant_type" -> "client_credentials"))
-      .flatMap(_.bodyAsString)
-      .flatMap(deserializeBodyOrFail[ClientCredentialsFlowData])
-      .provideLayer(layer)
+  override def getClientCredentials = (for {
+    response     <- executePost(Map("grant_type" -> "client_credentials"))
+    body         <- response.bodyAsString
+    deserialized <- deserializeBodyOrFail[ClientCredentialsFlowData](response.status, body)
+  } yield deserialized).provideLayer(layer)
 
   override def getAuthCode(code: String) =
-    executePost(
-      Map(
-        "grant_type"   -> "authorization_code",
-        "code"         -> code,
-        "redirect_uri" -> config.redirectURI
-      ))
-      .flatMap(_.bodyAsString)
-      .flatMap(deserializeBodyOrFail[AuthCodeFlowData])
-      .provideLayer(layer)
+    (for {
+      response     <- executePost(
+                        Map(
+                          "grant_type"   -> "authorization_code",
+                          "code"         -> code,
+                          "redirect_uri" -> config.redirectURI
+                        ))
+      body         <- response.bodyAsString
+      deserialized <- deserializeBodyOrFail[AuthCodeFlowData](response.status, body)
+    } yield deserialized).provideLayer(layer)
 
   override def requestNewAccessToken(refreshToken: String) =
-    executePost(
-      Map(
-        "grant_type"    -> "refresh_token",
-        "refresh_token" -> refreshToken,
-        "redirect_uri"  -> config.redirectURI
-      ))
-      .flatMap(_.bodyAsString)
-      .flatMap(deserializeBodyOrFail[RefreshAuthData])
-      .provideLayer(layer)
+    (for {
+      response     <- executePost(
+                        Map(
+                          "grant_type"    -> "refresh_token",
+                          "refresh_token" -> refreshToken,
+                          "redirect_uri"  -> config.redirectURI
+                        ))
+      body         <- response.bodyAsString
+      deserialized <- deserializeBodyOrFail[RefreshAuthData](response.status, body)
+    } yield deserialized).provideLayer(layer)
 
-  case class SpotifyAuthError(message: String, error: String, body: String) extends Exception(message)
-  private def deserializeBodyOrFail[T: JsonDecoder](body: String) =
+  private def deserializeBodyOrFail[T: JsonDecoder](status: Status, body: String) =
     body
       .fromJson[T]
       .fold(
-        e => ZIO.fail(SpotifyAuthError("Failed to deserialize body", e, body )),
+        _ => deserializeErrorBody(status, body),
         ZIO.succeed(_)
       )
+
+  private def deserializeErrorBody(status: Status, body: String) =
+    body
+      .fromJson[SpotifyAuthErrorResponse]
+      .fold(
+        e => ZIO.fail(SpotifyAuthDeserializationError("Failed to deserialize error body", e, body)),
+        ZIO.fail(_)
+      ).mapError(SpotifyAuthError(status, _))
 
   private def executePost(body: Map[String, String]) = {
     val headers = Headers.basicAuthorizationHeader(config.clientID, config.clientSecret) ++
