@@ -2,7 +2,7 @@ package muse.server
 
 import muse.config.{ServerConfig, SpotifyConfig}
 import muse.domain.session.UserSession
-import muse.domain.spotify.AuthCodeFlowData
+import muse.domain.spotify.auth.AuthCodeFlowData
 import muse.domain.table.User
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
@@ -17,11 +17,16 @@ import zio.{Cause, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOApp
 object Auth {
   val scopes = List(
     "user-library-read",
+    // To ensure premium subscription.
+    "user-read-private",
+    // Playlist permissions.
     "playlist-read-private",
     "playlist-read-collaborative",
+    // playback state.
     "user-modify-playback-state",
     "user-read-playback-state",
     "user-read-currently-playing",
+    // Library.
     "user-library-modify",
     // Streaming permissions!
     "streaming",
