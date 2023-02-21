@@ -11,7 +11,7 @@ final case class AudioAnalysis(
     segments: List[AudioSegment]
 )
 
-final case class TimeInterval(start: Double, duration: Double, confidence: Confidence)
+final case class TimeInterval(start: Double, duration: Double, confidence: Double)
 
 object AudioAnalysis {
   given audioAnalysisDecoder: JsonDecoder[AudioAnalysis] = DeriveJsonDecoder.gen[AudioAnalysis]

@@ -6,16 +6,16 @@ import zio.json.{DeriveJsonDecoder, JsonDecoder, SnakeCase, jsonMemberNames}
 final case class AudioSection(
     start: Double,
     duration: Double,
-    confidence: Confidence,
+    confidence: Double,
     loudness: Double,
     tempo: Int,
-    tempoConfidence: Confidence,
+    tempoConfidence: Double,
     key: Double,
-    keyConfidence: Confidence,
+    keyConfidence: Double,
     mode: Modality,
-    modeConfidence: Confidence,
+    modeConfidence: Double,
     timeSignature: Double,
-    timeSignatureConfidence: Confidence
+    timeSignatureConfidence: Double
 )
 
 enum Modality(val value: Int) {
