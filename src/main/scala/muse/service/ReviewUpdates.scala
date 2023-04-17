@@ -8,5 +8,5 @@ import zio.{Hub, ZLayer}
 import java.util.UUID
 
 object ReviewUpdates {
-  val hub = ZLayer.scoped(Hub.bounded[ReviewUpdate](100))
+  val hub = ZLayer.scoped(Hub.bounded[ReviewUpdate](128))
 }

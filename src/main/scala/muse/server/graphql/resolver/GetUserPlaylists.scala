@@ -11,8 +11,7 @@ import zio.query.ZQuery
 final case class UserPlaylistsInput(pagination: Option[Pagination])
 
 object GetUserPlaylists:
-  def boxedQuery(userId: String)(input: UserPlaylistsInput)
-      : ZQuery[RequestSession[SpotifyService] & RequestSession[UserSession], Throwable, List[Playlist]] =
+  def boxedQuery(userId: String)(input: UserPlaylistsInput) =
     query(userId)(input.pagination)
 
   def query(userId: String)(p: Option[Pagination]) = ZQuery.fromZIO {
