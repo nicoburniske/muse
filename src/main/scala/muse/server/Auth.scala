@@ -48,7 +48,7 @@ object Auth {
           .get("code")
           .flatMap(_.headOption)
           .fold {
-            ZIO.succeed(Response(status = Status.BadRequest, data = HttpData.fromString("Missing 'code' query parameter")))
+            ZIO.succeed(Response(status = Status.BadRequest, body = Body.fromString("Missing 'code' query parameter")))
           } { code =>
             for {
               authData     <- SpotifyAuthService.getAuthCode(code)

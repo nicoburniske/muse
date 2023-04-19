@@ -63,6 +63,10 @@ object MuseGraphQL {
   given Schema[Env, spotify.AudioAnalysis] = Schema.gen
   given Schema[Env, spotify.AudioFeatures] = Schema.gen
   given Schema[Env, Track]                 = Schema.gen
+  
+  given Schema[Env, Queries] = Schema.gen
+  given Schema[Env, Mutations] = Schema.gen
+  given Schema[Env, Subscriptions] = Schema.gen
 
   // TODO: give this another shot?
 //  given errorSchema[A](using Schema[Any, A]): Schema[Any, IO[Throwable | MuseError, A]] =
@@ -72,7 +76,7 @@ object MuseGraphQL {
 //        case throwable: Throwable => ExecutionError(throwable.getMessage, innerThrowable = Some(throwable))
 //    )
 
-  val api = GraphQL.graphQL[Env, Queries, Mutations, Subscriptions](
+  val api = caliban.graphQL[Env, Queries, Mutations, Subscriptions](
     RootResolver(Queries.live, Mutations.live, Subscriptions.live)) @@ printErrors @@ apolloTracing
 
   val interpreter = api.interpreter.map(errorHandler(_))

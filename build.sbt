@@ -3,16 +3,6 @@ ThisBuild / organization := "io.nicoburniske"
 ThisBuild / name         := "muse"
 ThisBuild / scalaVersion := "3.2.2"
 
-val zio          = "2.0.0"
-val zioJson      = "0.4.2"
-val zioConfig    = "3.0.1"
-val zhttp        = "2.0.0-RC10"
-val protoQuill   = "4.6.0"
-val postgresql   = "42.3.6"
-val flyway       = "8.5.12"
-val sttp         = "3.7.0"
-val slf4jVersion = "2.0.1"
-
 lazy val mainMethod = "muse.Main"
 
 inThisBuild(
@@ -38,37 +28,37 @@ lazy val root = (project in file("."))
     assembly / mainClass             := Some(mainMethod),
     Compile / discoveredMainClasses  := Seq(),
     libraryDependencies ++= Seq(
-      "dev.zio"                       %% "zio"                           % zio,
-      "dev.zio"                       %% "zio-json"                      % zioJson,
-      "dev.zio"                       %% "zio-nio"                       % zio,
-      "dev.zio"                       %% "zio-cache"                     % "0.2.0",
-      "dev.zio"                       %% "zio-metrics-prometheus"        % zio,
-      "dev.zio"                       %% "zio-metrics-connectors"        % zio,
-      "com.stuart"                    %% "zcaffeine"                     % "1.0.0-M2",
-      "nl.vroste"                     %% "rezilience"                    % "0.9.0",
+      "dev.zio"                       %% "zio"                           % Version.zio,
+      "dev.zio"                       %% "zio-json"                      % Version.zioJson,
+      "dev.zio"                       %% "zio-nio"                       % Version.zioNio,
+      "dev.zio"                       %% "zio-cache"                     % Version.zioCache,
+      "dev.zio"                       %% "zio-metrics-prometheus"        % Version.zioMetrics,
+      "dev.zio"                       %% "zio-metrics-connectors"        % Version.zioMetrics,
+      "com.stuart"                    %% "zcaffeine"                     % Version.zcaffiene,
+      "nl.vroste"                     %% "rezilience"                    % Version.rezilience,
       // ZIO Config.
-      "dev.zio"                       %% "zio-config"                    % zioConfig,
-      "dev.zio"                       %% "zio-config-typesafe"           % zioConfig,
+      "dev.zio"                       %% "zio-config"                    % Version.zioConfig,
+      "dev.zio"                       %% "zio-config-typesafe"           % Version.zioConfig,
       // HTTP Server.
-      "io.d11"                        %% "zhttp"                         % zhttp,
+      "dev.zio"                       %% "zio-http"                      % Version.zioHttp,
       // HTTP Client.
-      "com.softwaremill.sttp.client3" %% "core"                          % sttp,
-      "com.softwaremill.sttp.client3" %% "async-http-client-backend-zio" % sttp,
-      "com.softwaremill.sttp.client3" %% "zio-json"                      % sttp,
+      "com.softwaremill.sttp.client3" %% "core"                          % Version.sttp,
+      "com.softwaremill.sttp.client3" %% "async-http-client-backend-zio" % Version.sttp,
+      "com.softwaremill.sttp.client3" %% "zio-json"                      % Version.sttp,
       // Database.
-      "io.getquill"                   %% "quill-jdbc-zio"                % protoQuill,
-      "org.postgresql"                 % "postgresql"                    % postgresql,
-      "org.flywaydb"                   % "flyway-core"                   % flyway,
+      "io.getquill"                   %% "quill-jdbc-zio"                % Version.protoQuill,
+      "org.postgresql"                 % "postgresql"                    % Version.postgresql,
+      "org.flywaydb"                   % "flyway-core"                   % Version.flyway,
       // Logging.
-      "dev.zio"                       %% "zio-logging-slf4j"             % zio,
-      "org.slf4j"                      % "slf4j-api"                     % slf4jVersion,
-      "ch.qos.logback"                 % "logback-classic"               % "1.4.1",
-
+      "dev.zio"                       %% "zio-logging-slf4j"             % Version.zioLogging,
+      "org.slf4j"                      % "slf4j-api"                     % Version.slf4j,
+      "ch.qos.logback"                 % "logback-classic"               % Version.logback,
       // Graphql.
-      "com.github.ghostdogpr" %% "caliban"          % "2.0.1",
-      "com.github.ghostdogpr" %% "caliban-zio-http" % "2.0.1",
+      "com.github.ghostdogpr"         %% "caliban"                       % Version.caliban,
+      "com.github.ghostdogpr"         %% "caliban-zio-http"              % Version.caliban,
+      "com.softwaremill.sttp.tapir"   %% "tapir-json-zio"                % "1.2.11",
       // Test Libraries.
-      "dev.zio"               %% "zio-test"         % zio % Test
+      "dev.zio"                       %% "zio-test"                      % Version.zio % Test
     ),
     scalacOptions ++= Seq(
       "-Xmax-inlines:55"
@@ -78,7 +68,8 @@ lazy val root = (project in file("."))
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
     ),
     excludeDependencies ++= Seq(
-      ExclusionRule("org.scala-lang.modules", "scala-collection-compat_2.13")
+      ExclusionRule("org.scala-lang.modules", "scala-collection-compat_2.13"),
+      ExclusionRule("com.lihaoyi", "geny_2.13")
     ),
     assembly / assemblyMergeStrategy := {
       case PathList("module-info.class") => MergeStrategy.discard

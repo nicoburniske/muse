@@ -3,7 +3,7 @@ package muse.service.spotify
 import muse.config.SpotifyConfig
 import muse.domain.spotify.auth.{AuthCodeFlowData, ClientCredentialsFlowData, RefreshAuthData, SpotifyAuthDeserializationError, SpotifyAuthError, SpotifyAuthErrorResponse}
 import muse.service.UserSessions
-import zhttp.http.{HeaderValues, Headers, HttpData, Method, Path, Response, Scheme, Status, URL}
+import zhttp.http.{Body, HeaderValues, Headers, Method, Path, Response, Scheme, Status, URL}
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.json.*
 import zio.{Task, ZIO, ZLayer}
@@ -42,7 +42,7 @@ case class SpotifyAuthLive(config: SpotifyConfig, eventLoopGroup: EventLoopGroup
 
   override def getClientCredentials = (for {
     response     <- executePost(Map("grant_type" -> "client_credentials"))
-    body         <- response.bodyAsString
+    body         <- response.body.asString
     deserialized <- deserializeBodyOrFail[ClientCredentialsFlowData](response.status, body)
   } yield deserialized).provideLayer(layer)
 
@@ -54,7 +54,7 @@ case class SpotifyAuthLive(config: SpotifyConfig, eventLoopGroup: EventLoopGroup
                           "code"         -> code,
                           "redirect_uri" -> config.redirectURI
                         ))
-      body         <- response.bodyAsString
+      body         <- response.body.asString
       deserialized <- deserializeBodyOrFail[AuthCodeFlowData](response.status, body)
     } yield deserialized).provideLayer(layer)
 
@@ -66,7 +66,7 @@ case class SpotifyAuthLive(config: SpotifyConfig, eventLoopGroup: EventLoopGroup
                           "refresh_token" -> refreshToken,
                           "redirect_uri"  -> config.redirectURI
                         ))
-      body         <- response.bodyAsString
+      body         <- response.body.asString
       deserialized <- deserializeBodyOrFail[RefreshAuthData](response.status, body)
     } yield deserialized).provideLayer(layer)
 
@@ -89,7 +89,7 @@ case class SpotifyAuthLive(config: SpotifyConfig, eventLoopGroup: EventLoopGroup
   private def executePost(body: Map[String, String]) = {
     val headers = Headers.basicAuthorizationHeader(config.clientID, config.clientSecret) ++
       Headers.contentType(HeaderValues.applicationXWWWFormUrlencoded)
-    Client.request(TOKEN_ENDPOINT.encode, Method.POST, headers, HttpData.fromString(encodeFormBody(body)))
+    Client.request(TOKEN_ENDPOINT.encode, Method.POST, headers, Body.fromString(encodeFormBody(body)))
   }
 
   // TODO: add to ZIO-HTTP

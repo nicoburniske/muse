@@ -1,10 +1,10 @@
 package muse.config
 
 import zio.config.*
-import ConfigDescriptor.*
-import ZConfig.*
+import zio.Config
+import Config._
 import com.typesafe.config.ConfigFactory
-import zio.config.typesafe.TypesafeConfig
+import zio.config.typesafe.TypesafeConfigProvider
 import zio.{ZIO, ZLayer}
 
 import java.io.File
@@ -14,43 +14,50 @@ final case class AppConfig(spotify: SpotifyConfig, sqlConfig: SqlConfig, serverC
 object AppConfig {
 
   lazy val flattened = for {
-    appConfigEnv <- ZLayer.environment[AppConfig]
-    spotify      <- ZLayer.succeed(appConfigEnv.get.spotify)
-    sql          <- ZLayer.succeed(appConfigEnv.get.sqlConfig)
-    server       <- ZLayer.succeed(appConfigEnv.get.serverConfig)
+    appConfigEnv   <- ZLayer.environment[AppConfig]
+    spotify        <- ZLayer.succeed(appConfigEnv.get.spotify)
+    sql            <- ZLayer.succeed(appConfigEnv.get.sqlConfig)
+    server         <- ZLayer.succeed(appConfigEnv.get.serverConfig)
     spotifyService <- ZLayer.succeed(appConfigEnv.get.spotify.service)
   } yield appConfigEnv ++ spotify ++ sql ++ server ++ spotifyService
 
   lazy val layer = appConfigLayer >>> flattened
 
-  lazy val appConfigLayer = TypesafeConfig.fromTypesafeConfig(ZIO.attempt(ConfigFactory.load.resolve), appDescriptor)
+//  lazy val appConfigLayer = for {
+//    config <- ZIO.attempt(ConfigFactory.load.resolve)
+//    appConfig <- TypesafeConfigProvider.fromTypesafeConfig(config)
+//
+//                                 }
+  lazy val appConfigLayer = ZLayer.fromZIO {
+    read(appDescriptor from TypesafeConfigProvider.fromTypesafeConfig(ConfigFactory.load.resolve))
+  }
 
-  lazy val appDescriptor: ConfigDescriptor[AppConfig] =
-    (nested("spotify")(spotifyDescriptor) zip
-      nested("db")(sqlDescriptor) zip
-      nested("server")(serverDescriptor)).to[AppConfig]
+  lazy val appDescriptor: Config[AppConfig] =
+    (spotifyDescriptor.nested("spotify") zip
+      sqlDescriptor.nested("db") zip
+      serverDescriptor.nested("server")).to[AppConfig]
 
-  lazy val spotifyServiceDescriptor: ConfigDescriptor[SpotifyServiceConfig] =
+  lazy val spotifyServiceDescriptor: Config[SpotifyServiceConfig] =
     (int("artist_cache_size") zip
       int("album_cache_size") zip
       int("user_cache_size") zip
       int("playlist_cache_size") zip
       int("liked_songs_cache_size")).to[SpotifyServiceConfig]
 
-  lazy val spotifyDescriptor: ConfigDescriptor[SpotifyConfig] =
+  lazy val spotifyDescriptor: Config[SpotifyConfig] =
     (string("client_id") zip
       string("client_secret") zip
       string("redirect_uri") zip
-      nested("service")(spotifyServiceDescriptor)).to[SpotifyConfig]
+      spotifyServiceDescriptor.nested("service")).to[SpotifyConfig]
 
-  lazy val sqlDescriptor: ConfigDescriptor[SqlConfig] =
+  lazy val sqlDescriptor: Config[SqlConfig] =
     (string("database") zip
       string("host") zip
       int("port") zip
       string("user") zip
       string("password")).to[SqlConfig]
 
-  lazy val serverDescriptor: ConfigDescriptor[ServerConfig] =
+  lazy val serverDescriptor: Config[ServerConfig] =
     (string("domain").optional zip
       string("frontend_url") zip
       int("port") zip
