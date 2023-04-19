@@ -1,10 +1,17 @@
 package muse.service.spotify
 
 import muse.config.SpotifyConfig
-import muse.domain.spotify.auth.{AuthCodeFlowData, ClientCredentialsFlowData, RefreshAuthData, SpotifyAuthDeserializationError, SpotifyAuthError, SpotifyAuthErrorResponse}
+import muse.domain.spotify.auth.{
+  AuthCodeFlowData,
+  ClientCredentialsFlowData,
+  RefreshAuthData,
+  SpotifyAuthDeserializationError,
+  SpotifyAuthError,
+  SpotifyAuthErrorResponse
+}
 import muse.service.UserSessions
-import zhttp.http.{Body, HeaderValues, Headers, Method, Path, Response, Scheme, Status, URL}
-import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
+import zio.http.model.{HeaderValues, Headers, Method, Scheme, Status}
+import zio.http.{Body, Client, Path, URL}
 import zio.json.*
 import zio.{Task, ZIO, ZLayer}
 
@@ -15,11 +22,12 @@ trait SpotifyAuthService {
 }
 
 object SpotifyAuthService {
-  val layer = ZLayer.fromZIO(for {
-    config         <- ZIO.service[SpotifyConfig]
-    eventLoopGroup <- ZIO.service[EventLoopGroup]
-    channelFactory <- ZIO.service[ChannelFactory]
-  } yield SpotifyAuthLive(config, eventLoopGroup, channelFactory))
+  val layer = ZLayer.fromZIO {
+    for {
+      config <- ZIO.service[SpotifyConfig]
+      client <- ZIO.service[Client]
+    } yield SpotifyAuthLive(config, client)
+  }
 
   def getClientCredentials = ZIO.serviceWithZIO[SpotifyAuthService](_.getClientCredentials)
 
@@ -30,21 +38,20 @@ object SpotifyAuthService {
 
 }
 
-case class SpotifyAuthLive(config: SpotifyConfig, eventLoopGroup: EventLoopGroup, channelFactory: ChannelFactory)
-    extends SpotifyAuthService {
+case class SpotifyAuthLive(config: SpotifyConfig, client: Client) extends SpotifyAuthService {
 
   val TOKEN_ENDPOINT = URL(
     Path.decode("/api/token"),
     URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
   )
 
-  val layer = ZLayer.succeed(eventLoopGroup) ++ ZLayer.succeed(channelFactory)
+  val layer = ZLayer.succeed(client)
 
   override def getClientCredentials = (for {
     response     <- executePost(Map("grant_type" -> "client_credentials"))
     body         <- response.body.asString
     deserialized <- deserializeBodyOrFail[ClientCredentialsFlowData](response.status, body)
-  } yield deserialized).provideLayer(layer)
+  } yield deserialized).provide(layer)
 
   override def getAuthCode(code: String) =
     (for {
@@ -56,7 +63,7 @@ case class SpotifyAuthLive(config: SpotifyConfig, eventLoopGroup: EventLoopGroup
                         ))
       body         <- response.body.asString
       deserialized <- deserializeBodyOrFail[AuthCodeFlowData](response.status, body)
-    } yield deserialized).provideLayer(layer)
+    } yield deserialized).provide(layer)
 
   override def requestNewAccessToken(refreshToken: String) =
     (for {
@@ -68,7 +75,7 @@ case class SpotifyAuthLive(config: SpotifyConfig, eventLoopGroup: EventLoopGroup
                         ))
       body         <- response.body.asString
       deserialized <- deserializeBodyOrFail[RefreshAuthData](response.status, body)
-    } yield deserialized).provideLayer(layer)
+    } yield deserialized).provide(layer)
 
   private def deserializeBodyOrFail[T: JsonDecoder](status: Status, body: String) =
     body

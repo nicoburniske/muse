@@ -15,11 +15,13 @@ import muse.service.{RequestSession, ReviewUpdates, UserSessions}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.Duration.*
-import zio.http.Server
+import zio.http.{Client, Server}
 import zio.logging.*
 import zio.logging.backend.SLF4J
 import zio.metrics.connectors.MetricsConfig
 import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, durationInt}
+
+import java.time.format.DateTimeFormatter
 
 object Main extends ZIOAppDefault {
   override def run = MuseServer
@@ -29,6 +31,7 @@ object Main extends ZIOAppDefault {
       Scope.default,
       AsyncHttpClientZioBackend.layer(),
       Server.default,
+      Client.default,
       // Spotify layers
       SpotifyAuthService.layer,
       SpotifyCache.layer,
@@ -53,12 +56,20 @@ object Main extends ZIOAppDefault {
 
   val metricsConfig = ZLayer.succeed(MetricsConfig(5.seconds))
 
-//  val eventLoopGroupLayer = for {
-//    serverConfig <- ZLayer.environment[ServerConfig]
-//    http         <- EventLoopGroup.auto(serverConfig.get.nThreads)
-//  } yield http
+  val logFormat = {
+    import zio.logging.LogFormat._
 
-  val logLayer = Runtime.removeDefaultLoggers >>> SLF4J.slf4j(LogLevel.Info, LogFormat.colored)
+    val userId = LogFormat.annotation("user_id")
 
-  override val bootstrap: ZLayer[ZIOAppArgs with Scope, Any, Any] = logLayer
+    label("timestamp", timestamp(DateTimeFormatter.ISO_LOCAL_DATE_TIME).fixed(28)).color(LogColor.BLUE) |-|
+      label("level", level).highlight |-|
+      label("thread", fiberId).color(LogColor.WHITE) |-|
+      (space + label("user_id", userId).highlight) |-|
+      label("message", quoted(line)).highlight +
+      (space + label("cause", cause).highlight).filter(LogFilter.causeNonEmpty)
+
+  }
+
+  val logLayer           = Runtime.removeDefaultLoggers >>> SLF4J.slf4j(logFormat)
+  override val bootstrap = logLayer
 }

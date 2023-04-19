@@ -1,11 +1,20 @@
 package muse.server.graphql
 
+import caliban.schema.{ArgBuilder, Schema}
 import muse.domain.common.EntityType
 import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
-import muse.domain.event.{CreatedComment, DeletedComment, ReviewUpdate, UpdatedComment}
+import muse.domain.event.ReviewUpdate.{CreatedComment, DeletedComment, UpdatedComment}
+import muse.domain.event.ReviewUpdate
 import muse.domain.mutate.*
 import muse.domain.session.UserSession
-import muse.domain.spotify.{ErrorReason, ErrorResponse, StartPlaybackBody, TransferPlaybackBody, UriOffset, PositionOffset as SpotifyPostionOffset}
+import muse.domain.spotify.{
+  ErrorReason,
+  ErrorResponse,
+  StartPlaybackBody,
+  TransferPlaybackBody,
+  UriOffset,
+  PositionOffset as SpotifyPostionOffset
+}
 import muse.domain.{spotify, table}
 import muse.server.graphql.subgraph.{Comment, Review}
 import muse.service.RequestSession
@@ -26,18 +35,18 @@ type MutationEnv   = RequestSession[UserSession] & DatabaseService & RequestSess
 type MutationError = Throwable | MuseError
 
 final case class Mutations(
-    createReview: Input[CreateReview] => ZIO[MutationEnv, MutationError, Review],
-    createComment: Input[CreateComment] => ZIO[MutationEnv, MutationError, Comment],
-    linkReviews: Input[LinkReviews] => ZIO[MutationEnv, MutationError, Boolean],
-    updateReviewLink: Input[UpdateReviewLink] => ZIO[MutationEnv, MutationError, Boolean],
-    updateReview: Input[UpdateReview] => ZIO[MutationEnv, MutationError, Review],
-    updateReviewEntity: Input[table.ReviewEntity] => ZIO[MutationEnv, MutationError, Review],
-    updateComment: Input[UpdateComment] => ZIO[MutationEnv, MutationError, Comment],
-    updateCommentIndex: Input[UpdateCommentIndex] => ZIO[MutationEnv, MutationError, Boolean],
-    deleteReview: Input[DeleteReview] => ZIO[MutationEnv, MutationError, Boolean],
-    deleteComment: Input[DeleteComment] => ZIO[MutationEnv, MutationError, Boolean],
-    deleteReviewLink: Input[DeleteReviewLink] => ZIO[MutationEnv, MutationError, Boolean],
-    shareReview: Input[ShareReview] => ZIO[MutationEnv, MutationError, Boolean]
+    createReview: CreateReviewInput => ZIO[MutationEnv, MutationError, Review],
+    createComment: CreateCommentInput => ZIO[MutationEnv, MutationError, Comment],
+    linkReviews: LinkReviewsInput => ZIO[MutationEnv, MutationError, Boolean],
+    updateReviewLink: UpdateReviewLinkInput => ZIO[MutationEnv, MutationError, Boolean],
+    updateReview: UpdateReviewInput => ZIO[MutationEnv, MutationError, Review],
+    updateReviewEntity: UpdateReviewEntityInput => ZIO[MutationEnv, MutationError, Review],
+    updateComment: UpdateCommentInput => ZIO[MutationEnv, MutationError, Comment],
+    updateCommentIndex: UpdateCommentIndexInput => ZIO[MutationEnv, MutationError, Boolean],
+    deleteReview: DeleteReviewInput => ZIO[MutationEnv, MutationError, Boolean],
+    deleteComment: DeleteCommentInput => ZIO[MutationEnv, MutationError, Boolean],
+    deleteReviewLink: DeleteReviewLinkInput => ZIO[MutationEnv, MutationError, Boolean],
+    shareReview: ShareReviewInput => ZIO[MutationEnv, MutationError, Boolean]
 )
 
 object Mutations {
@@ -119,12 +128,13 @@ object Mutations {
     details <- DatabaseService.getReviewEntity(update.reviewId)
   } yield Review.fromTable(review, details)
 
-  def updateReviewEntity(update: table.ReviewEntity) = for {
+  def updateReviewEntity(update: UpdateReviewEntity) = for {
     user        <- RequestSession.get[UserSession]
     _           <- validateReviewPermissions(user.userId, update.reviewId)
-    maybeReview <- DatabaseService.getReview(update.reviewId) <&> updateReviewEntityFromTable(update)
+    asTable      = update.toTable
+    maybeReview <- DatabaseService.getReview(update.reviewId) <&> updateReviewEntityFromTable(asTable)
     review      <- ZIO.fromOption(maybeReview).orElseFail(BadRequest(Some("Review not found.")))
-  } yield Review.fromTable(review, Some(update))
+  } yield Review.fromTable(review, Some(asTable))
 
   val updateCommentMetric                  = timer("UpdateComment", ChronoUnit.MILLIS)
   def updateComment(update: UpdateComment) = (for {

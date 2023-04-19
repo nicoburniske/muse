@@ -1,6 +1,7 @@
 package muse.server.graphql
 
 import caliban.schema.Annotations.GQLDefault
+import caliban.schema.{ArgBuilder, Schema}
 import muse.domain.common.EntityType
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
@@ -16,17 +17,17 @@ import zio.query.ZQuery
 
 import java.util.UUID
 
-final case class UserArgs(id: Option[String])
-final case class SearchUserArgs(displayName: String)
-final case class ReviewArgs(id: UUID)
-final case class ReviewsArgs(reviewIds: List[UUID])
+final case class UserArgs(id: Option[String]) derives Schema.SemiAuto, ArgBuilder
+final case class SearchUserArgs(displayName: String) derives Schema.SemiAuto, ArgBuilder
+final case class ReviewArgs(id: UUID) derives Schema.SemiAuto, ArgBuilder
+final case class ReviewsArgs(reviewIds: List[UUID]) derives Schema.SemiAuto, ArgBuilder
 
 final case class SearchArgs(
     query: String,
     types: Set[EntityType],
-    @GQLDefault(Default.Search.annotation) pagination: Option[Pagination])
+    @GQLDefault(Default.Search.annotation) pagination: Option[Pagination]) derives Schema.SemiAuto, ArgBuilder
 
-final case class EntityId(id: String)
+final case class EntityId(id: String) derives Schema.SemiAuto, ArgBuilder
 // TODO: Integrate "Input" for arguments.
 final case class Queries(
     user: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Nothing, User],
@@ -37,7 +38,7 @@ final case class Queries(
       List[User]],
     review: ReviewArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, Option[Review]],
     reviews: ReviewsArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]],
-    search: SearchArgs => ZQuery[RequestSession[SpotifyService], Throwable, SearchResult],
+//    search: SearchArgs => ZQuery[RequestSession[SpotifyService], Throwable, SearchResult],
     getPlaylist: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Playlist],
     getAlbum: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Album],
     getTrack: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Track]
@@ -50,7 +51,7 @@ object Queries {
     args => GetUser.fromDisplayName(args.displayName),
     args => GetReview.query(args.id),
     args => GetReview.multiQuery(args.reviewIds),
-    args => GetSearch.query(args.query, args.types, args.pagination.getOrElse(Default.Search)),
+//    args => GetSearch.query(args.query, args.types, args.pagination.getOrElse(Default.Search)),
     args => GetPlaylist.query(args.id),
     args => GetAlbum.query(args.id),
     args => GetTrack.query(args.id)

@@ -1,5 +1,6 @@
 package muse.server.graphql.subgraph
 
+import caliban.schema.Schema
 import muse.domain.spotify
 import muse.server.graphql.resolver.GetSpotifyProfile
 import muse.service.RequestSession
@@ -14,6 +15,7 @@ final case class SpotifyProfile(
     externalUrls: Map[String, String],
     images: List[String],
     numFollowers: Option[Int])
+    derives Schema.SemiAuto
 
 object SpotifyProfile {
   def fromSpotify(u: spotify.PublicUser): SpotifyProfile = {

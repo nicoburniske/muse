@@ -15,3 +15,4 @@ final case class CreateComment(
     // If none, will be added to the end of the list.
     commentIndex: Option[Int]
 )
+final case class CreateCommentInput(input: CreateComment)

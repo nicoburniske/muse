@@ -10,3 +10,4 @@ final case class UpdateComment(
     reviewId: UUID,
     comment: String
 )
+final case class UpdateCommentInput(input: UpdateComment)

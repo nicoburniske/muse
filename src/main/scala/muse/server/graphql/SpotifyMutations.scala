@@ -21,11 +21,11 @@ import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, Mus
 
 type SpotifyMutationEnv = RequestSession[UserSession] & RequestSession[SpotifyService]
 case class SpotifyMutations(
-    play: Input[Play] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
+    play: PlayInput => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     transferPlayback: Input[TransferPlayback] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
-    playTracks: Input[PlayTracks] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
-    playOffsetContext: Input[PlayOffsetContext] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
-    playEntityContext: Input[PlayEntityContext] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
+    playTracks: PlayTracksInput => ZIO[SpotifyMutationEnv, Throwable, Boolean],
+    playOffsetContext: PlayOffsetContextInput => ZIO[SpotifyMutationEnv, Throwable, Boolean],
+    playEntityContext: PlayEntityContextInput => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     seekPlayback: Input[SeekPlayback] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     pausePlayback: AlterPlayback => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     skipToNext: AlterPlayback => ZIO[SpotifyMutationEnv, Throwable, Boolean],
@@ -36,7 +36,6 @@ case class SpotifyMutations(
 )
 
 object SpotifyMutations {
-
   val live = SpotifyMutations(
     i => play(i.input),
     i => transferPlayback(i.input),

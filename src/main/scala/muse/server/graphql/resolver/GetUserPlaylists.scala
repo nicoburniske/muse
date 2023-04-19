@@ -5,10 +5,11 @@ import muse.service.spotify.SpotifyService
 import muse.server.graphql.subgraph.Playlist
 import muse.domain.session.UserSession
 import muse.server.graphql.Pagination
+import caliban.schema.Schema
 import zio.ZIO
 import zio.query.ZQuery
 
-final case class UserPlaylistsInput(pagination: Option[Pagination])
+final case class UserPlaylistsInput(pagination: Option[Pagination]) derives Schema.SemiAuto
 
 object GetUserPlaylists:
   def boxedQuery(userId: String)(input: UserPlaylistsInput)

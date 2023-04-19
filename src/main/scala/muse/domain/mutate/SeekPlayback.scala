@@ -1,3 +1,4 @@
 package muse.domain.mutate
 
-case class SeekPlayback(deviceId: Option[String], positionMs: Int)
+import caliban.schema.{ArgBuilder, Schema}
+final case class SeekPlayback(deviceId: Option[String], positionMs: Int) derives Schema.SemiAuto, ArgBuilder

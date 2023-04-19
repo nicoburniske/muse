@@ -16,21 +16,13 @@ import sttp.client3.SttpBackend
 import zio.*
 import zio.http.Http.Route
 import zio.http.model.HttpError
-import zio.http.{Handler, Http, Request, Response}
+import zio.http.{Handler, Http, Request, RequestHandlerMiddleware, Response}
 import zio.stream.ZStream
 
 import java.time.Instant
 
 object MuseMiddleware {
   def checkAuthAddSession[R](app: Http[R, Throwable, Request, Response]) =
-//    new Route[
-//      RequestSession[SpotifyService] with RequestSession[UserSession] with UserSessions,
-//      // None if no match.
-//      Option[Response],
-//      Request,
-//      Response
-//    ] {
-//      override def run(request: Request) = {
     Http.fromOptionalHandlerZIO[Request] { request =>
       extractRequestAuth(request) match
         case None       => ZIO.fail(Some(Unauthorized("Missing Auth").response))
@@ -43,7 +35,9 @@ object MuseMiddleware {
             _       <- RequestSession.set[UserSession](Some(session))
             _       <- RequestSession.set[SpotifyService](Some(session.spotifyService))
             bulkHead = session.bulkhead
-            result   <- bulkHead(app.runZIO(request)).mapBoth(
+            result  <- bulkHead {
+                         (app @@ debug ).runZIO(request)
+                       }.mapBoth(
                          {
                            case WrappedError(None)                  => None
                            case WrappedError(Some(u: Unauthorized)) => Some(u.response)
@@ -53,29 +47,14 @@ object MuseMiddleware {
                          },
                          Handler.response
                        )
-          } yield result 
+          } yield result
     }
+
 
   private def extractRequestAuth(request: Request) = request
     .cookieValue(COOKIE_KEY)
     .orElse(request.authorization)
     .map(_.toString)
-//
-//  val handleErrors: HttpMiddleware[Any, Throwable] = new HttpMiddleware[Any, Throwable] {
-//    override def apply[R1 <: Any, E1 >: Throwable](http: Http[R1, E1, Request, Response]) = http
-//      .tapErrorZIO {
-//        case u: MuseError => ZIO.logInfo(u.message)
-//        case t: Throwable =>
-//          val cause   = Option(t.getCause).map(_.toString).getOrElse("")
-//          val message = s"Something went wrong!. Exception: ${t.toString}. cause:$cause"
-//          ZIO.logError(message)
-//      }.catchAll {
-//        case u: Unauthorized => u.http
-//        case RateLimited     => RateLimited.http
-//        case t: Throwable    =>
-//          Http.error(HttpError.InternalServerError("Something went wrong.", Some(t)))
-//      }
-//  }
 
   /**
    * Logs the requests made to the server.
@@ -83,25 +62,32 @@ object MuseMiddleware {
    * It also adds a request ID to the logging context, so any further logging that occurs in the handler can be associated with
    * the same request.
    */
-//  val requestLoggingTrace: HttpMiddleware[Any, Nothing] = new HttpMiddleware[Any, Nothing] {
-//    override def apply[R1 <: Any, E1 >: Nothing](
-//        http: Http[R1, E1, Request, Response]
-//    ): Http[R1, E1, Request, Response] =
-//      Http.fromOptionFunction[Request] { request =>
-//        Random.nextUUID.flatMap { requestId =>
-//          ZIO.logAnnotate("trace_id", requestId.toString) {
-//            http(request)
-//          }
-//        }
-//      }
-//  }
+
+  /**
+   * Add log status, method, url and time taken from req to res
+   */
+  final def debug: RequestHandlerMiddleware.Simple[Any, Nothing] =
+    new RequestHandlerMiddleware.Simple[Any, Nothing] {
+      override def apply[R1 <: Any, Err1 >: Nothing](
+          handler: Handler[R1, Err1, Request, Response]
+      )(implicit trace: Trace): Handler[R1, Err1, Request, Response] =
+        Handler.fromFunctionZIO { request =>
+          for {
+            traceId             <- Random.nextUUID
+            withTime            <- ZIO.logAnnotate("trace-id", traceId.toString) {
+                                     handler.runZIO(request).timed
+                                   }
+            (duration, response) = withTime
+            _                   <- ZIO.logInfo(s"${response.status.code} ${request.method} ${request.url.encode} ${duration.toMillis}ms")
+          } yield response
+        }
+    }
 
   object Websockets {
 
     private val makeSessionRef = Ref.make[Option[UserSession]](None)
 
     def live[R](interpreter: GraphQLInterpreter[R, CalibanError]) =
-//        : Http[UserSessions & RequestSession[SpotifyService] & RequestSession[UserSession], Response, Request, Response] =
       Http.fromHttpZIO[Request] { request =>
         val maybeAuth = extractRequestAuth(request)
         MuseMiddleware.Websockets.configure(interpreter, maybeAuth).map { app =>

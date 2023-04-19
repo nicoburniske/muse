@@ -8,11 +8,11 @@ import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.service.{RequestSession, UserSessions}
 import sttp.client3.SttpBackend
-import zhttp.http.*
-import zhttp.http.Middleware.csrfGenerate
-import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
+import zio.http.{Http, Request, Response}
+import zio.http.model.{Cookie, HttpError, Method, Scheme}
+import zio.http.*
 import zio.json.*
-import zio.{Cause, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer, durationInt}
+import zio.{Cause, Chunk, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer, durationInt}
 
 object Auth {
   val scopes = List(
@@ -48,25 +48,31 @@ object Auth {
           .get("code")
           .flatMap(_.headOption)
           .fold {
-            ZIO.succeed(Response(status = Status.BadRequest, body = Body.fromString("Missing 'code' query parameter")))
+            ZIO.fail(Response.fromHttpError(HttpError.BadRequest("Missing 'code' query parameter")))
           } { code =>
-            for {
-              authData     <- SpotifyAuthService.getAuthCode(code)
-              _            <- ZIO.logInfo("Received auth data for login")
-              newSessionId <- handleUserLogin(authData)
-              config       <- ZIO.service[ServerConfig]
-              _            <- ZIO.logInfo(s"Successfully added session.")
-            } yield {
-              val cookie = Cookie(
-                COOKIE_KEY,
-                newSessionId,
-                isSecure = true,
-                isHttpOnly = true,
-                maxAge = Some(365.days.toSeconds),
-                // On localhost dev, we don't want a cookie domain.
-                domain = config.domain
-              )
-              Response.redirect(config.frontendUrl).addCookie(cookie)
+            {
+              for {
+                authData     <- SpotifyAuthService.getAuthCode(code)
+                _            <- ZIO.logInfo("Received auth data for login")
+                newSessionId <- handleUserLogin(authData)
+                config       <- ZIO.service[ServerConfig]
+                _            <- ZIO.logInfo(s"Successfully added session.")
+              } yield {
+                val cookie = Cookie(
+                  COOKIE_KEY,
+                  newSessionId,
+                  isSecure = true,
+                  isHttpOnly = true,
+                  maxAge = Some(365.days.toSeconds),
+                  // On localhost dev, we don't want a cookie domain.
+                  domain = config.domain
+                )
+                Response.redirect(config.frontendUrl).addCookie(cookie)
+              }
+            }.flatMapError { cause =>
+              ZIO.logError(s"Failed to login user: ${cause.toString}") as Response.fromHttpError {
+                HttpError.InternalServerError("Failed to login user.")
+              }
             }
           }
     }
@@ -91,23 +97,18 @@ object Auth {
       } yield Response.text(newSession.accessToken)
   }
 
-  lazy val logEndpoint = Middleware
-    .identity[Request, Response].contramapZIO[Request](request => {
-      ZIO.logInfo(s"Request: ${request.method} ${request.url}").as(request)
-    })
-
   val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {
     c     <- ZIO.service[SpotifyConfig]
     state <- Random.nextUUID
   } yield URL(
     Path.decode("/authorize"),
     URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443),
-    Map(
-      "response_type" -> List("code"),
-      "client_id"     -> List(c.clientID),
-      "redirect_uri"  -> List(c.redirectURI),
-      "scope"         -> List(scopes),
-      "state"         -> List(state.toString.take(15))
+    QueryParams(
+      "response_type" -> Chunk("code"),
+      "client_id"     -> Chunk(c.clientID),
+      "redirect_uri"  -> Chunk(c.redirectURI),
+      "scope"         -> Chunk(scopes),
+      "state"         -> Chunk(state.toString.take(15))
     )
   )
 
