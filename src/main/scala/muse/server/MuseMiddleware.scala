@@ -16,40 +16,41 @@ import sttp.client3.SttpBackend
 import zio.*
 import zio.http.Http.Route
 import zio.http.model.HttpError
+import zio.http.middleware.*
 import zio.http.{Handler, Http, Request, RequestHandlerMiddleware, Response}
 import zio.stream.ZStream
 
 import java.time.Instant
 
 object MuseMiddleware {
-  def checkAuthAddSession[R](app: Http[R, Throwable, Request, Response]) =
-    Http.fromOptionalHandlerZIO[Request] { request =>
-      extractRequestAuth(request) match
-        case None       => ZIO.fail(Some(Unauthorized("Missing Auth").response))
-        case Some(auth) =>
+
+  type Sessions = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]
+  final def InjectSessionAndRateLimit: RequestHandlerMiddleware.Simple[Sessions, Throwable] =
+    new RequestHandlerMiddleware.Simple[Sessions, Throwable] {
+      override def apply[Env <: Sessions, Err >: Throwable](handler: Handler[Env, Err, Request, Response])(
+          implicit trace: Trace): Handler[Env, Err, Request, Response] =
+        Handler.fromFunctionZIO[Request] { request =>
+          // Init Session.
           for {
-            session <- UserSessions.getUserSession(auth).mapError {
-                         case u: Unauthorized => Some(u.response)
-                         case t: Throwable    => Some(Response.fromHttpError(HttpError.InternalServerError(t.getMessage)))
-                       }
+            session <- {
+              extractRequestAuth(request) match
+                case None        => ZIO.fail(Unauthorized("Missing Auth Header"))
+                case Some(value) => UserSessions.getUserSession(value)
+            }
             _       <- RequestSession.set[UserSession](Some(session))
             _       <- RequestSession.set[SpotifyService](Some(session.spotifyService))
-            bulkHead = session.bulkhead
-            result  <- bulkHead {
-                         (app @@ debug ).runZIO(request)
-                       }.mapBoth(
-                         {
-                           case WrappedError(None)                  => None
-                           case WrappedError(Some(u: Unauthorized)) => Some(u.response)
-                           case WrappedError(Some(e: Throwable))    =>
-                             Some(Response.fromHttpError(HttpError.InternalServerError(e.getMessage)))
-                           case Bulkhead.BulkheadRejection          => Some(RateLimited.response)
-                         },
-                         Handler.response
-                       )
-          } yield result
-    }
 
+            // Run handler with bulkhead.
+            result <- session
+                        .bulkhead {
+                          handler.runZIO(request)
+                        }.mapError {
+                          case WrappedError(error)        => error
+                          case Bulkhead.BulkheadRejection => RateLimited
+                        }
+          } yield result
+        }
+    }
 
   private def extractRequestAuth(request: Request) = request
     .cookieValue(COOKIE_KEY)
@@ -90,19 +91,15 @@ object MuseMiddleware {
     def live[R](interpreter: GraphQLInterpreter[R, CalibanError]) =
       Http.fromHttpZIO[Request] { request =>
         val maybeAuth = extractRequestAuth(request)
-        MuseMiddleware.Websockets.configure(interpreter, maybeAuth).map { app =>
-          app.mapError {
-            case t: Throwable => Response.fromHttpError(HttpError.InternalServerError(t.getMessage))
-            case o: Response  => o
-          }
-        }
+        MuseMiddleware.Websockets.configure(interpreter, maybeAuth)
       }
 
     def configure[R](interpreter: GraphQLInterpreter[R, CalibanError], maybeUserSessionId: Option[String]) = for {
       ref        <- makeSessionRef
       authSession = createSession[UserSession](ref)
-      // Authorize with cookie!
-      _          <- initSession(authSession, maybeUserSessionId).ignore
+
+      // Authorize with cookie! Ignored because we can also authorize with payload.
+      _ <- initSession(authSession, maybeUserSessionId).ignore
     } yield {
       // Authorize with input value!
       val connectionInit = WebSocketHooks.init { payload =>

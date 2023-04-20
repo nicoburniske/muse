@@ -30,7 +30,7 @@ object Main extends ZIOAppDefault {
       ZLayer.Debug.mermaid,
       Scope.default,
       AsyncHttpClientZioBackend.layer(),
-      Server.default,
+      serverConfig,
       Client.default,
       // Spotify layers
       SpotifyAuthService.layer,
@@ -53,6 +53,8 @@ object Main extends ZIOAppDefault {
     )
     .tapErrorCause(e => ZIO.logErrorCause(s"Failed to start server ${e.prettyPrint}", e))
     .exitCode
+
+  val serverConfig = ZLayer.fromFunction { (config: ServerConfig) => Server.defaultWithPort(config.port) }.flatten
 
   val metricsConfig = ZLayer.succeed(MetricsConfig(5.seconds))
 
