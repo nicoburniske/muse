@@ -11,7 +11,7 @@ import muse.server.graphql.MuseGraphQL
 import muse.server.{Auth, MuseMiddleware, MuseServer}
 import muse.service.persist.{DatabaseService, MigrationService, QuillContext}
 import muse.service.spotify.{RateLimitRef, SpotifyAuthService, SpotifyCache}
-import muse.service.{RequestSession, ReviewUpdates, UserSessions}
+import muse.service.{RedisService, RequestSession, ReviewUpdates, UserSessions}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.Duration.*
@@ -19,6 +19,7 @@ import zio.http.{Client, Server}
 import zio.logging.*
 import zio.logging.backend.SLF4J
 import zio.metrics.connectors.MetricsConfig
+import zio.redis.{Redis, RedisExecutor}
 import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, durationInt}
 
 import java.time.format.DateTimeFormatter
@@ -39,6 +40,8 @@ object Main extends ZIOAppDefault {
       // Muse layers.
       AppConfig.layer,
       DatabaseService.layer,
+      RedisService.layer,
+      RedisService.redisLayer,
       MigrationService.layer,
       UserSessions.layer,
       ReviewUpdates.hub,

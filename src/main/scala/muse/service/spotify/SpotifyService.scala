@@ -6,13 +6,15 @@ import muse.domain.common.EntityType
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.*
-import muse.service.{RequestSession, UserSessions}
+import muse.service.{RequestSession, UserSessions, RedisService}
 import muse.utils.Givens
 import muse.utils.Givens.given
 import sttp.client3.SttpBackend
 import sttp.model.StatusCode
 import zio.cache.{Cache, Lookup}
+import zio.redis.Redis
 import zio.{Clock, Ref, Task, ZEnvironment, ZIO, ZLayer, durationInt}
+import muse.utils.Utils.addTimeLog
 
 trait SpotifyService {
   def getCurrentUserProfile: Task[PrivateUser]
@@ -57,19 +59,20 @@ trait SpotifyService {
 object SpotifyService {
 
   def live(accessToken: String) = for {
-    backend       <- ZIO.service[SttpBackend[Task, Any]]
+    backend    <- ZIO.service[SttpBackend[Task, Any]]
     // RetryAfter time in seconds.
-    retryAfter    <- ZIO.service[Ref[Option[Long]]]
-    asLibRef       = Givens.zioRef(retryAfter)
-    spotify        = SpotifyAPI(backend, asLibRef, accessToken)
-    // Given permissions vary, we want to create cache per instance to avoid conflicts.
-    likeCache     <- SpotifyCache.savedSongsCache
-    playlistCache <- SpotifyCache.playlistCache(spotify)
-    // These are global caches that we can share across instances.
-    artistCache   <- ZIO.service[zcaffeine.Cache[Any, String, Artist]]
-    albumCache    <- ZIO.service[zcaffeine.Cache[Any, String, Album]]
-    userCache     <- ZIO.service[zcaffeine.Cache[Any, String, PublicUser]]
-  } yield SpotifyServiceLive(spotify, likeCache, playlistCache, artistCache, albumCache, userCache)
+    retryAfter <- ZIO.service[Ref[Option[Long]]]
+    asLibRef    = Givens.zioRef(retryAfter)
+    spotify     = SpotifyAPI(backend, asLibRef, accessToken)
+//    // Given permissions vary, we want to create cache per instance to avoid conflicts.
+//    likeCache     <- SpotifyCache.savedSongsCache
+//    playlistCache <- SpotifyCache.playlistCache(spotify)
+//    // These are global caches that we can share across instances.
+//    artistCache   <- ZIO.service[zcaffeine.Cache[Any, String, Artist]]
+//    albumCache    <- ZIO.service[zcaffeine.Cache[Any, String, Album]]
+//    userCache     <- ZIO.service[zcaffeine.Cache[Any, String, PublicUser]]
+    redis      <- ZIO.service[Redis]
+  } yield SpotifyServiceLive(spotify, redis)
 
   def getCurrentUserProfile = ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserProfile)
 
@@ -161,19 +164,28 @@ object SpotifyService {
 
 case class SpotifyServiceLive(
     s: SpotifyAPI[Task],
-    likeCache: zcaffeine.Cache[Any, String, Boolean],
-    playlistCache: Cache[PlaylistInput, Throwable, SinglePlaylist],
-    artistCache: zcaffeine.Cache[Any, String, Artist],
-    albumCache: zcaffeine.Cache[Any, String, Album],
-    userCache: zcaffeine.Cache[Any, String, PublicUser]
+    redis: Redis
 ) extends SpotifyService {
+
+  import zio.schema.{DeriveSchema, Schema}
+  import zio.durationInt
+
+  given Schema[SinglePlaylist] = DeriveSchema.gen[SinglePlaylist]
+  given Schema[Artist]         = DeriveSchema.gen[Artist]
+  given Schema[Track]          = DeriveSchema.gen[Track]
+  given Schema[Album]          = DeriveSchema.gen[Album]
+  given Schema[PublicUser]     = DeriveSchema.gen[PublicUser]
+
+  val redisService = RedisService(redis)
+
   def getCurrentUserProfile                          = s.getCurrentUserProfile
   def getTrackRecommendations(input: TrackRecsInput) = s.getTrackRecommendations(input).map(_.tracks)
 
   def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None) =
     s.search(query, entityTypes, limit, offset)
 
-  def getUserProfile(userId: String) = userCache.get(userId)(userId => s.getUserProfile(userId))
+  def getUserProfile(userId: String) =
+    redisService.cacheOrExecute("user:" + userId, 10.minutes)(s.getUserProfile(userId))
 
   def isValidEntity(entityId: String, entityType: EntityType) =
     entityType match
@@ -183,7 +195,7 @@ case class SpotifyServiceLive(
       case EntityType.Track    => getTrack(entityId).isSuccess
 
   def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None) =
-    playlistCache.get(PlaylistInput(playlistId, fields, market))
+    redisService.cacheOrExecute("playlist:" + playlistId, 1.minute)(s.getPlaylist(playlistId, fields, market))
 
   def getTrack(id: String, market: Option[String] = None) =
     s.getTrack(id, market)
@@ -200,24 +212,30 @@ case class SpotifyServiceLive(
   def getTracksAudioFeatures(ids: Vector[String]) =
     s.getTracksAudioFeatures(ids)
 
-  def getArtist(id: String): Task[Artist] = artistCache.get(id)(s.getArtist)
+  private def artistKey(id: String) = "artist:" + id
+
+  def getArtist(id: String): Task[Artist] =
+    redisService.cacheOrExecute("artist:" + id, 30.minutes)(s.getArtist(id))
 
   def getArtists(ids: Seq[String]): Task[Vector[Artist]] =
-    artistCache
-      .getAll(ids.toSet) { ids =>
+    redisService
+      .cacheOrExecuteBulk(ids.map(artistKey).toList) { ids =>
         for {
           artists <- s.getArtists(ids.toVector)
-        } yield artists.map(a => a.id -> a).toMap
+        } yield artists.map(a => artistKey(a.id) -> a).toMap
       }.map(_.values.toVector)
 
-  def getAlbum(id: String): Task[Album] = albumCache.get(id)(s.getAlbum)
+  private def albumKey(id: String) = "album:" + id
+
+  def getAlbum(id: String): Task[Album] =
+    redisService.cacheOrExecute(albumKey(id), 2.hours)(s.getAlbum(id))
 
   def getAlbums(ids: Seq[String]): Task[Vector[Album]] =
-    albumCache
-      .getAll(ids.toSet) { ids =>
+    redisService
+      .cacheOrExecuteBulk(ids.map(albumKey).toList) { ids =>
         for {
           albums <- s.getAlbums(ids.toVector)
-        } yield albums.map(a => a.id -> a).toMap
+        } yield albums.map(a => albumKey(a.id) -> a).toMap
       }.map(_.values.toVector)
 
   def getUserPlaylists(userId: String, limit: Int, offset: Option[Int] = None) =
@@ -250,12 +268,7 @@ case class SpotifyServiceLive(
     s.getArtistTopTracks(artistId, country)
 
   def checkUserSavedTracks(trackIds: Vector[String]): Task[Vector[(String, Boolean)]] =
-    likeCache
-      .getAll(trackIds.toSet) { ids =>
-        for {
-          likes <- s.checkUserSavedTracks(ids.toVector)
-        } yield likes.toMap
-      }.map(_.toVector)
+    s.checkUserSavedTracks(trackIds)
 
   def startPlayback(device: Option[String], startPlaybackBody: Option[StartPlaybackBody]) =
     s.startPlayback(device, startPlaybackBody)
@@ -264,12 +277,8 @@ case class SpotifyServiceLive(
   def transferPlayback(deviceId: String)                      = s.transferPlayback(deviceId)
   def seekPlayback(deviceId: Option[String], positionMs: Int) = s.seekPlayback(deviceId, positionMs)
 
-  def saveTracks(trackIds: Vector[String])                              =
-    s.saveTracks(trackIds) <* toggleSaveTracks(trackIds, true)
-  def removeSavedTracks(trackIds: Vector[String])                       =
-    s.removeSavedTracks(trackIds) <* toggleSaveTracks(trackIds, false)
-  private def toggleSaveTracks(trackIds: Vector[String], save: Boolean) =
-    ZIO.foreachPar(trackIds)(id => likeCache.put(id, ZIO.succeed(save)))
+  def saveTracks(trackIds: Vector[String])        = s.saveTracks(trackIds)
+  def removeSavedTracks(trackIds: Vector[String]) = s.removeSavedTracks(trackIds)
 
   def currentPlaybackState                     = s.getPlaybackState
   def pausePlayback(deviceId: Option[String])  = s.pausePlayback(deviceId)

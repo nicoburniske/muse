@@ -20,6 +20,7 @@ import java.time.temporal.ChronoUnit
 
 trait UserSessions {
   def getUserSession(sessionId: String): IO[Throwable, UserSession]
+  def getUserBulkhead(sessionId: String): UIO[Bulkhead]
   def deleteUserSession(sessionId: String): IO[Throwable, Boolean]
   def refreshUserSession(sessionId: String): IO[Throwable, UserSession]
 }
@@ -33,12 +34,19 @@ object UserSessions {
                            59.minutes,
                            Lookup(getUserSessionLive)
                          )
+      // This is a cache just to make sure we don't grow forever?
+      bulkheadCache   <- Cache.make(
+                           10000,
+                           1.hour,
+                           Lookup((_: String) => Bulkhead.make(maxInFlightCalls = 5, maxQueueing = 5))
+                         )
       databaseService <- ZIO.service[DatabaseService]
       _               <- startCacheReporter(cache)
-    } yield UserSessionsLive(cache, databaseService)
+    } yield UserSessionsLive(cache, bulkheadCache, databaseService)
   }
 
   def getUserSession(sessionId: String)     = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
+  def getUserBulkhead(sessionId: String)    = ZIO.serviceWithZIO[UserSessions](_.getUserBulkhead(sessionId))
   def deleteUserSession(sessionId: String)  = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
   def refreshUserSession(sessionId: String) = ZIO.serviceWithZIO[UserSessions](_.refreshUserSession(sessionId))
 
@@ -48,9 +56,7 @@ object UserSessions {
     authInfo     <- SpotifyAuthService
                       .requestNewAccessToken(session.refreshToken)
                       .retry(retrySchedule)
-    spotify      <- SpotifyService.live(authInfo.accessToken)
-    bulkhead     <- Bulkhead.make(maxInFlightCalls = 5, maxQueueing = 0)
-  } yield UserSession(sessionId, session.userId, authInfo.accessToken, spotify, bulkhead)
+  } yield UserSession(sessionId, session.userId, authInfo.accessToken)
 
   def startCacheReporter(cache: Cache[String, Throwable, UserSession]) = {
     val reporter = CacheUtils.ZioCacheStatReporter("user_sessions", cache)
@@ -63,17 +69,25 @@ object UserSessions {
   }
 }
 
-final case class UserSessionsLive(cache: Cache[String, Throwable, UserSession], databaseService: DatabaseService)
+final case class UserSessionsLive(
+    userCache: Cache[String, Throwable, UserSession],
+    bulkheadCache: Cache[String, Nothing, Bulkhead],
+    databaseService: DatabaseService)
     extends UserSessions {
-  override def getUserSession(sessionId: String)     = getSession(sessionId)
-  override def refreshUserSession(sessionId: String) = cache.invalidate(sessionId) *> getSession(sessionId)
 
-  private def getSession(sessionId: String) = cache.get(sessionId).flatMapError {
+  override def getUserSession(sessionId: String)     = getSession(sessionId)
+  override def getUserBulkhead(sessionId: String)    = bulkheadCache.get(sessionId)
+  override def refreshUserSession(sessionId: String) = userCache.invalidate(sessionId) *> getSession(sessionId)
+
+  private def getSession(sessionId: String) = userCache.get(sessionId).flatMapError {
     // After we get a revocation error delete the session from DB.
     case SpotifyAuthError(_, SpotifyAuthErrorResponse.revoked) =>
       deleteUserSession(sessionId).ignore *> ZIO.succeed(Unauthorized("User Session Revoked."))
     case e                                                     => ZIO.succeed(e)
   }
 
-  override def deleteUserSession(sessionId: String) = cache.invalidate(sessionId) *> databaseService.deleteUserSession(sessionId)
+  override def deleteUserSession(sessionId: String) =
+    bulkheadCache.invalidate(sessionId) *>
+      userCache.invalidate(sessionId) *>
+      databaseService.deleteUserSession(sessionId)
 }

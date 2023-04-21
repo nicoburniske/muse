@@ -18,36 +18,43 @@ import zio.http.Http.Route
 import zio.http.model.HttpError
 import zio.http.middleware.*
 import zio.http.{Handler, Http, Request, RequestHandlerMiddleware, Response}
+import zio.redis.Redis
 import zio.stream.ZStream
 
 import java.time.Instant
 
 object MuseMiddleware {
 
-  type Sessions = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]
-  final def InjectSessionAndRateLimit: RequestHandlerMiddleware.Simple[Sessions, Throwable] =
-    new RequestHandlerMiddleware.Simple[Sessions, Throwable] {
-      override def apply[Env <: Sessions, Err >: Throwable](handler: Handler[Env, Err, Request, Response])(
+  type SessionEnv = Redis & UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService] & SttpBackend[Task, Any] &
+    Ref[Option[Long]]
+
+  final def InjectSessionAndRateLimit: RequestHandlerMiddleware.Simple[SessionEnv, Throwable] =
+    new RequestHandlerMiddleware.Simple[SessionEnv, Throwable] {
+      override def apply[Env <: SessionEnv, Err >: Throwable](handler: Handler[Env, Err, Request, Response])(
           implicit trace: Trace): Handler[Env, Err, Request, Response] =
         Handler.fromFunctionZIO[Request] { request =>
           // Init Session.
           for {
-            session <- {
+            sessionData        <- {
               extractRequestAuth(request) match
-                case None        => ZIO.fail(Unauthorized("Missing Auth Header"))
-                case Some(value) => UserSessions.getUserSession(value)
+                case None            => ZIO.fail(Unauthorized("Missing Auth Header"))
+                case Some(sessionId) =>
+                  UserSessions.getUserSession(sessionId) <&>
+                    UserSessions.getUserBulkhead(sessionId)
             }
-            _       <- RequestSession.set[UserSession](Some(session))
-            _       <- RequestSession.set[SpotifyService](Some(session.spotifyService))
+            (session, bulkhead) = sessionData
+            _                  <- RequestSession.set[UserSession](Some(session))
+            spotify            <- SpotifyService.live(session.accessToken)
+            _                  <- RequestSession.set[SpotifyService](Some(spotify))
 
             // Run handler with bulkhead.
-            result <- session
-                        .bulkhead {
-                          handler.runZIO(request)
-                        }.mapError {
-                          case WrappedError(error)        => error
-                          case Bulkhead.BulkheadRejection => RateLimited
-                        }
+//            result <- handler.runZIO(request)
+            result <- bulkhead {
+                        handler.runZIO(request)
+                      }.mapError {
+                        case WrappedError(error)        => error
+                        case Bulkhead.BulkheadRejection => RateLimited
+                      }
           } yield result
         }
     }
@@ -113,19 +120,19 @@ object MuseMiddleware {
         initSession(authSession, maybeSessionId)
       }
 
-      type Env = UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService]
       // Ensure that each message has latest sessions in environment.
-      val transformService = WebSocketHooks.message(new StreamTransformer[Env, Throwable] {
-        def transform[R1 <: Env, E1 >: Throwable](
+      val transformService = WebSocketHooks.message(new StreamTransformer[SessionEnv, Throwable] {
+        def transform[R1 <: SessionEnv, E1 >: Throwable](
             stream: ZStream[R1, E1, GraphQLWSOutput]
         ): ZStream[R1, E1, GraphQLWSOutput] =
           ZStream.fromZIO(
             for {
               sessionId     <- authSession.get.map(_.sessionId)
               latestSession <- UserSessions.getUserSession(sessionId)
+              spotify       <- SpotifyService.live(latestSession.accessToken)
               _             <- authSession.set(Some(latestSession)) <&>
                                  RequestSession.set[UserSession](Some(latestSession)) <&>
-                                 RequestSession.set[SpotifyService](Some(latestSession.spotifyService))
+                                 RequestSession.set[SpotifyService](Some(spotify))
             } yield ()
           ) *> stream
       })

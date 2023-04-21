@@ -29,9 +29,12 @@ lazy val root = (project in file("."))
     Compile / discoveredMainClasses  := Seq(),
     libraryDependencies ++= Seq(
       "dev.zio"                       %% "zio"                           % Version.zio,
+      "dev.zio"                       %% "zio-schema"                    % Version.zioSchema,
+      "dev.zio"                       %% "zio-schema-json"               % Version.zioSchema,
       "dev.zio"                       %% "zio-json"                      % Version.zioJson,
       "dev.zio"                       %% "zio-nio"                       % Version.zioNio,
       "dev.zio"                       %% "zio-cache"                     % Version.zioCache,
+      "dev.zio"                       %% "zio-redis"                     % Version.zioRedis,
       "dev.zio"                       %% "zio-metrics-prometheus"        % Version.zioMetrics,
       "dev.zio"                       %% "zio-metrics-connectors"        % Version.zioMetrics,
       "com.stuart"                    %% "zcaffeine"                     % Version.zcaffiene,
@@ -73,10 +76,10 @@ lazy val root = (project in file("."))
     ),
     assembly / assemblyMergeStrategy := {
       case PathList("module-info.class") => MergeStrategy.discard
-      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case PathList("META-INF", xs*) => MergeStrategy.discard
       case _                             => MergeStrategy.first
     }
-  ).settings(dockerSettings: _*)
+  ).settings(dockerSettings*)
 
 lazy val dockerSettings = Seq(
   Docker / packageName := "muse_server",

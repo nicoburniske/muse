@@ -13,16 +13,22 @@ services:
       - POSTGRES_DB=muse
     ports:
       - "5432:5432"
-  backend:
-    container_name: muse_backend
-    environment:
-      - DATA_SOURCE_SERVER_NAME=muse_db
-      - SPOTIFY_CLIENT_ID
-      - SPOTIFY_CLIENT_SECRET
-    build:
-      context: .
-      dockerfile: Dockerfile
+  redis:
+    image: redis:6.2
+    container_name: muse_redis
+    restart: always
     ports:
-      - "8883:8883"
-    depends_on:
-      - postgres
+      - "6379:6379"
+#  backend:
+#    container_name: muse_backend
+#    environment:
+#      - DATA_SOURCE_SERVER_NAME=muse_db
+#      - SPOTIFY_CLIENT_ID
+#      - SPOTIFY_CLIENT_SECRET
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    ports:
+#      - "8883:8883"
+#    depends_on:
+#      - postgres

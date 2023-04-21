@@ -16,7 +16,5 @@ import java.time.Instant
 final case class UserSession(
     sessionId: String,
     userId: String,
-    accessToken: String,
-    spotifyService: SpotifyService,
-    bulkhead: Bulkhead
+    accessToken: String
 )
