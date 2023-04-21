@@ -189,7 +189,7 @@ case class SpotifyServiceLive(
       case EntityType.Track    => getTrack(entityId).isSuccess
 
   def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None) =
-    redisService.cacheOrExecute("playlist:" + playlistId, 1.minute)(s.getPlaylist(playlistId, fields, market))
+    redisService.cacheOrExecute("playlist:" + playlistId, 10.minutes)(s.getPlaylist(playlistId, fields, market))
 
   def getTrack(id: String, market: Option[String] = None) =
     s.getTrack(id, market)

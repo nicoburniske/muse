@@ -39,25 +39,35 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   val layer = ZLayer.succeed(d)
 
-  inline def user = querySchema[User]("muse.user")
+  inline val userTable = "muse.user"
+  inline def user      = querySchema[User](userTable)
 
-  inline def userSession = querySchema[UserSession]("muse.user_session")
+  inline val userSessionTable = "muse.user_session"
+  inline def userSession      = querySchema[UserSession](userSessionTable)
 
-  inline def review = querySchema[Review]("muse.review")
+  inline val reviewTable = "muse.review"
+  inline def review      = querySchema[Review](reviewTable)
 
-  inline def reviewEntity = querySchema[ReviewEntity]("muse.review_entity")
+  inline val reviewEntityTable = "muse.review_entity"
+  inline def reviewEntity      = querySchema[ReviewEntity](reviewEntityTable)
 
-  inline def reviewLink = querySchema[ReviewLink]("muse.review_link")
+  inline val reviewLinkTable = "muse.review_link"
+  inline def reviewLink      = querySchema[ReviewLink](reviewLinkTable)
 
-  inline def reviewAccess = querySchema[ReviewAccess]("muse.review_access")
+  inline val reviewAccessTable = "muse.review_access"
+  inline def reviewAccess      = querySchema[ReviewAccess](reviewAccessTable)
 
-  inline def comment = querySchema[ReviewComment]("muse.review_comment")
+  inline val commentTable = "muse.review_comment"
+  inline def comment      = querySchema[ReviewComment](commentTable)
 
-  inline def commentEntity = querySchema[ReviewCommentEntity]("muse.review_comment_entity")
+  inline val commentEntityTable = "muse.review_comment_entity"
+  inline def commentEntity      = querySchema[ReviewCommentEntity](commentEntityTable)
 
-  inline def commentIndex = querySchema[ReviewCommentIndex]("muse.review_comment_index")
+  inline val commentIndexTable = "muse.review_comment_index"
+  inline def commentIndex      = querySchema[ReviewCommentIndex](commentIndexTable)
 
-  inline def commentParentChild = querySchema[ReviewCommentParentChild]("muse.review_comment_parent_child")
+  inline val commentParentChildTable = "muse.review_comment_parent_child"
+  inline def commentParentChild      = querySchema[ReviewCommentParentChild](commentParentChildTable)
 
   /**
    * Read!
@@ -74,6 +84,12 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   inline def allUserReviews(inline userId: UserId) =
     userReviews(userId) union userSharedReviews(userId)
+
+  inline def allViewableComments(inline userId: UserId) =
+    allUserReviews(userId)
+      .join(comment)
+      .on((review, comment) => review.reviewId == comment.reviewId)
+      .map(_._2)
 
   override def getAllUserReviews(userId: UserId) = run {
     allUserReviews(lift(userId))
@@ -156,9 +172,9 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .on((review, entity) => review.reviewId == entity.reviewId)
   }.provide(layer)
 
-  override def getComment(commentId: Long) = run {
+  override def getComment(commentId: Long, userId: UserId) = run {
     for {
-      comment       <- comment.filter(_.commentId == lift(commentId))
+      comment       <- allViewableComments(lift(userId)).filter(_.commentId == lift(commentId))
       commentIndex  <- commentIndex.join(_.commentId == comment.commentId)
       parentComment <- commentParentChild.leftJoin(_.childCommentId == comment.commentId)
       entity        <- commentEntity.leftJoin(_.commentId == comment.commentId)
@@ -178,9 +194,27 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     getAllCommentData(comments)
   }.provide(layer)
 
-  override def getComments(commentIds: List[Long]) = run {
-    val comments = comment.filter(c => liftQuery(commentIds.toSet).contains(c.commentId))
+  override def getComments(commentIds: List[Long], userId: UserId) = run {
+    val comments = allViewableComments(lift(userId)).filter(c => liftQuery(commentIds).contains(c.commentId))
     getAllCommentData(comments)
+  }.provide(layer)
+
+  override def getAllCommentChildren(commentId: Long, userId: UserId) = run {
+    val allChildrenIds: Query[Long] = sql"""
+        WITH RECURSIVE children AS (
+           SELECT ${lift(commentId)} AS comment_id
+           UNION ALL 
+           SELECT c.child_comment_id
+           FROM children 
+             JOIN ${lift(commentParentChildTable)} c
+             ON children.comment_id = c.parent_comment_id
+        )
+        -- Exclude the original comment.
+        SELECT * FROM children WHERE comment_id != ${lift(commentId)}
+       """.as[Query[Long]]
+
+    val childComments = allViewableComments(lift(userId)).filter(c => allChildrenIds.contains(c.commentId))
+    getAllCommentData(childComments)
   }.provide(layer)
 
   private inline def getAllCommentData(query: Query[ReviewComment]) = for {

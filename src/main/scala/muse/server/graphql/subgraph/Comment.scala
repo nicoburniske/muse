@@ -25,8 +25,9 @@ final case class Comment(
     commenter: User,
     comment: Option[String],
     entities: ZQuery[RequestSession[SpotifyService], Throwable, List[ReviewEntity]],
-    parentComment: ZQuery[DatabaseService, Throwable, Option[Comment]],
-    childComments: ZQuery[DatabaseService, Throwable, List[Comment]]
+    parentComment: ZQuery[GetComment.Env, Throwable, Option[Comment]],
+    childComments: ZQuery[GetComment.Env, Throwable, List[Comment]],
+    allChildComments: ZQuery[GetComment.Env, Throwable, List[Comment]]
 )
 
 object Comment {
@@ -51,7 +52,8 @@ object Comment {
       r.comment,
       ZQuery.foreachPar(entities)(e => GetEntity.query(e.entityId, e.entityType)),
       parentId.fold(ZQuery.succeed(None))(p => GetComment.query(p)),
-      ZQuery.foreachPar(childIds)(GetComment.query).map(_.flatten)
+      ZQuery.foreachPar(childIds)(GetComment.query).map(_.flatten),
+      GetComment.queryAllChildren(r.commentId)
     )
 
   def fromTableRows(

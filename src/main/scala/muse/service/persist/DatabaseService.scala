@@ -5,8 +5,33 @@ import io.getquill.context.ZioJdbc.*
 import io.getquill.jdbczio.Quill
 import muse.domain.common.EntityType
 import muse.domain.common.Types.{RefreshToken, SessionId, UserId}
-import muse.domain.mutate.{CreateComment, CreateReview, DeleteComment, DeleteReview, DeleteReviewLink, LinkReviews, ReviewEntityInput, ShareReview, UpdateComment, UpdateCommentIndex, UpdateReview, UpdateReviewLink}
-import muse.domain.table.{AccessLevel, Review, ReviewAccess, ReviewComment, ReviewCommentEntity, ReviewCommentIndex, ReviewCommentParentChild, ReviewEntity, ReviewLink, User, UserSession}
+import muse.domain.mutate.{
+  CreateComment,
+  CreateReview,
+  DeleteComment,
+  DeleteReview,
+  DeleteReviewLink,
+  LinkReviews,
+  ReviewEntityInput,
+  ShareReview,
+  UpdateComment,
+  UpdateCommentIndex,
+  UpdateReview,
+  UpdateReviewLink
+}
+import muse.domain.table.{
+  AccessLevel,
+  Review,
+  ReviewAccess,
+  ReviewComment,
+  ReviewCommentEntity,
+  ReviewCommentIndex,
+  ReviewCommentParentChild,
+  ReviewEntity,
+  ReviewLink,
+  User,
+  UserSession
+}
 import zio.ZLayer.*
 import zio.{Clock, IO, Schedule, TaskLayer, ZIO, ZLayer, durationInt}
 
@@ -71,11 +96,14 @@ trait DatabaseService {
   def getReviewComments(reviewId: UUID)
       : IO[SQLException, List[(ReviewComment, ReviewCommentIndex, Option[ReviewCommentParentChild], Option[ReviewCommentEntity])]]
 
-  def getComments(commentIds: List[Long])
+  def getComments(commentIds: List[Long], userId: UserId)
       : IO[SQLException, List[(ReviewComment, ReviewCommentIndex, Option[ReviewCommentParentChild], Option[ReviewCommentEntity])]]
 
-  def getComment(commentId: Long)
+  def getComment(commentId: Long, userId: UserId)
       : IO[SQLException, Option[(ReviewComment, ReviewCommentIndex, List[ReviewCommentParentChild], List[ReviewCommentEntity])]]
+
+  def getAllCommentChildren(commentId: Long, userId: UserId)
+      : IO[SQLException, List[(ReviewComment, ReviewCommentIndex, Option[ReviewCommentParentChild], Option[ReviewCommentEntity])]]
 
   def getCommentEntities(commentId: Long): IO[SQLException, List[ReviewCommentEntity]]
 
@@ -170,11 +198,14 @@ object DatabaseService {
 
   def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewComments(reviewId))
 
-  def getComment(id: Long) = ZIO.serviceWithZIO[DatabaseService](_.getComment(id))
+  def getComment(id: Long, userId: UserId) = ZIO.serviceWithZIO[DatabaseService](_.getComment(id, userId))
 
-  def getComments(ids: List[Long]) = ZIO.serviceWithZIO[DatabaseService](_.getComments(ids))
+  def getComments(ids: List[Long], userId: UserId) = ZIO.serviceWithZIO[DatabaseService](_.getComments(ids, userId))
 
   def getCommentEntities(id: Long) = ZIO.serviceWithZIO[DatabaseService](_.getCommentEntities(id))
+
+  def getAllCommentChildren(commentId: Long, userId: UserId) =
+    ZIO.serviceWithZIO[DatabaseService](_.getAllCommentChildren(commentId, userId))
 
   def getAllUsersWithAccess(reviewIds: List[UUID]) =
     ZIO.serviceWithZIO[DatabaseService](_.getAllUsersWithAccess(reviewIds))

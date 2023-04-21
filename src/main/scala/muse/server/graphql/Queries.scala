@@ -9,8 +9,8 @@ import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.PlaybackDevice
 import muse.server.graphql.Pagination.Default
-import muse.server.graphql.resolver.{GetAlbum, GetPlaylist, GetReview, GetSearch, GetTrack, GetUser, GetUserPlaylists}
-import muse.server.graphql.subgraph.{Album, Playlist, Review, SearchResult, Track, User}
+import muse.server.graphql.resolver.{GetAlbum, GetComment, GetPlaylist, GetReview, GetSearch, GetTrack, GetUser, GetUserPlaylists}
+import muse.server.graphql.subgraph.{Album, Comment, Playlist, Review, SearchResult, Track, User}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
@@ -23,6 +23,8 @@ final case class UserInput(id: Option[UserId])
 final case class SearchUserInput(displayName: String) derives Schema.SemiAuto, ArgBuilder
 final case class ReviewInput(id: UUID) derives Schema.SemiAuto, ArgBuilder
 final case class ReviewsInput(reviewIds: List[UUID]) derives Schema.SemiAuto, ArgBuilder
+final case class CommentInput(id: Long) 
+final case class CommentsInput(commentIds: List[Long]) 
 
 final case class SearchArgs(
     query: String,
@@ -42,6 +44,8 @@ final case class Queries(
       List[User]],
     review: ReviewInput => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, Option[Review]],
     reviews: ReviewsInput => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]],
+    comment: CommentInput => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, Option[Comment]],
+//    comments: CommentsInput => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Comment]],
     //    search: SearchArgs => ZQuery[RequestSession[SpotifyService], Throwable, SearchResult],
     getPlaylist: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Playlist],
     getAlbum: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Album],
@@ -55,6 +59,8 @@ object Queries {
     args => GetUser.fromDisplayName(args.displayName),
     args => GetReview.query(args.id),
     args => GetReview.multiQuery(args.reviewIds),
+    args => GetComment.query(args.id),
+//    args => 
 //    args => GetSearch.query(args.query, args.types, args.pagination.getOrElse(Default.Search)),
     args => GetPlaylist.query(args.id),
     args => GetAlbum.query(args.id),

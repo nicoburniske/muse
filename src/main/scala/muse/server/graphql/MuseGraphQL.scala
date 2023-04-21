@@ -166,6 +166,10 @@ object MuseGraphQL {
   given Schema[Env, DeleteReviewLinkInput] = Schema.gen
   given ArgBuilder[DeleteReviewLinkInput]  = ArgBuilder.gen
 
+  // Input Wrappers
+  given Schema[Env, CommentInput] = Schema.gen
+  given ArgBuilder[CommentInput] = ArgBuilder.gen
+
   given Schema[Env, Queries]       = Schema.gen
   given Schema[Env, Mutations]     = Schema.gen
   given Schema[Env, Subscriptions] = Schema.gen

@@ -30,10 +30,10 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 // TODO: add checking for what constitutes a valid comment. What does rating represent?
-// TODO: What actually should return boolean? Deletion?
 // TODO: Consider adding ZQuery for batched operations to DB.
 type MutationEnv   = RequestSession[UserSession] & DatabaseService & RequestSession[SpotifyService] & Hub[ReviewUpdate]
 type MutationError = Throwable | MuseError
+type Mutation[A]   = ZIO[MutationEnv, MutationError, A]
 
 final case class Mutations(
     createReview: CreateReviewInput => ZIO[MutationEnv, MutationError, Review],
@@ -66,8 +66,6 @@ object Mutations {
     i => deleteReviewLink(i.input),
     i => shareReview(i.input)
   )
-
-  type Mutation[A] = ZIO[MutationEnv, MutationError, A]
 
   // TODO: Wrap this in a single transaction.
   def createReview(create: CreateReview) = for {
@@ -142,7 +140,7 @@ object Mutations {
     _         <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
     _         <- DatabaseService.updateComment(update)
     comment   <- DatabaseService
-                   .getComment(update.commentId)
+                   .getComment(update.commentId, user.userId)
                    .someOrFail(BadRequest(Some("Comment does not exist")))
                    .map(Comment.fromTable.tupled)
     published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
@@ -164,7 +162,7 @@ object Mutations {
                 case updated =>
                   (for {
                     hub       <- ZIO.service[Hub[ReviewUpdate]]
-                    comments  <- DatabaseService.getComments(updated.map(_._1)).map(Comment.fromTableRows)
+                    comments  <- DatabaseService.getComments(updated.map(_._1), user.userId).map(Comment.fromTableRows)
                     published <- ZIO.foreachPar(comments)(c => hub.publish(UpdatedComment(c))).map(_.forall(identity))
                     _         <- ZIO.logError("Failed to publish comment update").unless(published)
                     _         <- ZIO.logInfo("Successfully published update messages")
@@ -177,11 +175,11 @@ object Mutations {
     result            <- DatabaseService.deleteComment(d)
     (deleted, updated) = result
     // TODO: Is there a better way to do this?
-    _                 <- publishDeletedComments(d.reviewId, deleted, updated).forkDaemon
+    _                 <- publishDeletedComments(user.userId, d.reviewId, deleted, updated).forkDaemon
   } yield deleted.nonEmpty || updated.nonEmpty).addTimeLog("DeleteComment")
 
-  def publishDeletedComments(reviewId: UUID, deletedCommentIds: List[Long], updatedCommentIds: List[Long]) = for {
-    updatedComments             <- DatabaseService.getComments(updatedCommentIds)
+  def publishDeletedComments(userId: UserId, reviewId: UUID, deletedCommentIds: List[Long], updatedCommentIds: List[Long]) = for {
+    updatedComments             <- DatabaseService.getComments(updatedCommentIds, userId)
     fromTable                    = Comment.fromTableRows(updatedComments)
     hub                         <- ZIO.service[Hub[ReviewUpdate]]
     updates                      = ZIO.foreachPar(fromTable)(c => hub.publish(UpdatedComment(c)))
