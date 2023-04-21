@@ -151,11 +151,11 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
 
   override def getAllChildReviews(reviewIds: List[UUID]) = run {
-    (for {
+    for {
       link           <- reviewLink.filter(link => liftQuery(reviewIds.toSet).contains(link.parentReviewId))
       child          <- review.join(_.reviewId == link.childReviewId)
       reviewEntities <- reviewEntity.leftJoin(e => child.reviewId == e.reviewId)
-    } yield (link, child, reviewEntities))
+    } yield (link, child, reviewEntities)
   }.provide(layer)
 
   override def getUserById(userId: UserId) = run {

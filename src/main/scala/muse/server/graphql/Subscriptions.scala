@@ -1,6 +1,5 @@
 package muse.server.graphql
 
-import caliban.schema.{ArgBuilder, Schema}
 import muse.domain.event.ReviewUpdate
 import muse.domain.session.UserSession
 import muse.domain.spotify.{PlaybackDevice, Track, PlaybackState as SpotPlaybackState}
@@ -16,13 +15,13 @@ import java.util.UUID
 
 type Sessions = UserSessions & RequestSession[SpotifyService] & RequestSession[UserSession]
 final case class Subscriptions(
-    nowPlaying: NowPlayingArgs => ZStream[Sessions, Throwable, PlaybackState],
+    nowPlaying: NowPlayingInput => ZStream[Sessions, Throwable, PlaybackState],
     availableDevices: ZStream[Sessions, Throwable, List[PlaybackDevice]],
-    reviewUpdates: ReviewUpdatesArgs => ZStream[Sessions & Hub[ReviewUpdate] & Scope, Throwable, ReviewUpdate]
+    reviewUpdates: ReviewUpdatesInput => ZStream[Sessions & Hub[ReviewUpdate] & Scope, Throwable, ReviewUpdate]
 )
 
-case class NowPlayingArgs(tickInterval: Int) derives Schema.SemiAuto, ArgBuilder
-case class ReviewUpdatesArgs(reviewIds: Set[UUID]) derives Schema.SemiAuto, ArgBuilder
+case class NowPlayingInput(tickInterval: Int)
+case class ReviewUpdatesInput(reviewIds: Set[UUID])
 
 object Subscriptions {
   val live: Subscriptions = Subscriptions(

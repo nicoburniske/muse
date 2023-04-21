@@ -69,16 +69,9 @@ object MuseGraphQL {
 //  given Schema[Env, PaginationResult[Playlist]] = Schema.gen
 //  given Schema[Env, PaginationResult[Track]]    = Schema.gen
 
-  given Schema[Env, UserId]    = stringSchema.contramap(UserId(_))
-  given ArgBuilder[UserId]     = ArgBuilder.string.map(UserId(_))
-  given Schema[Env, UserInput] = Schema.gen
-  given ArgBuilder[UserInput]  = ArgBuilder.gen
-
-  given Schema[Env, Review]             = Schema.gen
-  given Schema[Env, Comment]            = Schema.gen
-  given Schema[Env, User]               = Schema.gen
-  given Schema[Env, UserPlaylistsInput] = Schema.gen
-  given ArgBuilder[UserPlaylistsInput]  = ArgBuilder.gen
+  given Schema[Env, Review]  = Schema.gen
+  given Schema[Env, Comment] = Schema.gen
+  given Schema[Env, User]    = Schema.gen
 
   given Schema[Env, Collaborator]                        = Schema.gen
   given Schema[Env, table.AccessLevel]                   = Schema.gen
@@ -105,11 +98,20 @@ object MuseGraphQL {
   given Schema[Env, ReviewUpdate.CreatedComment] = Schema.gen
   given Schema[Env, ReviewUpdate.DeletedComment] = Schema.gen
 
+  // Queries.
+  given Schema[Env, UserPlaylistsInput] = Schema.gen
+  given ArgBuilder[UserPlaylistsInput]  = ArgBuilder.gen
+  given Schema[Env, SpotifyProfile]     = Schema.gen
+  given Schema[Env, Pagination]         = Schema.gen
+  given ArgBuilder[Pagination]          = ArgBuilder.gen
+
   // Mutation.
   given Schema[Env, CreateReview]      = Schema.gen
   given ArgBuilder[CreateReview]       = ArgBuilder.gen
   given Schema[Env, CreateReviewInput] = Schema.gen
   given ArgBuilder[CreateReviewInput]  = ArgBuilder.gen
+  given Schema[Env, InitialLink]       = Schema.gen
+  given ArgBuilder[InitialLink]        = ArgBuilder.gen
 
   given Schema[Env, CreateComment]      = Schema.gen
   given ArgBuilder[CreateComment]       = ArgBuilder.gen
@@ -167,12 +169,49 @@ object MuseGraphQL {
   given ArgBuilder[DeleteReviewLinkInput]  = ArgBuilder.gen
 
   // Input Wrappers
-  given Schema[Env, CommentInput] = Schema.gen
-  given ArgBuilder[CommentInput] = ArgBuilder.gen
+  given Schema[Env, UserId] = stringSchema.contramap(UserId(_))
+  given ArgBuilder[UserId]  = ArgBuilder.string.map(UserId(_))
+
+  given Schema[Env, UserInput]          = Schema.gen
+  given ArgBuilder[UserInput]           = ArgBuilder.gen
+  given Schema[Env, SearchUserInput]    = Schema.gen
+  given ArgBuilder[SearchUserInput]     = ArgBuilder.gen
+  given Schema[Env, ReviewInput]        = Schema.gen
+  given ArgBuilder[ReviewInput]         = ArgBuilder.gen
+  given Schema[Env, ReviewsInput]       = Schema.gen
+  given ArgBuilder[ReviewsInput]        = ArgBuilder.gen
+  given Schema[Env, SpotifyEntityInput] = Schema.gen
+  given ArgBuilder[SpotifyEntityInput]  = ArgBuilder.gen
+
+  given Schema[Env, ReviewEntityInput] = Schema.gen
+  given ArgBuilder[ReviewEntityInput]  = ArgBuilder.gen
+
+  // Entity Type Enum.
+  given Schema[Env, EntityType]               = Schema.gen
+  given ArgBuilder[EntityType]                = ArgBuilder.gen
+  given Schema[Any, EntityType.Album.type]    = Schema.gen
+  given ArgBuilder[EntityType.Album.type]     = ArgBuilder.gen
+  given Schema[Any, EntityType.Artist.type]   = Schema.gen
+  given ArgBuilder[EntityType.Artist.type]    = ArgBuilder.gen
+  given Schema[Any, EntityType.Track.type]    = Schema.gen
+  given ArgBuilder[EntityType.Track.type]     = ArgBuilder.gen
+  given Schema[Any, EntityType.Playlist.type] = Schema.gen
+  given ArgBuilder[EntityType.Playlist.type]  = ArgBuilder.gen
+
+  given Schema[Env, CommentInput]  = Schema.gen
+  given ArgBuilder[CommentInput]   = ArgBuilder.gen
+  given Schema[Env, CommentsInput] = Schema.gen
+  given ArgBuilder[CommentsInput]  = ArgBuilder.gen
 
   given Schema[Env, Queries]       = Schema.gen
   given Schema[Env, Mutations]     = Schema.gen
   given Schema[Env, Subscriptions] = Schema.gen
+
+  // Subscription Input.
+  given Schema[Env, NowPlayingInput]    = Schema.gen
+  given ArgBuilder[NowPlayingInput]     = ArgBuilder.gen
+  given Schema[Env, ReviewUpdatesInput] = Schema.gen
+  given ArgBuilder[ReviewUpdatesInput]  = ArgBuilder.gen
 
   // TODO: give this another shot?
 //  given errorSchema[A](using Schema[Any, A]): Schema[Any, IO[Throwable | MuseError, A]] =

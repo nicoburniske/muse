@@ -15,7 +15,6 @@ final case class SpotifyProfile(
     externalUrls: Map[String, String],
     images: List[String],
     numFollowers: Option[Int])
-    derives Schema.SemiAuto
 
 object SpotifyProfile {
   def fromSpotify(u: spotify.PublicUser): SpotifyProfile = {

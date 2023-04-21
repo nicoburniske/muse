@@ -10,7 +10,7 @@ import muse.domain.common.Types.UserId
 import zio.ZIO
 import zio.query.ZQuery
 
-final case class UserPlaylistsInput(pagination: Option[Pagination]) derives Schema.SemiAuto
+final case class UserPlaylistsInput(pagination: Option[Pagination])
 
 object GetUserPlaylists:
   def boxedQuery(userId: UserId)(input: UserPlaylistsInput)

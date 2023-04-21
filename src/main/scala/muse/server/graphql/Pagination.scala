@@ -3,7 +3,7 @@ package muse.server.graphql
 import caliban.schema.Annotations.GQLDefault
 import caliban.schema.{ArgBuilder, Schema}
 
-final case class Pagination(first: Int, @GQLDefault("0") offset: Int = 0) derives Schema.SemiAuto, ArgBuilder {
+final case class Pagination(first: Int, @GQLDefault("0") offset: Int = 0) {
   def annotation = s"{first: $first, offset: $offset}"
 }
 
