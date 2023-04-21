@@ -62,7 +62,7 @@ object Main extends ZIOAppDefault {
   val metricsConfig = ZLayer.succeed(MetricsConfig(5.seconds))
 
   val logFormat = {
-    import zio.logging.LogFormat._
+    import zio.logging.LogFormat.*
 
     val userId = LogFormat.annotation("user_id")
 

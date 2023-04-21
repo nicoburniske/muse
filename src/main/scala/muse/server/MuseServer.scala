@@ -5,21 +5,20 @@ import caliban.execution.QueryExecution
 import com.stuart.zcaffeine.Cache
 import io.netty.handler.codec.http.HttpHeaderNames
 import muse.config.{AppConfig, ServerConfig, SpotifyConfig, SpotifyServiceConfig}
-import muse.domain.error.{Unauthorized, RateLimited}
+import muse.domain.error.{RateLimited, Unauthorized}
 import muse.domain.session.UserSession
+import muse.domain.spotify
 import muse.server.MuseMiddleware
 import muse.server.graphql.MuseGraphQL
 import muse.server.graphql.MuseGraphQL.Env
 import muse.service.persist.{DatabaseService, MigrationService}
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
-import muse.domain.spotify
 import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils
 import sttp.client3.SttpBackend
+import zio.http.middleware.RequestHandlerMiddlewares
 import zio.http.model.{HttpError, Method}
 import zio.http.*
-import zio.http.middleware.RequestHandlerMiddlewares
-import zio.http.{Http, Request, Server}
 import zio.metrics.connectors.prometheus.PrometheusPublisher
 import zio.{Tag, Task, ZIO}
 
@@ -47,16 +46,17 @@ object MuseServer {
       protectedRest ++ websocket
   }
 
-  import sttp.tapir.json.zio._
-
-  val endpointsGraphQL = for {
-    interpreter <- MuseGraphQL.interpreter
-  } yield (
-    Http.collectRoute[Request] {
-      case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter, queryExecution = QueryExecution.Batched)
-    },
-    Http.collectRoute[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
-  )
+  val endpointsGraphQL = {
+    import sttp.tapir.json.zio.*
+    for {
+      interpreter <- MuseGraphQL.interpreter
+    } yield (
+      Http.collectRoute[Request] {
+        case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter, queryExecution = QueryExecution.Batched)
+      },
+      Http.collectRoute[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
+    )
+  }
 
   val metricsServer =
     Server.serve(metricsRouter).provideSomeLayer[PrometheusPublisher](Server.defaultWithPort(9091))

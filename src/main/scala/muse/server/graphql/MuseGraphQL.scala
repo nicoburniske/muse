@@ -3,8 +3,8 @@ package muse.server.graphql
 import caliban.CalibanError.{ExecutionError, ParsingError, ValidationError}
 import caliban.ResponseValue.ObjectValue
 import caliban.Value.StringValue
-import caliban.schema.{ArgBuilder, GenericSchema, Schema}
 import caliban.schema.Schema.stringSchema
+import caliban.schema.{ArgBuilder, GenericSchema, Schema}
 import caliban.wrappers.ApolloTracing.apolloTracing
 import caliban.wrappers.Wrappers.printErrors
 import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}

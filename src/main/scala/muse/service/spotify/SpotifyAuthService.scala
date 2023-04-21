@@ -1,16 +1,9 @@
 package muse.service.spotify
 
 import muse.config.SpotifyConfig
-import muse.domain.spotify.auth.{
-  AuthCodeFlowData,
-  ClientCredentialsFlowData,
-  RefreshAuthData,
-  SpotifyAuthDeserializationError,
-  SpotifyAuthError,
-  SpotifyAuthErrorResponse
-}
+import muse.domain.spotify.auth.*
 import muse.service.UserSessions
-import zio.http.model.{HeaderValues, Headers, Method, Scheme, Status}
+import zio.http.model.*
 import zio.http.{Body, Client, Path, URL}
 import zio.json.*
 import zio.{Task, ZIO, ZLayer}

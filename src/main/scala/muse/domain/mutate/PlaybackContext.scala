@@ -3,8 +3,6 @@ package muse.domain.mutate
 import caliban.schema.Annotations.GQLDescription
 import muse.domain.common.EntityType
 
-import caliban.schema.{ArgBuilder, Schema}
-
 final case class PlayOffsetContextInput(input: PlayOffsetContext)
 final case class PlayOffsetContext(offset: PositionOffset, positionMs: Option[Int], deviceId: Option[String])
 final case class PlayEntityContextInput(input: PlayEntityContext)

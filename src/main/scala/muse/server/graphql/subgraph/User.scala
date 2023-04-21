@@ -2,7 +2,7 @@ package muse.server.graphql.subgraph
 
 import muse.domain.common.Types.UserId
 import muse.domain.session.UserSession
-import muse.server.graphql.resolver.{GetSpotifyProfile, GetUser, GetUserPlaylists, GetUserReviews, UserPlaylistsInput}
+import muse.server.graphql.resolver.*
 import muse.server.graphql.{Input, Pagination, subgraph}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService

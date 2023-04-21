@@ -1,8 +1,8 @@
 package muse.domain.error
 
 import muse.domain.common.EntityType
-import zio.http.{Body, Response}
 import zio.http.model.HttpError
+import zio.http.{Body, Response}
 
 sealed trait MuseError extends Throwable:
   override def getMessage = message
@@ -19,8 +19,8 @@ final case class InvalidUser(id: String) extends MuseError:
   val message = s"Invalid User: $id"
 
 final case class Forbidden(reason: Option[String]) extends MuseError:
-  val code    = "FORBIDDEN"
-  val message = reason.fold("Forbidden")(s => s"Forbidden: $s")
+  val code     = "FORBIDDEN"
+  val message  = reason.fold("Forbidden")(s => s"Forbidden: $s")
   val response = Response.fromHttpError(HttpError.Forbidden(message))
 
 final case class Unauthorized(reason: Option[String]) extends MuseError:
@@ -29,8 +29,8 @@ final case class Unauthorized(reason: Option[String]) extends MuseError:
   val response = Response.fromHttpError(HttpError.Unauthorized(message))
 
 final case class BadRequest(reason: Option[String]) extends MuseError:
-  val code    = "INVALID_REQUEST"
-  val message = reason.fold("Invalid Request")(m => s"Invalid Request: $m")
+  val code     = "INVALID_REQUEST"
+  val message  = reason.fold("Invalid Request")(m => s"Invalid Request: $m")
   val response = Response.fromHttpError(HttpError.BadRequest(message))
 
 object RateLimited extends MuseError:

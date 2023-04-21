@@ -1,14 +1,10 @@
 package muse.server.graphql
 
+import muse.domain.common.EntityType
+import muse.domain.error.*
 import muse.domain.event.ReviewUpdate
 import muse.domain.mutate.*
 import muse.domain.session.UserSession
-import muse.domain.spotify.StartPlaybackBody
-import muse.service.RequestSession
-import muse.service.persist.DatabaseService
-import muse.service.spotify.SpotifyService
-import zio.{Hub, ZIO}
-import muse.domain.common.EntityType
 import muse.domain.spotify.{
   ErrorReason,
   ErrorResponse,
@@ -17,7 +13,10 @@ import muse.domain.spotify.{
   UriOffset,
   PositionOffset as SpotifyPostionOffset
 }
-import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
+import muse.service.RequestSession
+import muse.service.persist.DatabaseService
+import muse.service.spotify.SpotifyService
+import zio.{Hub, ZIO}
 
 type SpotifyMutationEnv = RequestSession[UserSession] & RequestSession[SpotifyService]
 case class SpotifyMutations(

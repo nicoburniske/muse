@@ -10,12 +10,12 @@ import muse.domain.spotify.*
 import muse.service.{RedisService, RequestSession, UserSessions}
 import muse.utils.Givens
 import muse.utils.Givens.given
+import muse.utils.Utils.addTimeLog
 import sttp.client3.SttpBackend
 import sttp.model.StatusCode
 import zio.cache.{Cache, Lookup}
 import zio.redis.Redis
 import zio.{Clock, Ref, Task, ZEnvironment, ZIO, ZLayer, durationInt}
-import muse.utils.Utils.addTimeLog
 
 trait SpotifyService {
   def getCurrentUserProfile: Task[PrivateUser]
@@ -161,8 +161,8 @@ case class SpotifyServiceLive(
     redis: Redis
 ) extends SpotifyService {
 
-  import zio.schema.{DeriveSchema, Schema}
   import zio.durationInt
+  import zio.schema.{DeriveSchema, Schema}
 
   given Schema[SinglePlaylist] = DeriveSchema.gen[SinglePlaylist]
   given Schema[Artist]         = DeriveSchema.gen[Artist]

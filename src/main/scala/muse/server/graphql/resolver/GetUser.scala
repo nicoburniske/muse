@@ -3,13 +3,12 @@ package muse.server.graphql.resolver
 import muse.domain.common.Types.UserId
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
-import muse.server.graphql.subgraph.User
-import muse.server.graphql.subgraph.SpotifyProfile
+import muse.server.graphql.subgraph.{SpotifyProfile, User}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
-import zio.query.{DataSource, Request, ZQuery}
 import zio.ZIO
+import zio.query.{DataSource, Request, ZQuery}
 
 case class GetUser(id: UserId) extends Request[Nothing, User]
 

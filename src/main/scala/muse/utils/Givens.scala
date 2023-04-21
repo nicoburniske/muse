@@ -1,9 +1,9 @@
 package muse.utils
 
+import sttp.monad.MonadError as SttpMonadError
 import zio.{Task, UIO, ZIO, Ref as ZRef}
 
 import java.time.temporal.ChronoUnit
-import sttp.monad.MonadError as SttpMonadError
 
 object Givens {
   given zioMonadError[R, E]: MonadError[[A] =>> ZIO[R, E, A], E] = new MonadErrorZIO[R, E]

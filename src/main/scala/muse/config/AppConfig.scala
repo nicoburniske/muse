@@ -1,12 +1,11 @@
 package muse.config
 
-import zio.config.*
-import zio.Config
-import Config.*
 import com.typesafe.config.ConfigFactory
+import zio.Config.*
+import zio.config.*
 import zio.config.typesafe.TypesafeConfigProvider
 import zio.redis.RedisConfig
-import zio.{ZIO, ZLayer}
+import zio.{Config, ZIO, ZLayer}
 
 import java.io.File
 

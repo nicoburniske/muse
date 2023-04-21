@@ -2,13 +2,10 @@ package muse.service.spotify
 
 import muse.domain.common.EntityType
 import muse.domain.spotify.*
-import muse.utils.MonadError
-import muse.utils.Ref
-import muse.utils.Clock
+import muse.utils.{Clock, MonadError, Ref}
 import sttp.client3.*
 import sttp.client3.ziojson.*
 import sttp.model.{Method, ResponseMetadata, StatusCode, Uri}
-import sttp.client3.ziojson.stringShowError
 import zio.Task
 import zio.json.*
 
@@ -49,7 +46,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], retryAfterRef: R
   def getTracks(ids: Vector[String], market: Option[String] = None): F[Vector[Track]] =
     val uri = uri"${SpotifyAPI.API_BASE}/tracks?market=$market&ids=${ids.mkString(",")}"
     execute[MultiTrack](uri, Method.GET).map(_.tracks)
-    
+
   def getTrackAudioAnalysis(id: String) =
     val uri = uri"${SpotifyAPI.API_BASE}/audio-analysis/$id"
     execute[AudioAnalysis](uri, Method.GET)

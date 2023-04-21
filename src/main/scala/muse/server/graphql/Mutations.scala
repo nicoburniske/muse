@@ -3,9 +3,9 @@ package muse.server.graphql
 import caliban.schema.{ArgBuilder, Schema}
 import muse.domain.common.EntityType
 import muse.domain.common.Types.UserId
-import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
-import muse.domain.event.ReviewUpdate.{CreatedComment, DeletedComment, UpdatedComment}
+import muse.domain.error.*
 import muse.domain.event.ReviewUpdate
+import muse.domain.event.ReviewUpdate.{CreatedComment, DeletedComment, UpdatedComment}
 import muse.domain.mutate.*
 import muse.domain.session.UserSession
 import muse.domain.spotify.{

@@ -1,7 +1,7 @@
 package muse.service.persist
 
-import io.getquill.{LowerCase, NamingStrategy, PostgresZioJdbcContext, SnakeCase}
 import io.getquill.jdbczio.Quill
+import io.getquill.{LowerCase, NamingStrategy, PostgresZioJdbcContext, SnakeCase}
 import muse.domain.common.EntityType
 import muse.domain.common.Types.{RefreshToken, SessionId, UserId}
 import muse.domain.table.AccessLevel
@@ -37,10 +37,10 @@ object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, Low
     encoder(Types.VARCHAR, (index, value, row) => row.setString(index, value))
 
   given Decoder[SessionId] = decoder((index, row, _) => SessionId(row.getString(index)))
-  
+
   given Encoder[RefreshToken] =
     encoder(Types.VARCHAR, (index, value, row) => row.setString(index, value))
-    
+
   given Decoder[RefreshToken] =
     decoder((index, row, _) => RefreshToken(row.getString(index)))
 }

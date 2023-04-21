@@ -46,14 +46,14 @@ object UserSessions {
     } yield UserSessionsLive(cache, bulkheadCache, databaseService)
   }
 
-  def getUserSession(sessionId: SessionId)     = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
-  def getUserBulkhead(userId: UserId)          = ZIO.serviceWithZIO[UserSessions](_.getUserBulkhead(userId))
-  
+  def getUserSession(sessionId: SessionId) = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
+  def getUserBulkhead(userId: UserId)      = ZIO.serviceWithZIO[UserSessions](_.getUserBulkhead(userId))
+
   def getSessionAndBulkhead(sessionId: SessionId) = for {
-    session    <- getUserSession(sessionId)
-    bulkhead   <- getUserBulkhead(session.userId)
+    session  <- getUserSession(sessionId)
+    bulkhead <- getUserBulkhead(session.userId)
   } yield (session, bulkhead)
-  
+
   def deleteUserSession(sessionId: SessionId)  = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
   def refreshUserSession(sessionId: SessionId) = ZIO.serviceWithZIO[UserSessions](_.refreshUserSession(sessionId))
 

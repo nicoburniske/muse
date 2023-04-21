@@ -9,7 +9,6 @@ import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.service.{RequestSession, UserSessions}
 import sttp.client3.SttpBackend
-import zio.http.{Http, Request, Response}
 import zio.http.model.{Cookie, HttpError, Method, Scheme}
 import zio.http.*
 import zio.json.*

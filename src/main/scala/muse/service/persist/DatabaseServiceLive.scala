@@ -2,31 +2,8 @@ package muse.service.persist
 
 import io.getquill.*
 import muse.domain.common.Types.{RefreshToken, SessionId, UserId}
-import muse.domain.mutate.{
-  CreateComment,
-  CreateReview,
-  DeleteComment,
-  DeleteReview,
-  DeleteReviewLink,
-  LinkReviews,
-  ShareReview,
-  UpdateComment,
-  UpdateReview,
-  UpdateReviewLink
-}
-import muse.domain.table.{
-  AccessLevel,
-  Review,
-  ReviewAccess,
-  ReviewComment,
-  ReviewCommentEntity,
-  ReviewCommentIndex,
-  ReviewCommentParentChild,
-  ReviewEntity,
-  ReviewLink,
-  User,
-  UserSession
-}
+import muse.domain.mutate.*
+import muse.domain.table.*
 import zio.{Clock, IO, ZIO, ZLayer, durationInt}
 
 import java.sql.SQLException

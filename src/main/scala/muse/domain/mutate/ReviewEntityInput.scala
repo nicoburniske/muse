@@ -1,7 +1,7 @@
 package muse.domain.mutate
 
 import caliban.schema.Annotations.GQLInputName
+import caliban.schema.{ArgBuilder, Schema}
 import muse.domain.common.EntityType
 
-import caliban.schema.{ArgBuilder, Schema}
-final case class ReviewEntityInput(entityType: EntityType, entityId: String) 
+final case class ReviewEntityInput(entityType: EntityType, entityId: String)

@@ -2,23 +2,23 @@ package muse.server
 
 import caliban.Value.StringValue
 import caliban.interop.tapir.{StreamTransformer, WebSocketHooks}
-import caliban.{CalibanError, GraphQLInterpreter, GraphQLWSOutput, InputValue, ZHttpAdapter}
+import caliban.*
 import io.netty.handler.codec.http.HttpHeaderNames
+import muse.domain.common.Types.SessionId
 import muse.domain.error.{MuseError, RateLimited, Unauthorized}
 import muse.domain.session.UserSession
-import muse.domain.common.Types.SessionId
 import muse.server.graphql.MuseGraphQL
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService}
 import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils
-import nl.vroste.rezilience.Bulkhead.{BulkheadError, BulkheadException, WrappedError}
 import nl.vroste.rezilience.Bulkhead
+import nl.vroste.rezilience.Bulkhead.{BulkheadError, BulkheadException, WrappedError}
 import sttp.client3.SttpBackend
 import zio.*
 import zio.http.Http.Route
-import zio.http.model.HttpError
 import zio.http.middleware.*
-import zio.http.{Handler, Http, Request, RequestHandlerMiddleware, Response}
+import zio.http.model.HttpError
+import zio.http.*
 import zio.redis.Redis
 import zio.stream.ZStream
 
@@ -134,7 +134,7 @@ object MuseMiddleware {
           ) *> stream
       })
 
-      import sttp.tapir.json.zio._
+      import sttp.tapir.json.zio.*
 
       ZHttpAdapter.makeWebSocketService(
         interpreter,

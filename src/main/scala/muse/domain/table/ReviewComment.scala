@@ -16,4 +16,3 @@ final case class ReviewComment(
     // Comment can be null if deleted.
     comment: Option[String]
 )
-

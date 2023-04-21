@@ -8,8 +8,8 @@ import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.PlaybackDevice
 import muse.server.graphql.Pagination.Default
-import muse.server.graphql.resolver.{GetAlbum, GetComment, GetPlaylist, GetReview, GetSearch, GetTrack, GetUser, GetUserPlaylists}
-import muse.server.graphql.subgraph.{Album, Comment, Playlist, Review, SearchResult, Track, User}
+import muse.server.graphql.resolver.*
+import muse.server.graphql.subgraph.*
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService

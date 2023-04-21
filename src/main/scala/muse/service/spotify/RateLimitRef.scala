@@ -1,6 +1,7 @@
 package muse.service.spotify
 
-import zio.{Ref, ZLayer, Clock, Console}
+import zio.{Clock, Console, Ref, ZLayer}
+
 import java.time.temporal.ChronoUnit
 
 object RateLimitRef {

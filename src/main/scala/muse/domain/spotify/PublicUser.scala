@@ -11,7 +11,7 @@ final case class PublicUser(
     id: String,
     `type`: String,
     images: List[Image],
-    uri: String,
+    uri: String
 )
 
 object PublicUser {

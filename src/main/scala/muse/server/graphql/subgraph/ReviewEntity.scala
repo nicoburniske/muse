@@ -3,7 +3,7 @@ package muse.server.graphql.subgraph
 import caliban.schema.Annotations.GQLInterface
 import muse.domain.common.Types.UserId
 import muse.domain.spotify
-import muse.server.graphql.resolver.{CheckUserLikedSong, GetAlbum, GetAlbumTracks, GetArtist, GetArtistAlbums, GetArtistTopTracks, GetPlaylist, GetPlaylistTracks, GetTrack, GetTrackAudioAnalysis, GetTrackAudioFeatures, GetUser}
+import muse.server.graphql.resolver.*
 import muse.server.graphql.subgraph
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
