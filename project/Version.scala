@@ -1,5 +1,6 @@
 object Version {
   val zio        = "2.0.13"
+  val zioPrelude = "1.0.0-RC18"
   // TODO: what is the right version
   val zioNio     = "2.0.0"
   val zioJson    = "0.5.0"

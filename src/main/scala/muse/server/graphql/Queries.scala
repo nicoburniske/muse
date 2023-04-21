@@ -1,8 +1,10 @@
 package muse.server.graphql
 
 import caliban.schema.Annotations.GQLDefault
+import caliban.schema.Schema.stringSchema
 import caliban.schema.{ArgBuilder, Schema}
 import muse.domain.common.EntityType
+import muse.domain.common.Types.UserId
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.PlaybackDevice
@@ -17,28 +19,30 @@ import zio.query.ZQuery
 
 import java.util.UUID
 
-final case class UserArgs(id: Option[String]) derives Schema.SemiAuto, ArgBuilder
-final case class SearchUserArgs(displayName: String) derives Schema.SemiAuto, ArgBuilder
-final case class ReviewArgs(id: UUID) derives Schema.SemiAuto, ArgBuilder
-final case class ReviewsArgs(reviewIds: List[UUID]) derives Schema.SemiAuto, ArgBuilder
+final case class UserInput(id: Option[UserId])
+final case class SearchUserInput(displayName: String) derives Schema.SemiAuto, ArgBuilder
+final case class ReviewInput(id: UUID) derives Schema.SemiAuto, ArgBuilder
+final case class ReviewsInput(reviewIds: List[UUID]) derives Schema.SemiAuto, ArgBuilder
 
 final case class SearchArgs(
     query: String,
     types: Set[EntityType],
-    @GQLDefault(Default.Search.annotation) pagination: Option[Pagination]) derives Schema.SemiAuto, ArgBuilder
+    @GQLDefault(Default.Search.annotation) pagination: Option[Pagination])
+    derives Schema.SemiAuto,
+      ArgBuilder
 
 final case class EntityId(id: String) derives Schema.SemiAuto, ArgBuilder
 // TODO: Integrate "Input" for arguments.
 final case class Queries(
-    user: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Nothing, User],
-    userMaybe: UserArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, User],
-    searchUser: SearchUserArgs => ZQuery[
+    user: UserInput => ZQuery[RequestSession[UserSession] & DatabaseService, Nothing, User],
+    userMaybe: UserInput => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, User],
+    searchUser: SearchUserInput => ZQuery[
       RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService,
       Throwable,
       List[User]],
-    review: ReviewArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, Option[Review]],
-    reviews: ReviewsArgs => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]],
-//    search: SearchArgs => ZQuery[RequestSession[SpotifyService], Throwable, SearchResult],
+    review: ReviewInput => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, Option[Review]],
+    reviews: ReviewsInput => ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]],
+    //    search: SearchArgs => ZQuery[RequestSession[SpotifyService], Throwable, SearchResult],
     getPlaylist: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Playlist],
     getAlbum: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Album],
     getTrack: EntityId => ZQuery[RequestSession[SpotifyService], Throwable, Track]

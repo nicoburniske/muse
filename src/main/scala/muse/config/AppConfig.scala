@@ -2,14 +2,15 @@ package muse.config
 
 import zio.config.*
 import zio.Config
-import Config._
+import Config.*
 import com.typesafe.config.ConfigFactory
 import zio.config.typesafe.TypesafeConfigProvider
+import zio.redis.RedisConfig
 import zio.{ZIO, ZLayer}
 
 import java.io.File
 
-final case class AppConfig(spotify: SpotifyConfig, sqlConfig: SqlConfig, serverConfig: ServerConfig)
+final case class AppConfig(spotify: SpotifyConfig, sqlConfig: SqlConfig, serverConfig: ServerConfig, redisConfig: RedisConfig)
 
 object AppConfig {
 
@@ -19,15 +20,11 @@ object AppConfig {
     sql            <- ZLayer.succeed(appConfigEnv.get.sqlConfig)
     server         <- ZLayer.succeed(appConfigEnv.get.serverConfig)
     spotifyService <- ZLayer.succeed(appConfigEnv.get.spotify.service)
-  } yield appConfigEnv ++ spotify ++ sql ++ server ++ spotifyService
+    redisConfig    <- ZLayer.succeed(appConfigEnv.get.redisConfig)
+  } yield appConfigEnv ++ spotify ++ sql ++ server ++ spotifyService ++ redisConfig
 
   lazy val layer = appConfigLayer >>> flattened
 
-//  lazy val appConfigLayer = for {
-//    config <- ZIO.attempt(ConfigFactory.load.resolve)
-//    appConfig <- TypesafeConfigProvider.fromTypesafeConfig(config)
-//
-//                                 }
   lazy val appConfigLayer = ZLayer.fromZIO {
     read(appDescriptor from TypesafeConfigProvider.fromTypesafeConfig(ConfigFactory.load.resolve))
   }
@@ -35,7 +32,8 @@ object AppConfig {
   lazy val appDescriptor: Config[AppConfig] =
     (spotifyDescriptor.nested("spotify") zip
       sqlDescriptor.nested("db") zip
-      serverDescriptor.nested("server")).to[AppConfig]
+      serverDescriptor.nested("server") zip
+      redisDescriptor.nested("redis")).to[AppConfig]
 
   lazy val spotifyServiceDescriptor: Config[SpotifyServiceConfig] =
     (int("artist_cache_size") zip
@@ -56,6 +54,10 @@ object AppConfig {
       int("port") zip
       string("user") zip
       string("password")).to[SqlConfig]
+
+  lazy val redisDescriptor: Config[RedisConfig] =
+    (string("host") zip
+      int("port")).to[RedisConfig]
 
   lazy val serverDescriptor: Config[ServerConfig] =
     (string("domain").optional zip

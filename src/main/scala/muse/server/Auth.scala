@@ -1,6 +1,7 @@
 package muse.server
 
 import muse.config.{ServerConfig, SpotifyConfig}
+import muse.domain.common.Types.{RefreshToken, SessionId, UserId}
 import muse.domain.session.UserSession
 import muse.domain.spotify.auth.AuthCodeFlowData
 import muse.domain.table.User
@@ -122,14 +123,13 @@ object Auth {
    */
   def handleUserLogin(auth: AuthCodeFlowData) =
     for {
-      uuid         <- Random.nextUUID
-      newSessionId  = uuid.toString
+      newSessionId <- Random.nextUUID.map(_.toString).map(SessionId(_))
       spotify      <- SpotifyService.live(auth.accessToken)
       userInfo     <- spotify.getCurrentUserProfile.retry(Schedule.recurs(2))
       spotifyUserId = userInfo.id
       _            <- ZIO.logInfo(s"Retrieved profile data for user $spotifyUserId")
       _            <- DatabaseService
-                        .createOrUpdateUser(newSessionId, auth.refreshToken, spotifyUserId)
+                        .createOrUpdateUser(newSessionId, RefreshToken(auth.refreshToken), UserId(spotifyUserId))
                         .timeout(10.seconds)
                         .tapError(_ => ZIO.logError("Failed to process user login."))
       _            <- ZIO.logInfo(s"Successfully logged in $spotifyUserId.")

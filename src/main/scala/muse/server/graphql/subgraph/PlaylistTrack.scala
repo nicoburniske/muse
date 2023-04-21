@@ -1,5 +1,6 @@
 package muse.server.graphql.subgraph
 
+import muse.domain.common.Types.UserId
 import muse.domain.spotify
 import muse.server.graphql.resolver.{GetPlaylist, GetUser}
 import muse.service.RequestSession
@@ -21,9 +22,9 @@ object PlaylistTrack {
   def fromSpotify(t: spotify.PlaylistTrack, playlistId: String) = {
     val user = {
       if (t.addedBy.id.isBlank)
-        GetUser.queryByUserId("spotify")
+        GetUser.queryByUserId(UserId("spotify"))
       else
-        User.missingSome(t.addedBy.id, t.addedBy.displayName, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls)
+        User.missingSome(UserId(t.addedBy.id), t.addedBy.displayName, t.addedBy.href, t.addedBy.uri, t.addedBy.externalUrls)
     }
 
     PlaylistTrack(

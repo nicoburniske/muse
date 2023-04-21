@@ -4,10 +4,12 @@ import caliban.CalibanError.{ExecutionError, ParsingError, ValidationError}
 import caliban.ResponseValue.ObjectValue
 import caliban.Value.StringValue
 import caliban.schema.{ArgBuilder, GenericSchema, Schema}
+import caliban.schema.Schema.stringSchema
 import caliban.wrappers.ApolloTracing.apolloTracing
 import caliban.wrappers.Wrappers.printErrors
 import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
+import muse.domain.common.Types.UserId
 import muse.domain.error.*
 import muse.domain.event.ReviewUpdate
 import muse.domain.mutate.*
@@ -31,8 +33,8 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] &
-    DatabaseService & UserSessions & Hub[ReviewUpdate] & Scope
+  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & Hub[ReviewUpdate] &
+    Scope
 
   given Schema[Env, spotify.PlaybackDevice]  = Schema.gen
   given Schema[Env, spotify.ExternalIds]     = Schema.gen
@@ -66,6 +68,11 @@ object MuseGraphQL {
 //  given Schema[Env, PaginationResult[Artist]]   = Schema.gen
 //  given Schema[Env, PaginationResult[Playlist]] = Schema.gen
 //  given Schema[Env, PaginationResult[Track]]    = Schema.gen
+
+  given Schema[Env, UserId]    = stringSchema.contramap(UserId(_))
+  given ArgBuilder[UserId]     = ArgBuilder.string.map(UserId(_))
+  given Schema[Env, UserInput] = Schema.gen
+  given ArgBuilder[UserInput]  = ArgBuilder.gen
 
   given Schema[Env, Review]             = Schema.gen
   given Schema[Env, Comment]            = Schema.gen

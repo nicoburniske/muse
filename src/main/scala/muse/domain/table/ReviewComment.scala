@@ -1,5 +1,6 @@
 package muse.domain.table
 
+import muse.domain.common.Types.UserId
 import zio.json.{DeriveJsonCodec, JsonCodec}
 
 import java.time.Instant
@@ -11,11 +12,8 @@ final case class ReviewComment(
     updatedAt: Instant,
     deleted: Boolean,
     reviewId: UUID,
-    commenter: String,
+    commenter: UserId,
     // Comment can be null if deleted.
     comment: Option[String]
 )
 
-object ReviewComment {
-  given reviewSummaryCodec: JsonCodec[ReviewComment] = DeriveJsonCodec.gen[ReviewComment]
-}

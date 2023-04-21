@@ -1,21 +1,9 @@
 package muse.server.graphql.subgraph
 
 import caliban.schema.Annotations.GQLInterface
+import muse.domain.common.Types.UserId
 import muse.domain.spotify
-import muse.server.graphql.resolver.{
-  CheckUserLikedSong,
-  GetAlbum,
-  GetAlbumTracks,
-  GetArtist,
-  GetArtistAlbums,
-  GetArtistTopTracks,
-  GetPlaylistTracks,
-  GetTrack,
-  GetTrackAudioAnalysis,
-  GetTrackAudioFeatures,
-  GetPlaylist,
-  GetUser
-}
+import muse.server.graphql.resolver.{CheckUserLikedSong, GetAlbum, GetAlbumTracks, GetArtist, GetArtistAlbums, GetArtistTopTracks, GetPlaylist, GetPlaylistTracks, GetTrack, GetTrackAudioAnalysis, GetTrackAudioFeatures, GetUser}
 import muse.server.graphql.subgraph
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
@@ -39,7 +27,8 @@ case class Artist(
     id: String,
     uri: String,
     name: String,
-    externalUrls: Map[String, String],
+    // Has to be wrapped with a query to be consistent with other entities.
+    externalUrls: SpotQuery[Map[String, String]],
     // From full artist.
     numFollowers: SpotQuery[Int],
     genres: SpotQuery[List[String]],
@@ -59,7 +48,7 @@ object Artist {
       a.id,
       a.uri,
       a.name,
-      a.externalUrls,
+      ZQuery.succeed(a.externalUrls),
       artist.flatMap(_.numFollowers),
       artist.flatMap(_.genres),
       artist.flatMap(_.images),
@@ -74,7 +63,7 @@ object Artist {
       a.id,
       a.uri,
       a.name,
-      a.externalUrls,
+      ZQuery.succeed(a.externalUrls),
       ZQuery.succeed(a.followers.total),
       ZQuery.succeed(a.genres),
       ZQuery.succeed(a.images.map(_.url)),
@@ -247,9 +236,9 @@ case class Playlist(
     public: Option[Boolean],
     description: Option[String],
     numberOfTracks: Int,
-    externalUrls: Map[String, String],
     images: List[String],
     owner: User,
+    externalUrls: SpotQuery[Map[String, String]],
     snapshotId: SpotQuery[String],
     numberOfFollowers: SpotQuery[Int],
     tracks: SpotQuery[List[PlaylistTrack]]
@@ -265,9 +254,9 @@ object Playlist {
     p.public,
     p.description,
     p.tracks.total,
-    p.externalUrls,
     p.images.map(_.url),
-    GetUser.queryByUserId(p.owner.id),
+    GetUser.queryByUserId(UserId(p.owner.id)),
+    ZQuery.succeed(p.externalUrls),
     ZQuery.succeed(p.snapshotId),
     ZQuery.succeed(p.followers.total),
     GetPlaylistTracks.query(p.id, p.tracks.total)
@@ -283,9 +272,9 @@ object Playlist {
       p.public,
       p.description,
       p.tracks.total,
-      p.externalUrls,
       p.images.map(_.url),
-      GetUser.queryByUserId(p.owner.id),
+      GetUser.queryByUserId(UserId(p.owner.id)),
+      ZQuery.succeed(p.externalUrls),
       ZQuery.succeed(p.snapshotId),
       GetPlaylist.query(p.id).flatMap(_.numberOfFollowers),
       GetPlaylistTracks.query(p.id, p.tracks.total)
@@ -302,9 +291,9 @@ object Playlist {
       p.public,
       p.description,
       p.tracks.total,
-      p.externalUrls,
       p.images.map(_.url),
-      GetUser.queryByUserId(p.owner.id),
+      GetUser.queryByUserId(UserId(p.owner.id)),
+      ZQuery.succeed(p.externalUrls),
       query.flatMap(_.snapshotId),
       query.flatMap(_.numberOfFollowers),
       GetPlaylistTracks.query(p.id, p.tracks.total)

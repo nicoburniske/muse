@@ -29,6 +29,7 @@ lazy val root = (project in file("."))
     Compile / discoveredMainClasses  := Seq(),
     libraryDependencies ++= Seq(
       "dev.zio"                       %% "zio"                           % Version.zio,
+      "dev.zio"                       %% "zio-prelude"                   % Version.zioPrelude,
       "dev.zio"                       %% "zio-schema"                    % Version.zioSchema,
       "dev.zio"                       %% "zio-schema-json"               % Version.zioSchema,
       "dev.zio"                       %% "zio-json"                      % Version.zioJson,
@@ -76,7 +77,7 @@ lazy val root = (project in file("."))
     ),
     assembly / assemblyMergeStrategy := {
       case PathList("module-info.class") => MergeStrategy.discard
-      case PathList("META-INF", xs*) => MergeStrategy.discard
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
       case _                             => MergeStrategy.first
     }
   ).settings(dockerSettings*)

@@ -1,5 +1,6 @@
 package muse.server.graphql.resolver
 
+import muse.domain.common.Types.UserId
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.server.graphql.subgraph.User
@@ -10,14 +11,14 @@ import muse.service.spotify.SpotifyService
 import zio.query.{DataSource, Request, ZQuery}
 import zio.ZIO
 
-case class GetUser(id: String) extends Request[Nothing, User]
+case class GetUser(id: UserId) extends Request[Nothing, User]
 
 object GetUser {
-  def query(maybeId: Option[String]) = maybeId match
+  def query(maybeId: Option[UserId]) = maybeId match
     case None     => currentUser
     case Some(id) => ZQuery.succeed(queryByUserId(id))
 
-  def queryByUserId(userId: String) =
+  def queryByUserId(userId: UserId) =
     User(userId, GetUserReviews.query(userId), GetSpotifyProfile.query(userId), GetUserPlaylists.boxedQuery(userId))
 
   def currentUser = for {
@@ -37,7 +38,7 @@ object GetUser {
         p.displayName.map(_.toLowerCase()).exists(_.contains(lowercaseSearch)) ||
         p.id.toLowerCase().contains(lowercaseSearch)
       }.map { spotifyUser =>
-        val userId = spotifyUser.id
+        val userId = UserId(spotifyUser.id)
         User(
           userId,
           GetUserReviews.query(userId, All),

@@ -1,5 +1,6 @@
 package muse.server.graphql.subgraph
 
+import muse.domain.common.Types.UserId
 import muse.domain.session.UserSession
 import muse.server.graphql.resolver.{GetSpotifyProfile, GetUser, GetUserPlaylists, GetUserReviews, UserPlaylistsInput}
 import muse.server.graphql.{Input, Pagination, subgraph}
@@ -10,7 +11,7 @@ import zio.ZIO
 import zio.query.ZQuery
 
 final case class User(
-    id: String,
+    id: UserId,
     reviews: ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]],
     spotifyProfile: ZQuery[RequestSession[SpotifyService], Throwable, SpotifyProfile],
     playlists: UserPlaylistsInput => ZQuery[
@@ -20,7 +21,7 @@ final case class User(
 )
 
 object User {
-  def missingSome(userId: String, displayName: Option[String], href: String, uri: String, externalUrls: Map[String, String]) =
+  def missingSome(userId: UserId, displayName: Option[String], href: String, uri: String, externalUrls: Map[String, String]) =
     User(
       userId,
       GetUserReviews.query(userId),

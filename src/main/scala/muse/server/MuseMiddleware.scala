@@ -6,6 +6,7 @@ import caliban.{CalibanError, GraphQLInterpreter, GraphQLWSOutput, InputValue, Z
 import io.netty.handler.codec.http.HttpHeaderNames
 import muse.domain.error.{MuseError, RateLimited, Unauthorized}
 import muse.domain.session.UserSession
+import muse.domain.common.Types.SessionId
 import muse.server.graphql.MuseGraphQL
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService}
 import muse.service.{RequestSession, UserSessions}
@@ -38,23 +39,19 @@ object MuseMiddleware {
             sessionData        <- {
               extractRequestAuth(request) match
                 case None            => ZIO.fail(Unauthorized("Missing Auth Header"))
-                case Some(sessionId) =>
-                  UserSessions.getUserSession(sessionId) <&>
-                    UserSessions.getUserBulkhead(sessionId)
+                case Some(sessionId) => UserSessions.getSessionAndBulkhead(SessionId(sessionId))
             }
             (session, bulkhead) = sessionData
             _                  <- RequestSession.set[UserSession](Some(session))
             spotify            <- SpotifyService.live(session.accessToken)
             _                  <- RequestSession.set[SpotifyService](Some(spotify))
-
             // Run handler with bulkhead.
-//            result <- handler.runZIO(request)
-            result <- bulkhead {
-                        handler.runZIO(request)
-                      }.mapError {
-                        case WrappedError(error)        => error
-                        case Bulkhead.BulkheadRejection => RateLimited
-                      }
+            result             <- bulkhead {
+                                    handler.runZIO(request)
+                                  }.mapError {
+                                    case WrappedError(error)        => error
+                                    case Bulkhead.BulkheadRejection => RateLimited
+                                  }
           } yield result
         }
     }
@@ -151,7 +148,7 @@ object MuseMiddleware {
       case false =>
         ZIO
           .fromOption(maybeUserSessionId).orElseFail(Unauthorized("Missing Auth: Unable to decode payload"))
-          .flatMap(auth => UserSessions.getUserSession(auth))
+          .flatMap(auth => UserSessions.getUserSession(SessionId(auth)))
           .flatMap(session => ref.set(Some(session)))
     }
 

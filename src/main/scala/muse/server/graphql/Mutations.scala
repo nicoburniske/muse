@@ -2,6 +2,7 @@ package muse.server.graphql
 
 import caliban.schema.{ArgBuilder, Schema}
 import muse.domain.common.EntityType
+import muse.domain.common.Types.UserId
 import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
 import muse.domain.event.ReviewUpdate.{CreatedComment, DeletedComment, UpdatedComment}
 import muse.domain.event.ReviewUpdate
@@ -95,9 +96,8 @@ object Mutations {
     _         <- ZIO
                    .fail(BadRequest(Some("Comment must have a non-empty body")))
                    .when(create.comment.isEmpty)
-    _         <- ZIO.foreachPar(create.entities)(e => validateEntity(e._2, e._1)) <&> validateCommentPermissions(
-                   user.userId,
-                   create.reviewId)
+    _         <- ZIO.foreachPar(create.entities)(e => validateEntity(e._2, e._1))
+                   <&> validateCommentPermissions(user.userId, create.reviewId)
     result    <- DatabaseService.createReviewComment(user.userId, create).map {
                    case (comment, index, parentChild, entities) => (comment, index, parentChild.fold(Nil)(List(_)), entities)
                  }
@@ -219,14 +219,14 @@ object Mutations {
       case false => ZIO.fail(InvalidEntity(entityId, entityType))
     }
 
-  private def validateReviewPermissions(userId: String, reviewId: UUID): ZIO[DatabaseService, Throwable | Forbidden, Unit] =
+  private def validateReviewPermissions(userId: UserId, reviewId: UUID): ZIO[DatabaseService, Throwable | Forbidden, Unit] =
     DatabaseService.canModifyReview(userId, reviewId).flatMap {
       case true  => ZIO.unit
       case false => ZIO.fail(Forbidden(s"User $userId cannot modify review $reviewId"))
     }
 
   private def validateCommentEditingPermissions(
-      userId: String,
+      userId: UserId,
       reviewId: UUID,
       commentId: Long): ZIO[DatabaseService, Throwable | Forbidden, Unit] =
     DatabaseService.canModifyComment(userId, reviewId, commentId).flatMap {
@@ -234,14 +234,14 @@ object Mutations {
       case false => ZIO.fail(Forbidden(s"User $userId cannot modify comment $commentId"))
     }
 
-  private def validateCommentPermissions(userId: String, reviewId: UUID): ZIO[DatabaseService, Throwable | Forbidden, Unit] = {
+  private def validateCommentPermissions(userId: UserId, reviewId: UUID): ZIO[DatabaseService, Throwable | Forbidden, Unit] = {
     DatabaseService.canMakeComment(userId, reviewId).flatMap {
       case true  => ZIO.unit
       case false => ZIO.fail(Forbidden(s"User $userId cannot comment on review $reviewId"))
     }
   }
 
-  private def validateUser(userId: String): ZIO[DatabaseService, Throwable | InvalidUser, Unit] =
+  private def validateUser(userId: UserId): ZIO[DatabaseService, Throwable | InvalidUser, Unit] =
     DatabaseService.getUserById(userId).flatMap {
       case Some(_) => ZIO.unit
       case None    => ZIO.fail(InvalidUser(userId))

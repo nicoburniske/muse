@@ -23,7 +23,6 @@ case class RedisService(redis: Redis) {
                         } yield value
                     }
     } yield value
-//      ).provideSomeLayer[R](layer)
 
   def cacheOrExecuteBulk[T: Schema, E <: Throwable, R](keys: List[String])(
       retrieveFresh: List[String] => ZIO[R, E, Map[String, T]]): ZIO[R, Throwable, Map[String, T]] =
@@ -47,8 +46,8 @@ case class RedisService(redis: Redis) {
 
 object RedisService {
 
-  def redisLayer = (RedisExecutor.local ++ codecLayer) >>> Redis.layer
-  def layer = ZLayer.fromFunction(RedisService.apply)
+  def redisLayer   = (RedisExecutor.layer ++ codecLayer) >>> Redis.layer
+  def serviceLayer = ZLayer.fromFunction(RedisService.apply)
 
   def codecLayer = ZLayer.succeed[CodecSupplier](RedisCodecSupplier)
 
