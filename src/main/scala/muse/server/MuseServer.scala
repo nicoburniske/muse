@@ -19,6 +19,7 @@ import sttp.client3.SttpBackend
 import zio.http.middleware.RequestHandlerMiddlewares
 import zio.http.model.{HttpError, Method}
 import zio.http.*
+import zio.http.HttpAppMiddleware.cors
 import zio.metrics.connectors.prometheus.PrometheusPublisher
 import zio.{Tag, Task, ZIO}
 
@@ -28,9 +29,9 @@ val COOKIE_KEY = "XSESSION"
 object MuseServer {
   val live = for {
     _                  <- MigrationService.runMigrations
-    _                  <- writeSchemaToFile
     protectedEndpoints <- createProtectedEndpoints
-    allEndpoints        = Auth.loginEndpoints ++ protectedEndpoints
+    cors               <- getCorsConfig
+    allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ cors
     _                  <- Server.serve(allEndpoints) <&> metricsServer
   } yield ()
 
@@ -56,6 +57,13 @@ object MuseServer {
       },
       Http.collectRoute[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
     )
+  }
+
+  val getCorsConfig = {
+    import zio.http.middleware.Cors.CorsConfig
+    for {
+      domain <- ZIO.serviceWith[ServerConfig](_.domain)
+    } yield cors(CorsConfig(allowedOrigins = origin => origin.contains(domain)))
   }
 
   val metricsServer =
