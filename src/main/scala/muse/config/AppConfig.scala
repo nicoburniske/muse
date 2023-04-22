@@ -9,7 +9,23 @@ import zio.{Config, ZIO, ZLayer}
 
 import java.io.File
 
-final case class AppConfig(spotify: SpotifyConfig, sqlConfig: SqlConfig, serverConfig: ServerConfig, redisConfig: RedisConfig)
+final case class AppConfig(
+    spotify: SpotifyConfig,
+    sqlConfig: SqlConfig,
+    serverConfig: ServerConfig,
+    redisConfig: RedisCacheConfig)
+
+final case class ServerConfig(domain: Option[String], frontendUrl: String, port: Int, schemaFile: String, nThreads: Int)
+final case class SpotifyConfig(clientID: String, clientSecret: String, redirectURI: String, service: SpotifyServiceConfig)
+final case class SpotifyServiceConfig(
+    artistCacheSize: Int,
+    albumCacheSize: Int,
+    userCacheSize: Int,
+    playlistCacheSize: Int,
+    likedSongsCacheSize: Int
+)
+final case class SqlConfig(database: String, host: String, port: Int, user: String, password: String)
+final case class RedisCacheConfig(host: String, port: Int, username: String, password: String)
 
 object AppConfig {
 
@@ -20,6 +36,7 @@ object AppConfig {
     server         <- ZLayer.succeed(appConfigEnv.get.serverConfig)
     spotifyService <- ZLayer.succeed(appConfigEnv.get.spotify.service)
     redisConfig    <- ZLayer.succeed(appConfigEnv.get.redisConfig)
+    _              <- ZLayer.fromZIO(ZIO.logInfo(s"Loaded config: $redisConfig"))
   } yield appConfigEnv ++ spotify ++ sql ++ server ++ spotifyService ++ redisConfig
 
   lazy val layer = appConfigLayer >>> flattened
@@ -54,9 +71,11 @@ object AppConfig {
       string("user") zip
       string("password")).to[SqlConfig]
 
-  lazy val redisDescriptor: Config[RedisConfig] =
+  lazy val redisDescriptor: Config[RedisCacheConfig] =
     (string("host") zip
-      int("port")).to[RedisConfig]
+      int("port") zip
+      string("username") zip
+      string("password")).to[RedisCacheConfig]
 
   lazy val serverDescriptor: Config[ServerConfig] =
     (string("domain").optional zip

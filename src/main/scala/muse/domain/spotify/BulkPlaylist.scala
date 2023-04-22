@@ -1,6 +1,5 @@
 package muse.domain.spotify
 
-import muse.domain.common.{Entity, EntityType}
 import zio.json.*
 
 // Bulk endpoints don't include followers.

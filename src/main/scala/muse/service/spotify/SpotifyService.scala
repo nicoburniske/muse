@@ -209,15 +209,15 @@ case class SpotifyServiceLive(
   private def artistKey(id: String) = "artist:" + id
 
   def getArtist(id: String): Task[Artist] =
-    redisService.cacheOrExecute("artist:" + id, 30.minutes)(s.getArtist(id))
+    redisService.cacheOrExecute(artistKey(id), 30.minutes)(s.getArtist(id))
 
   def getArtists(ids: Seq[String]): Task[Vector[Artist]] =
     redisService
-      .cacheOrExecuteBulk(ids.map(artistKey).toList) { ids =>
+      .cacheOrExecuteBulk(ids.toList, 1.hour)(artistKey) { ids =>
         for {
           artists <- s.getArtists(ids.toVector)
-        } yield artists.map(a => artistKey(a.id) -> a).toMap
-      }.map(_.values.toVector)
+        } yield artists.map(a => a.id -> a).toMap
+      }.map(_.toVector)
 
   private def albumKey(id: String) = "album:" + id
 
@@ -226,11 +226,11 @@ case class SpotifyServiceLive(
 
   def getAlbums(ids: Seq[String]): Task[Vector[Album]] =
     redisService
-      .cacheOrExecuteBulk(ids.map(albumKey).toList) { ids =>
+      .cacheOrExecuteBulk(ids.toList, 1.hour)(albumKey) { ids =>
         for {
           albums <- s.getAlbums(ids.toVector)
-        } yield albums.map(a => albumKey(a.id) -> a).toMap
-      }.map(_.values.toVector)
+        } yield albums.map(a => a.id -> a).toMap
+      }.map(_.toVector)
 
   def getUserPlaylists(userId: UserId, limit: Int, offset: Option[Int] = None) =
     s.getUserPlaylists(userId, limit, offset)

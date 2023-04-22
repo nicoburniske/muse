@@ -9,7 +9,7 @@ object Version {
   val zioMetrics = "2.0.1"
   val zioLogging = "2.1.12"
   val zioHttp    = "0.0.5"
-  val zioRedis   = "0.2.0"
+  val zioRedis   = "0.2.0+9-266abfb3-SNAPSHOT"
   val zioSchema  = "0.4.10"
 
   val rezilience = "0.9.3"

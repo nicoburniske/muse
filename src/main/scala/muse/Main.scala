@@ -19,7 +19,7 @@ import zio.http.{Client, Server}
 import zio.logging.*
 import zio.logging.backend.SLF4J
 import zio.metrics.connectors.MetricsConfig
-import zio.redis.{Redis, RedisExecutor}
+import zio.redis.{Redis, RedisError, RedisExecutor}
 import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, durationInt}
 
 import java.time.format.DateTimeFormatter
@@ -35,12 +35,11 @@ object Main extends ZIOAppDefault {
       Client.default,
       // Spotify layers
       SpotifyAuthService.layer,
-      SpotifyCache.layer,
+//      SpotifyCache.layer,
       RateLimitRef.layer,
       // Muse layers.
       AppConfig.layer,
       DatabaseService.layer,
-      RedisService.serviceLayer,
       RedisService.redisLayer,
       MigrationService.layer,
       UserSessions.layer,
@@ -54,7 +53,10 @@ object Main extends ZIOAppDefault {
       metricsConfig,
       Runtime.enableRuntimeMetrics
     )
-    .tapErrorCause(e => ZIO.logErrorCause(s"Failed to start server ${e.prettyPrint}", e))
+    .tapError {
+      case RedisError.IOError(t) => ZIO.logError(s"Failed to start server ${t.toString}")
+      case t: Throwable          => ZIO.logError(s"Failed to start server ${t.toString}")
+    }
     .exitCode
 
   val serverConfig = ZLayer.fromFunction { (config: ServerConfig) => Server.defaultWithPort(config.port) }.flatten

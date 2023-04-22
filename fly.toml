@@ -1,50 +1,51 @@
-# fly.toml file generated for muselabs on 2023-01-27T12:38:05-05:00
+# fly.toml app configuration file generated for muselabs on 2023-04-21T17:41:32-04:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
 app = "muselabs"
+primary_region = "mia"
 kill_signal = "SIGINT"
 kill_timeout = 5
-processes = []
+
+[experimental]
+  auto_rollback = true
 
 [env]
   SERVER_PORT = "8080"
   SPOTIFY_REDIRECT_URI = "https://api.muselabs.xyz/callback"
 
-[build]
-  dockerfile = "target/docker/stage/Dockerfile"
+  REDIS_HOST = "fly-muse-redis.upstash.io"
+  REDIS_PORT = "6379"
+  REDIS_USERNAME = "default"
 
-[experimental]
-  allowed_public_ports = []
-  auto_rollback = true
-  cmd = []
-  entrypoint = []
-  exec = []
-
-[metrics]
-  path = "/metrics"
-  port = 9091
+#[build]
+#  dockerfile = "target/docker/stage/Dockerfile"
 
 [[services]]
-  http_checks = []
+  protocol = "tcp"
   internal_port = 8080
   processes = ["app"]
-  protocol = "tcp"
-  script_checks = []
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
   [services.concurrency]
+    type = "connections"
     hard_limit = 25
     soft_limit = 20
-    type = "connections"
-
-  [[services.ports]]
-    force_https = true
-    handlers = ["http"]
-    port = 80
-
-  [[services.ports]]
-    handlers = ["tls", "http"]
-    port = 443
 
   [[services.tcp_checks]]
-    grace_period = "1s"
     interval = "15s"
-    restart_limit = 0
     timeout = "2s"
+    grace_period = "1s"
+    restart_limit = 0
+
+[metrics]
+  port = 9091
+  path = "/metrics"

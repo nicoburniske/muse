@@ -1,8 +1,3 @@
-ThisBuild / version      := "0.1.0"
-ThisBuild / organization := "io.nicoburniske"
-ThisBuild / name         := "muse"
-ThisBuild / scalaVersion := "3.2.2"
-
 lazy val mainMethod = "muse.Main"
 
 inThisBuild(
@@ -21,6 +16,11 @@ inThisBuild(
 lazy val root = (project in file("."))
   .enablePlugins(JavaAppPackaging, DockerPlugin)
   .settings(
+    // This is required by nixpacks
+    organization                     := "io.nicoburniske",
+    version                          := "0.1.0",
+    scalaVersion                     := "3.2.2",
+    executableScriptName             := "main",
     name                             := "muse",
     assembly / assemblyJarName       := "muse.jar",
     Compile / mainClass              := Some(mainMethod),
@@ -32,6 +32,7 @@ lazy val root = (project in file("."))
       "dev.zio"                       %% "zio-prelude"                   % Version.zioPrelude,
       "dev.zio"                       %% "zio-schema"                    % Version.zioSchema,
       "dev.zio"                       %% "zio-schema-json"               % Version.zioSchema,
+      "dev.zio"                       %% "zio-schema-protobuf"           % Version.zioSchema,
       "dev.zio"                       %% "zio-json"                      % Version.zioJson,
       "dev.zio"                       %% "zio-nio"                       % Version.zioNio,
       "dev.zio"                       %% "zio-cache"                     % Version.zioCache,
@@ -62,10 +63,8 @@ lazy val root = (project in file("."))
       "com.github.ghostdogpr"         %% "caliban-zio-http"              % Version.caliban,
       "com.softwaremill.sttp.tapir"   %% "tapir-json-zio"                % "1.2.11",
       // Test Libraries.
-      "dev.zio"                       %% "zio-test"                      % Version.zio % Test
-    ),
-    scalacOptions ++= Seq(
-      "-Xmax-inlines:55"
+      "dev.zio"                       %% "zio-test"                      % Version.zio      % Test,
+      "dev.zio"                       %% "zio-redis-embedded"            % Version.zioRedis % Test
     ),
     testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
     resolvers ++= Seq(
@@ -91,7 +90,7 @@ lazy val dockerSettings = Seq(
   dockerBaseImage      := "azul/zulu-openjdk:17",
   Universal / javaOptions ++= Seq(
     "-J-XX:ActiveProcessorCount=4", // Overrides the automatic detection mechanism of the JVM that doesn't work very well in k8s.
-    "-J-XX:MaxRAMPercentage=80.0",  // 80% * 1280Mi = 1024Mi (See https://github.com/conduktor/conduktor-devtools-builds/pull/96/files#diff-1c0a26888454bc51fc9423622b5d4ee82456b0420f169518a371f3f0e23d443cR67-R70)
+//    "-J-XX:MaxRAMPercentage=80.0",  // 80% * 1280Mi = 1024Mi (See https://github.com/conduktor/conduktor-devtools-builds/pull/96/files#diff-1c0a26888454bc51fc9423622b5d4ee82456b0420f169518a371f3f0e23d443cR67-R70)
     "-J-XX:+ExitOnOutOfMemoryError",
     "-J-XX:+HeapDumpOnOutOfMemoryError",
     "-J-XshowSettings:system",      // https://developers.redhat.com/articles/2022/04/19/java-17-whats-new-openjdks-container-awareness#recent_changes_in_openjdk_s_container_awareness_code
