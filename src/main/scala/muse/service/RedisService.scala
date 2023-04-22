@@ -16,8 +16,7 @@ case class RedisService(redis: Redis) {
     for {
       maybeValue <- redis.get(key).returning[T].timeoutTo(None)(identity)(1.seconds)
       value      <- maybeValue match {
-                      case Some(value) =>
-                        ZIO.logInfo(s"Found a value for key $key") *> ZIO.succeed(value)
+                      case Some(value) => ZIO.succeed(value)
                       case None        =>
                         for {
                           value <- retrieveFresh

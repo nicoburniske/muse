@@ -191,11 +191,17 @@ case class SpotifyServiceLive(
   def getPlaylist(playlistId: String, fields: Option[String] = None, market: Option[String] = None) =
     redisService.cacheOrExecute("playlist:" + playlistId, 10.minutes)(s.getPlaylist(playlistId, fields, market))
 
+  def trackKey(id: String)                                = "track:" + id
   def getTrack(id: String, market: Option[String] = None) =
-    s.getTrack(id, market)
+    redisService.cacheOrExecute(trackKey(id), 30.minutes)(s.getTrack(id))
 
   def getTracks(ids: Seq[String], market: Option[String] = None) =
-    s.getTracks(ids.toVector, market)
+    redisService
+      .cacheOrExecuteBulk(ids.toList, 1.hour)(trackKey) { ids =>
+        for {
+          tracks <- s.getTracks(ids.toVector)
+        } yield tracks.map(a => a.id -> a).toMap
+      }.map(_.toVector)
 
   def getTrackAudioAnalysis(id: String) =
     s.getTrackAudioAnalysis(id)
