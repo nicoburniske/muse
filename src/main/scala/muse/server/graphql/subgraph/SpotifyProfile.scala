@@ -1,5 +1,6 @@
 package muse.server.graphql.subgraph
 
+import caliban.schema.Schema
 import muse.domain.spotify
 import muse.server.graphql.resolver.GetSpotifyProfile
 import muse.service.RequestSession

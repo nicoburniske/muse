@@ -1,7 +1,6 @@
 package muse.domain.spotify
 
-import zio.json.JsonDecoder
-import zio.json.DeriveJsonDecoder
+import zio.json.{DeriveJsonDecoder, JsonDecoder}
 
 final case class AudioAnalysis(
     bars: List[TimeInterval],

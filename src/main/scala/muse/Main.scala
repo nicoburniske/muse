@@ -10,21 +10,19 @@ import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
 import muse.server.{Auth, MuseMiddleware, MuseServer}
 import muse.service.persist.{DatabaseService, MigrationService, QuillContext}
-import muse.service.spotify.{SpotifyAuthService, SpotifyCache, RateLimitRef}
-import muse.service.{RequestSession, ReviewUpdates, UserSessions}
+import muse.service.spotify.{RateLimitRef, SpotifyAuthService, SpotifyCache}
+import muse.service.{RedisService, RequestSession, ReviewUpdates, UserSessions}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
-import zhttp.*
-import zhttp.http.*
-import zhttp.http.Middleware.cors
-import zhttp.http.middleware.Cors.CorsConfig
-import zhttp.service.{ChannelFactory, EventLoopGroup, Server}
 import zio.Duration.*
-import zio.config.typesafe.TypesafeConfig
+import zio.http.{Client, Server}
 import zio.logging.*
 import zio.logging.backend.SLF4J
 import zio.metrics.connectors.MetricsConfig
-import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task,  ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, durationInt}
+import zio.redis.{Redis, RedisError, RedisExecutor}
+import zio.{Cause, Duration, LogLevel, Ref, Runtime, Schedule, Scope, Task, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, durationInt}
+
+import java.time.format.DateTimeFormatter
 
 object Main extends ZIOAppDefault {
   override def run = MuseServer
@@ -33,15 +31,16 @@ object Main extends ZIOAppDefault {
       ZLayer.Debug.mermaid,
       Scope.default,
       AsyncHttpClientZioBackend.layer(),
-      ChannelFactory.auto,
-      eventLoopGroupLayer,
+      serverConfig,
+      Client.default,
       // Spotify layers
       SpotifyAuthService.layer,
-      SpotifyCache.layer,
+//      SpotifyCache.layer,
       RateLimitRef.layer,
       // Muse layers.
       AppConfig.layer,
       DatabaseService.layer,
+      RedisService.redisLayer,
       MigrationService.layer,
       UserSessions.layer,
       ReviewUpdates.hub,
@@ -54,17 +53,30 @@ object Main extends ZIOAppDefault {
       metricsConfig,
       Runtime.enableRuntimeMetrics
     )
-    .tapErrorCause(e => ZIO.logErrorCause(s"Failed to start server ${e.prettyPrint}", e))
+    .tapError {
+      case RedisError.IOError(t) => ZIO.logError(s"Failed to start server ${t.toString}")
+      case t: Throwable          => ZIO.logError(s"Failed to start server ${t.toString}")
+    }
     .exitCode
+
+  val serverConfig = ZLayer.fromFunction { (config: ServerConfig) => Server.defaultWithPort(config.port) }.flatten
 
   val metricsConfig = ZLayer.succeed(MetricsConfig(5.seconds))
 
-  val eventLoopGroupLayer = for {
-    serverConfig <- ZLayer.environment[ServerConfig]
-    http         <- EventLoopGroup.auto(serverConfig.get.nThreads)
-  } yield http
+  val logFormat = {
+    import zio.logging.LogFormat.*
 
-  val logLayer = Runtime.removeDefaultLoggers >>> SLF4J.slf4j(LogLevel.Info, LogFormat.colored)
+    val userId = LogFormat.annotation("user_id")
 
-  override val bootstrap: ZLayer[ZIOAppArgs with Scope, Any, Any] = logLayer
+    label("timestamp", timestamp(DateTimeFormatter.ISO_LOCAL_DATE_TIME).fixed(28)).color(LogColor.BLUE) |-|
+      label("level", level).highlight |-|
+      label("thread", fiberId).color(LogColor.WHITE) |-|
+      (space + label("user_id", userId).highlight) |-|
+      label("message", quoted(line)).highlight +
+      (space + label("cause", cause).highlight).filter(LogFilter.causeNonEmpty)
+
+  }
+
+  val logLayer           = Runtime.removeDefaultLoggers >>> SLF4J.slf4j(logFormat)
+  override val bootstrap = logLayer
 }

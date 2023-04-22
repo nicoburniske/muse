@@ -2,21 +2,24 @@ package muse.server
 
 import caliban.*
 import caliban.execution.QueryExecution
+import com.stuart.zcaffeine.Cache
 import io.netty.handler.codec.http.HttpHeaderNames
-import muse.config.{AppConfig, ServerConfig, SpotifyConfig}
-import muse.domain.error.Unauthorized
+import muse.config.{AppConfig, ServerConfig, SpotifyConfig, SpotifyServiceConfig}
+import muse.domain.error.{RateLimited, Unauthorized}
 import muse.domain.session.UserSession
+import muse.domain.spotify
 import muse.server.MuseMiddleware
 import muse.server.graphql.MuseGraphQL
+import muse.server.graphql.MuseGraphQL.Env
 import muse.service.persist.{DatabaseService, MigrationService}
-import muse.service.spotify.SpotifyService
+import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils
 import sttp.client3.SttpBackend
-import zhttp.http.*
-import zhttp.http.Middleware.cors
-import zhttp.http.middleware.Cors.CorsConfig
-import zhttp.service
+import zio.http.middleware.RequestHandlerMiddlewares
+import zio.http.model.{HttpError, Method}
+import zio.http.*
+import zio.http.HttpAppMiddleware.cors
 import zio.metrics.connectors.prometheus.PrometheusPublisher
 import zio.{Tag, Task, ZIO}
 
@@ -25,43 +28,48 @@ val COOKIE_KEY = "XSESSION"
 
 object MuseServer {
   val live = for {
-    port               <- ZIO.serviceWith[ServerConfig](_.port)
     _                  <- MigrationService.runMigrations
     protectedEndpoints <- createProtectedEndpoints
-    corsConfig         <- getCorsConfig
-    allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ (MuseMiddleware.handleErrors ++ cors(corsConfig))
-    metrics             = service.Server.start(9091, metricsRouter).forever
-    museEndpoints       = service.Server.start(port, allEndpoints).forever
-    _                  <- metrics <&> museEndpoints
+    cors               <- getCorsConfig
+    allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ cors
+    _                  <- Server.serve(allEndpoints) <&> metricsServer
   } yield ()
-
-  // TODO: Is this necessary?
-  val getCorsConfig = for {
-    domain <- ZIO.serviceWith[ServerConfig](_.domain)
-  } yield CorsConfig(
-    allowedOrigins = origin => origin.contains(domain),
-    allowedMethods = Some(Set(Method.GET, Method.POST, Method.PUT, Method.DELETE, Method.OPTIONS)),
-    allowedHeaders = Some(
-      Set(HttpHeaderNames.CONTENT_TYPE.toString, HttpHeaderNames.AUTHORIZATION.toString, COOKIE_KEY, "*")
-    )
-  )
 
   def createProtectedEndpoints = endpointsGraphQL.map {
     case (rest, websocket) =>
-      (MuseMiddleware.checkAuthAddSession(Auth.logoutEndpoint ++ rest) ++ websocket) @@
-        MuseMiddleware.requestLoggingTrace
+      val protectedRest =
+        ((rest ++ Auth.logoutEndpoint) @@ MuseMiddleware.InjectSessionAndRateLimit @@ RequestHandlerMiddlewares.beautifyErrors)
+          .mapError {
+            case RateLimited     => RateLimited.response
+            case u: Unauthorized => u.response
+            case t: Throwable    => Response.fromHttpError(HttpError.InternalServerError(cause = Some(t)))
+          }
+      protectedRest ++ websocket
   }
 
-  val endpointsGraphQL = for {
-    interpreter <- MuseGraphQL.interpreter
-  } yield (
-    Http.collectHttp[Request] {
-      case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter, queryExecution = QueryExecution.Batched)
-    },
-    Http.collectHttp[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
-  )
+  val endpointsGraphQL = {
+    import sttp.tapir.json.zio.*
+    for {
+      interpreter <- MuseGraphQL.interpreter
+    } yield (
+      Http.collectRoute[Request] {
+        case _ -> !! / "api" / "graphql" => ZHttpAdapter.makeHttpService(interpreter, queryExecution = QueryExecution.Batched)
+      },
+      Http.collectRoute[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
+    )
+  }
 
-  val metricsRouter = Http.collectZIO[Request] {
+  val getCorsConfig = {
+    import zio.http.middleware.Cors.CorsConfig
+    for {
+      domain <- ZIO.serviceWith[ServerConfig](_.domain)
+    } yield cors(CorsConfig(allowedOrigins = origin => origin.contains(domain)))
+  }
+
+  val metricsServer =
+    Server.serve(metricsRouter).provideSomeLayer[PrometheusPublisher](Server.defaultWithPort(9091))
+
+  val metricsRouter: HttpApp[PrometheusPublisher, Nothing] = Http.collectZIO[Request] {
     case Method.GET -> !! / "metrics" => ZIO.serviceWithZIO[PrometheusPublisher](_.get.map(Response.text))
   }
 

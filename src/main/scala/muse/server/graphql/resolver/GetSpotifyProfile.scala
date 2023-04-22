@@ -1,15 +1,16 @@
 package muse.server.graphql.resolver
 
+import muse.domain.common.Types.UserId
 import muse.server.graphql.subgraph.SpotifyProfile
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import zio.ZIO
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 
-case class GetSpotifyProfile(id: String) extends Request[Throwable, SpotifyProfile]
+case class GetSpotifyProfile(id: UserId) extends Request[Throwable, SpotifyProfile]
 
 object GetSpotifyProfile {
-  def query(userId: String) =
+  def query(userId: UserId) =
     ZQuery.fromRequest(GetSpotifyProfile(userId))(spotifyProfileDataSource)
 
   val spotifyProfileDataSource: DataSource[RequestSession[SpotifyService], GetSpotifyProfile] =

@@ -15,6 +15,7 @@ import java.util.UUID
 case class GetReview(reviewId: UUID) extends Request[SQLException, Option[Review]]
 
 object GetReview {
+  type Env = DatabaseService & RequestSession[UserSession]
   val MAX_REVIEWS_PER_REQUEST = 100
 
   def query(reviewId: UUID)             = ZQuery.fromRequest(GetReview(reviewId))(ReviewDataSource)
@@ -22,7 +23,7 @@ object GetReview {
 
   def metric = Utils.timer("GetReview", ChronoUnit.MILLIS)
 
-  val ReviewDataSource: DataSource[DatabaseService & RequestSession[UserSession], GetReview] =
+  val ReviewDataSource: DataSource[Env, GetReview] =
     DataSource.Batched.make("ReviewDataSource") { reqs =>
       DatasourceUtils.createBatchedDataSource(
         reqs,

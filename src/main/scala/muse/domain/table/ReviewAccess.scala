@@ -1,10 +1,12 @@
 package muse.domain.table
 
+import muse.domain.common.Types.UserId
+
 import java.util.UUID
 
 final case class ReviewAccess(
     reviewId: UUID,
-    userId: String,
+    userId: UserId,
     accessLevel: AccessLevel
 )
 

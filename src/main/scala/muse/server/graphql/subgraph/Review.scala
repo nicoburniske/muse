@@ -1,11 +1,12 @@
 package muse.server.graphql.subgraph
 
+import caliban.schema.Schema
 import muse.domain.common.EntityType
 import muse.domain.error.{Forbidden, Unauthorized}
 import muse.domain.session.UserSession
 import muse.domain.table
 import muse.domain.table.AccessLevel
-import muse.server.graphql.resolver.{GetChildReviews, GetCollaborators, GetEntity, GetReview, GetReviewComments, GetUser}
+import muse.server.graphql.resolver.*
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService

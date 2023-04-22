@@ -1,23 +1,24 @@
 package muse.server.graphql.resolver
 
+import muse.domain.common.Types.UserId
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
-import muse.server.graphql.subgraph.User
-import muse.server.graphql.subgraph.SpotifyProfile
+import muse.server.graphql.subgraph.{SpotifyProfile, User}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
-import zio.query.{DataSource, Request, ZQuery}
 import zio.ZIO
+import zio.query.{DataSource, Request, ZQuery}
 
-case class GetUser(id: String) extends Request[Nothing, User]
+case class GetUser(id: UserId) extends Request[Nothing, User]
 
 object GetUser {
-  def query(maybeId: Option[String]) = maybeId match
+  type Env = RequestSession[UserSession] & DatabaseService
+  def query(maybeId: Option[UserId]) = maybeId match
     case None     => currentUser
     case Some(id) => ZQuery.succeed(queryByUserId(id))
 
-  def queryByUserId(userId: String) =
+  def queryByUserId(userId: UserId) =
     User(userId, GetUserReviews.query(userId), GetSpotifyProfile.query(userId), GetUserPlaylists.boxedQuery(userId))
 
   def currentUser = for {
@@ -26,6 +27,9 @@ object GetUser {
 
   // TODO: This needs to be revised.
   // Incorporate a limit of how many users can be returned.
+
+  type SearchEnv = RequestSession[SpotifyService] with DatabaseService
+
   def fromDisplayName(search: String) = ZQuery.fromZIO {
     for {
       spotify        <- RequestSession.get[SpotifyService]
@@ -37,7 +41,7 @@ object GetUser {
         p.displayName.map(_.toLowerCase()).exists(_.contains(lowercaseSearch)) ||
         p.id.toLowerCase().contains(lowercaseSearch)
       }.map { spotifyUser =>
-        val userId = spotifyUser.id
+        val userId = UserId(spotifyUser.id)
         User(
           userId,
           GetUserReviews.query(userId, All),

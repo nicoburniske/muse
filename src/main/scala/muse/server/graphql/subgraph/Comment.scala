@@ -3,7 +3,7 @@ package muse.server.graphql.subgraph
 import muse.domain.common.EntityType
 import muse.domain.session.UserSession
 import muse.domain.table
-import muse.server.graphql.resolver.{GetEntity, GetUser}
+import muse.server.graphql.resolver.{GetComment, GetEntity, GetReviewComments, GetUser}
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
@@ -24,7 +24,10 @@ final case class Comment(
     childCommentIds: List[Long],
     commenter: User,
     comment: Option[String],
-    entities: ZQuery[RequestSession[SpotifyService], Throwable, List[ReviewEntity]]
+    entities: ZQuery[RequestSession[SpotifyService], Throwable, List[ReviewEntity]],
+    parentComment: ZQuery[GetComment.Env, Throwable, Option[Comment]],
+    childComments: ZQuery[GetComment.Env, Throwable, List[Comment]],
+    allChildComments: ZQuery[GetComment.Env, Throwable, List[Comment]]
 )
 
 object Comment {
@@ -34,6 +37,8 @@ object Comment {
       parentChild: List[table.ReviewCommentParentChild],
       entities: List[table.ReviewCommentEntity]
   ) =
+    val parentId = parentChild.map(_.parentCommentId).find(_ != r.commentId)
+    val childIds = parentChild.filter(_.parentCommentId == r.commentId).map(_.childCommentId)
     Comment(
       r.commentId,
       index.commentIndex,
@@ -41,11 +46,14 @@ object Comment {
       r.createdAt,
       r.updatedAt,
       r.deleted,
-      parentChild.map(_.parentCommentId).find(_ != r.commentId),
-      parentChild.filter(_.parentCommentId == r.commentId).map(_.childCommentId),
+      parentId,
+      childIds,
       GetUser.queryByUserId(r.commenter),
       r.comment,
-      ZQuery.foreachPar(entities)(e => GetEntity.query(e.entityId, e.entityType))
+      ZQuery.foreachPar(entities)(e => GetEntity.query(e.entityId, e.entityType)),
+      parentId.fold(ZQuery.succeed(None))(p => GetComment.query(p)),
+      ZQuery.foreachPar(childIds)(GetComment.query).map(_.flatten),
+      GetComment.queryAllChildren(r.commentId)
     )
 
   def fromTableRows(

@@ -1,6 +1,5 @@
 package muse.domain.spotify
 
-import muse.domain.common.Entity
 import zio.json.*
 
 @jsonMemberNames(SnakeCase)

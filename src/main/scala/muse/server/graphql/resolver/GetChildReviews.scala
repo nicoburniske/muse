@@ -1,7 +1,7 @@
 package muse.server.graphql.resolver
 
-import muse.domain.table.{ReviewEntity, ReviewLink}
 import muse.domain.table
+import muse.domain.table.{ReviewEntity, ReviewLink}
 import muse.server.graphql.subgraph.Review
 import muse.service.persist.DatabaseService
 import muse.utils.Utils

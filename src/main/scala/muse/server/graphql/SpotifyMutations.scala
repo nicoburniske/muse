@@ -1,14 +1,10 @@
 package muse.server.graphql
 
+import muse.domain.common.EntityType
+import muse.domain.error.*
 import muse.domain.event.ReviewUpdate
 import muse.domain.mutate.*
 import muse.domain.session.UserSession
-import muse.domain.spotify.StartPlaybackBody
-import muse.service.RequestSession
-import muse.service.persist.DatabaseService
-import muse.service.spotify.SpotifyService
-import zio.{Hub, ZIO}
-import muse.domain.common.EntityType
 import muse.domain.spotify.{
   ErrorReason,
   ErrorResponse,
@@ -17,15 +13,18 @@ import muse.domain.spotify.{
   UriOffset,
   PositionOffset as SpotifyPostionOffset
 }
-import muse.domain.error.{BadRequest, Forbidden, InvalidEntity, InvalidUser, MuseError, Unauthorized}
+import muse.service.RequestSession
+import muse.service.persist.DatabaseService
+import muse.service.spotify.SpotifyService
+import zio.{Hub, ZIO}
 
 type SpotifyMutationEnv = RequestSession[UserSession] & RequestSession[SpotifyService]
 case class SpotifyMutations(
-    play: Input[Play] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
+    play: PlayInput => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     transferPlayback: Input[TransferPlayback] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
-    playTracks: Input[PlayTracks] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
-    playOffsetContext: Input[PlayOffsetContext] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
-    playEntityContext: Input[PlayEntityContext] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
+    playTracks: PlayTracksInput => ZIO[SpotifyMutationEnv, Throwable, Boolean],
+    playOffsetContext: PlayOffsetContextInput => ZIO[SpotifyMutationEnv, Throwable, Boolean],
+    playEntityContext: PlayEntityContextInput => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     seekPlayback: Input[SeekPlayback] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     pausePlayback: AlterPlayback => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     skipToNext: AlterPlayback => ZIO[SpotifyMutationEnv, Throwable, Boolean],
@@ -36,7 +35,6 @@ case class SpotifyMutations(
 )
 
 object SpotifyMutations {
-
   val live = SpotifyMutations(
     i => play(i.input),
     i => transferPlayback(i.input),

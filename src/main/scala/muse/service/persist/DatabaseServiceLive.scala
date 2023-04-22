@@ -1,31 +1,9 @@
 package muse.service.persist
 
 import io.getquill.*
-import muse.domain.mutate.{
-  CreateComment,
-  CreateReview,
-  DeleteComment,
-  DeleteReview,
-  DeleteReviewLink,
-  LinkReviews,
-  ShareReview,
-  UpdateComment,
-  UpdateReview,
-  UpdateReviewLink
-}
-import muse.domain.table.{
-  AccessLevel,
-  Review,
-  ReviewAccess,
-  ReviewComment,
-  ReviewCommentEntity,
-  ReviewCommentIndex,
-  ReviewCommentParentChild,
-  ReviewEntity,
-  ReviewLink,
-  User,
-  UserSession
-}
+import muse.domain.common.Types.{RefreshToken, SessionId, UserId}
+import muse.domain.mutate.*
+import muse.domain.table.*
 import zio.{Clock, IO, ZIO, ZLayer, durationInt}
 
 import java.sql.SQLException
@@ -38,49 +16,65 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   val layer = ZLayer.succeed(d)
 
-  inline def user = querySchema[User]("muse.user")
+  inline val userTable = "muse.user"
+  inline def user      = querySchema[User](userTable)
 
-  inline def userSession = querySchema[UserSession]("muse.user_session")
+  inline val userSessionTable = "muse.user_session"
+  inline def userSession      = querySchema[UserSession](userSessionTable)
 
-  inline def review = querySchema[Review]("muse.review")
+  inline val reviewTable = "muse.review"
+  inline def review      = querySchema[Review](reviewTable)
 
-  inline def reviewEntity = querySchema[ReviewEntity]("muse.review_entity")
+  inline val reviewEntityTable = "muse.review_entity"
+  inline def reviewEntity      = querySchema[ReviewEntity](reviewEntityTable)
 
-  inline def reviewLink = querySchema[ReviewLink]("muse.review_link")
+  inline val reviewLinkTable = "muse.review_link"
+  inline def reviewLink      = querySchema[ReviewLink](reviewLinkTable)
 
-  inline def reviewAccess = querySchema[ReviewAccess]("muse.review_access")
+  inline val reviewAccessTable = "muse.review_access"
+  inline def reviewAccess      = querySchema[ReviewAccess](reviewAccessTable)
 
-  inline def comment = querySchema[ReviewComment]("muse.review_comment")
+  inline val commentTable = "muse.review_comment"
+  inline def comment      = querySchema[ReviewComment](commentTable)
 
-  inline def commentEntity = querySchema[ReviewCommentEntity]("muse.review_comment_entity")
+  inline val commentEntityTable = "muse.review_comment_entity"
+  inline def commentEntity      = querySchema[ReviewCommentEntity](commentEntityTable)
 
-  inline def commentIndex = querySchema[ReviewCommentIndex]("muse.review_comment_index")
+  inline val commentIndexTable = "muse.review_comment_index"
+  inline def commentIndex      = querySchema[ReviewCommentIndex](commentIndexTable)
 
-  inline def commentParentChild = querySchema[ReviewCommentParentChild]("muse.review_comment_parent_child")
+  inline val commentParentChildTable = "muse.review_comment_parent_child"
+  inline def commentParentChild      = querySchema[ReviewCommentParentChild](commentParentChildTable)
 
   /**
    * Read!
    */
 
-  inline def userReviews(inline userId: String) = review.filter(_.creatorId == userId)
+  inline def userReviews(inline userId: UserId) = review.filter(_.creatorId == userId)
 
-  inline def userSharedReviews(inline userId: String) =
+  inline def userSharedReviews(inline userId: UserId) =
     reviewAccess
       .filter(_.userId == userId)
       .join(review)
       .on((access, review) => review.reviewId == access.reviewId)
       .map(_._2)
 
-  inline def allUserReviews(inline userId: String) =
+  inline def allUserReviews(inline userId: UserId) =
     userReviews(userId) union userSharedReviews(userId)
 
-  override def getAllUserReviews(userId: String) = run {
+  inline def allViewableComments(inline userId: UserId) =
+    allUserReviews(userId)
+      .join(comment)
+      .on((review, comment) => review.reviewId == comment.reviewId)
+      .map(_._2)
+
+  override def getAllUserReviews(userId: UserId) = run {
     allUserReviews(lift(userId))
       .leftJoin(reviewEntity)
       .on((review, entity) => review.reviewId == entity.reviewId)
   }.provide(layer)
 
-  override def getUserReviewsExternal(sourceUserId: String, viewerUserId: String) = run {
+  override def getUserReviewsExternal(sourceUserId: UserId, viewerUserId: UserId) = run {
     for {
       review <- userReviews(lift(sourceUserId)).filter(_.isPublic) union userSharedReviews(lift(viewerUserId))
       if review.creatorId == lift(sourceUserId)
@@ -108,7 +102,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
     .map(_.headOption)
 
-  override def getReviewWithPermissions(reviewId: UUID, userId: String) = run {
+  override def getReviewWithPermissions(reviewId: UUID, userId: UserId) = run {
     allViewableReviews(lift(userId))
       .filter(_.reviewId == lift(reviewId))
       .leftJoin(reviewEntity)
@@ -116,7 +110,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
     .map(_.headOption)
 
-  override def getReviewsWithPermissions(reviewIds: List[UUID], userId: String) = run {
+  override def getReviewsWithPermissions(reviewIds: List[UUID], userId: UserId) = run {
     allViewableReviews(lift(userId))
       .filter(r => liftQuery(reviewIds.toSet).contains(r.reviewId))
       .leftJoin(reviewEntity)
@@ -134,30 +128,30 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
 
   override def getAllChildReviews(reviewIds: List[UUID]) = run {
-    (for {
+    for {
       link           <- reviewLink.filter(link => liftQuery(reviewIds.toSet).contains(link.parentReviewId))
       child          <- review.join(_.reviewId == link.childReviewId)
       reviewEntities <- reviewEntity.leftJoin(e => child.reviewId == e.reviewId)
-    } yield (link, child, reviewEntities))
+    } yield (link, child, reviewEntities)
   }.provide(layer)
 
-  override def getUserById(userId: String) = run {
+  override def getUserById(userId: UserId) = run {
     user.filter(_.userId == lift(userId))
   }.map(_.headOption).provide(layer)
 
-  override def getUserSession(sessionId: String) = run {
+  override def getUserSession(sessionId: SessionId) = run {
     userSession.filter(_.sessionId == lift(sessionId))
   }.map(_.headOption).provide(layer)
 
-  override def getUserReviews(userId: String) = run {
+  override def getUserReviews(userId: UserId) = run {
     userReviews(lift(userId))
       .leftJoin(reviewEntity)
       .on((review, entity) => review.reviewId == entity.reviewId)
   }.provide(layer)
 
-  override def getComment(commentId: Long) = run {
+  override def getComment(commentId: Long, userId: UserId) = run {
     for {
-      comment       <- comment.filter(_.commentId == lift(commentId))
+      comment       <- allViewableComments(lift(userId)).filter(_.commentId == lift(commentId))
       commentIndex  <- commentIndex.join(_.commentId == comment.commentId)
       parentComment <- commentParentChild.leftJoin(_.childCommentId == comment.commentId)
       entity        <- commentEntity.leftJoin(_.commentId == comment.commentId)
@@ -177,9 +171,27 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     getAllCommentData(comments)
   }.provide(layer)
 
-  override def getComments(commentIds: List[Long]) = run {
-    val comments = comment.filter(c => liftQuery(commentIds.toSet).contains(c.commentId))
+  override def getComments(commentIds: List[Long], userId: UserId) = run {
+    val comments = allViewableComments(lift(userId)).filter(c => liftQuery(commentIds).contains(c.commentId))
     getAllCommentData(comments)
+  }.provide(layer)
+
+  override def getAllCommentChildren(commentId: Long, userId: UserId) = run {
+    val allChildrenIds: Query[Long] = sql"""
+        WITH RECURSIVE children AS (
+           SELECT ${lift(commentId)} AS comment_id
+           UNION ALL 
+           SELECT c.child_comment_id
+           FROM children 
+             JOIN ${lift(commentParentChildTable)} c
+             ON children.comment_id = c.parent_comment_id
+        )
+        -- Exclude the original comment.
+        SELECT * FROM children WHERE comment_id != ${lift(commentId)}
+       """.as[Query[Long]]
+
+    val childComments = allViewableComments(lift(userId)).filter(c => allChildrenIds.contains(c.commentId))
+    getAllCommentData(childComments)
   }.provide(layer)
 
   private inline def getAllCommentData(query: Query[ReviewComment]) = for {
@@ -209,14 +221,14 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
    * Create!
    */
 
-  override def createUser(userId: String) = run {
+  override def createUser(userId: UserId) = run {
     user
       .insert(
         _.userId -> lift(userId)
       ).onConflictIgnore
   }.provideLayer(layer).unit
 
-  override def createUserSession(sessionId: String, refreshToken: String, userId: String) = run {
+  override def createUserSession(sessionId: SessionId, refreshToken: RefreshToken, userId: UserId) = run {
     userSession.insert(
       _.sessionId    -> lift(sessionId),
       _.refreshToken -> lift(refreshToken),
@@ -224,7 +236,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     )
   }.provideLayer(layer).unit
 
-  override def createReview(userId: String, create: CreateReview) = run {
+  override def createReview(userId: UserId, create: CreateReview) = run {
     review
       .insert(
         _.creatorId  -> lift(userId),
@@ -237,7 +249,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       Review(uuid, instant, userId, create.name, create.isPublic)
   }
 
-  override def createReviewComment(userId: String, create: CreateComment) = {
+  override def createReviewComment(userId: UserId, create: CreateComment) = {
     def insertComment(insertIndex: Int) = transaction {
       for {
         createdComment     <- run {
@@ -299,7 +311,6 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       // Insert the comment at the end of the list.
       case None              =>
         for {
-          _          <- ZIO.logInfo(s"Searching for index ${create.parentCommentId.getClass.toString}")
           topIndex   <- run {
                           commentIndex
                             .filter(_.reviewId == lift(create.reviewId))
@@ -672,14 +683,14 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
 
   // Is review public?
   // Or does user have access to it?
-  inline def allViewableReviews(inline userId: String) =
+  inline def allViewableReviews(inline userId: UserId) =
     review.filter(_.isPublic) union allUserReviews(userId)
 
-  override def canModifyReview(userId: String, reviewId: UUID) = run {
+  override def canModifyReview(userId: UserId, reviewId: UUID) = run {
     reviewCreator(lift(reviewId)).contains(lift(userId))
   }.provide(layer)
 
-  override def canModifyComment(userId: String, reviewId: UUID, commentId: Long) = run {
+  override def canModifyComment(userId: UserId, reviewId: UUID, commentId: Long) = run {
     comment
       .filter(_.commentId == lift(commentId))
       .filter(_.reviewId == lift(reviewId))
@@ -687,7 +698,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .contains(lift(userId))
   }.provide(layer)
 
-  override def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean] = run {
+  override def canMakeComment(userId: UserId, reviewId: UUID): IO[SQLException, Boolean] = run {
     allUsersWithWriteAccess(lift(reviewId)).filter(_ == lift(userId))
   }.map(_.nonEmpty).provide(layer)
 

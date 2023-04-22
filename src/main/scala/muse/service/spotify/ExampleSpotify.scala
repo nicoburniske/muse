@@ -5,8 +5,8 @@ import muse.domain.spotify.{BulkPlaylist, PlaylistTrack, Track}
 import muse.utils.Givens
 import muse.utils.Givens.given
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
-import zhttp.service.{ChannelFactory, EventLoopGroup}
 import zio.Console.printLine
+import zio.http.Client
 import zio.{Ref, Schedule, Task, ZIO, ZIOAppDefault}
 
 import java.text.SimpleDateFormat
@@ -32,8 +32,7 @@ object ExampleSpotify extends ZIOAppDefault {
   override def run = program.provide(
     AppConfig.layer,
     SpotifyAuthService.layer,
-    EventLoopGroup.auto(8),
-    ChannelFactory.auto
+    Client.default
   )
 }
 

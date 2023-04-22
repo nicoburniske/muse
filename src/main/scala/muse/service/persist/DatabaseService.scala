@@ -4,33 +4,9 @@ import io.getquill.*
 import io.getquill.context.ZioJdbc.*
 import io.getquill.jdbczio.Quill
 import muse.domain.common.EntityType
-import muse.domain.mutate.{
-  CreateComment,
-  CreateReview,
-  DeleteComment,
-  DeleteReview,
-  DeleteReviewLink,
-  LinkReviews,
-  ReviewEntityInput,
-  ShareReview,
-  UpdateComment,
-  UpdateCommentIndex,
-  UpdateReview,
-  UpdateReviewLink
-}
-import muse.domain.table.{
-  AccessLevel,
-  Review,
-  ReviewAccess,
-  ReviewComment,
-  ReviewCommentEntity,
-  ReviewCommentIndex,
-  ReviewCommentParentChild,
-  ReviewEntity,
-  ReviewLink,
-  User,
-  UserSession
-}
+import muse.domain.common.Types.{RefreshToken, SessionId, UserId}
+import muse.domain.mutate.*
+import muse.domain.table.*
 import zio.ZLayer.*
 import zio.{Clock, IO, Schedule, TaskLayer, ZIO, ZLayer, durationInt}
 
@@ -44,13 +20,13 @@ trait DatabaseService {
   /**
    * Create!
    */
-  def createUser(userId: String): IO[SQLException, Unit]
+  def createUser(userId: UserId): IO[SQLException, Unit]
 
-  def createUserSession(sessionId: String, refreshToken: String, userId: String): IO[SQLException, Unit]
+  def createUserSession(sessionId: SessionId, refreshToken: RefreshToken, userId: UserId): IO[SQLException, Unit]
 
-  def createReview(id: String, review: CreateReview): IO[SQLException, Review]
+  def createReview(userId: UserId, review: CreateReview): IO[SQLException, Review]
 
-  def createReviewComment(id: String, review: CreateComment)
+  def createReviewComment(userId: UserId, review: CreateComment)
       : IO[Throwable, (ReviewComment, ReviewCommentIndex, Option[ReviewCommentParentChild], List[ReviewCommentEntity])]
 
   def linkReviews(link: LinkReviews): IO[Throwable, Boolean]
@@ -60,18 +36,18 @@ trait DatabaseService {
    */
   def getUsers: IO[SQLException, List[User]]
 
-  def getUserById(userId: String): IO[SQLException, Option[User]]
+  def getUserById(userId: UserId): IO[SQLException, Option[User]]
 
-  def getUserSession(sessionId: String): IO[SQLException, Option[UserSession]]
+  def getUserSession(sessionId: SessionId): IO[SQLException, Option[UserSession]]
 
   // Reviews that the given user created.
-  def getUserReviews(userId: String): IO[SQLException, List[(Review, Option[ReviewEntity])]]
+  def getUserReviews(userId: UserId): IO[SQLException, List[(Review, Option[ReviewEntity])]]
 
   // Reviews that the given user has access to.
-  def getAllUserReviews(userId: String): IO[SQLException, List[(Review, Option[ReviewEntity])]]
+  def getAllUserReviews(userId: UserId): IO[SQLException, List[(Review, Option[ReviewEntity])]]
 
   // Reviews that viewerUser can see of sourceUser.
-  def getUserReviewsExternal(sourceUserId: String, viewerUserId: String): IO[SQLException, List[(Review, Option[ReviewEntity])]]
+  def getUserReviewsExternal(sourceUserId: UserId, viewerUserId: UserId): IO[SQLException, List[(Review, Option[ReviewEntity])]]
 
   def getReviewAndEntity(reviewId: UUID): IO[SQLException, Option[(Review, Option[ReviewEntity])]]
 
@@ -81,10 +57,10 @@ trait DatabaseService {
 
   // TODO: Might have to incorporate permissions here.
   // Review will only be returned if the user has access to it.
-  def getReviewWithPermissions(reviewId: UUID, userId: String): IO[SQLException, Option[(Review, Option[ReviewEntity])]]
+  def getReviewWithPermissions(reviewId: UUID, userId: UserId): IO[SQLException, Option[(Review, Option[ReviewEntity])]]
 
   // Multi review version of getReviewWithPermissions.
-  def getReviewsWithPermissions(reviewIds: List[UUID], userId: String): IO[SQLException, List[(Review, Option[ReviewEntity])]]
+  def getReviewsWithPermissions(reviewIds: List[UUID], userId: UserId): IO[SQLException, List[(Review, Option[ReviewEntity])]]
 
   // TODO: Might have to incorporate permissions here.
   def getChildReviews(reviewId: UUID): IO[SQLException, List[(Review, Option[ReviewEntity])]]
@@ -95,11 +71,14 @@ trait DatabaseService {
   def getReviewComments(reviewId: UUID)
       : IO[SQLException, List[(ReviewComment, ReviewCommentIndex, Option[ReviewCommentParentChild], Option[ReviewCommentEntity])]]
 
-  def getComments(commentIds: List[Long])
+  def getComments(commentIds: List[Long], userId: UserId)
       : IO[SQLException, List[(ReviewComment, ReviewCommentIndex, Option[ReviewCommentParentChild], Option[ReviewCommentEntity])]]
 
-  def getComment(commentId: Long)
+  def getComment(commentId: Long, userId: UserId)
       : IO[SQLException, Option[(ReviewComment, ReviewCommentIndex, List[ReviewCommentParentChild], List[ReviewCommentEntity])]]
+
+  def getAllCommentChildren(commentId: Long, userId: UserId)
+      : IO[SQLException, List[(ReviewComment, ReviewCommentIndex, Option[ReviewCommentParentChild], Option[ReviewCommentEntity])]]
 
   def getCommentEntities(commentId: Long): IO[SQLException, List[ReviewCommentEntity]]
 
@@ -137,68 +116,71 @@ trait DatabaseService {
    */
   def getAllUsersWithAccess(reviewIds: List[UUID]): IO[SQLException, List[ReviewAccess]]
 
-  def canMakeComment(userId: String, reviewId: UUID): IO[SQLException, Boolean]
+  def canMakeComment(userId: UserId, reviewId: UUID): IO[SQLException, Boolean]
 
-  def canModifyReview(userId: String, reviewId: UUID): IO[SQLException, Boolean]
+  def canModifyReview(userId: UserId, reviewId: UUID): IO[SQLException, Boolean]
 
-  def canModifyComment(userId: String, reviewId: UUID, commentId: Long): IO[SQLException, Boolean]
+  def canModifyComment(userId: UserId, reviewId: UUID, commentId: Long): IO[SQLException, Boolean]
 }
 
 object DatabaseService {
   val layer = ZLayer.fromFunction(DatabaseServiceLive.apply(_))
 
-  def createUser(userId: String) =
+  def createUser(userId: UserId) =
     ZIO.serviceWithZIO[DatabaseService](_.createUser(userId))
 
-  def createUserSession(sessionId: String, refreshToken: String, userId: String) =
+  def createUserSession(sessionId: SessionId, refreshToken: RefreshToken, userId: UserId) =
     ZIO.serviceWithZIO[DatabaseService](_.createUserSession(sessionId, refreshToken, userId))
 
-  def createOrUpdateUser(sessionId: String, refreshToken: String, userId: String) =
+  def createOrUpdateUser(sessionId: SessionId, refreshToken: RefreshToken, userId: UserId) =
     createUser(userId)
       *> createUserSession(sessionId, refreshToken, userId)
 
-  def createReview(userId: String, review: CreateReview) =
+  def createReview(userId: UserId, review: CreateReview) =
     ZIO.serviceWithZIO[DatabaseService](_.createReview(userId, review))
 
   def linkReviews(link: LinkReviews) =
     ZIO.serviceWithZIO[DatabaseService](_.linkReviews(link))
 
-  def createReviewComment(userId: String, c: CreateComment) =
+  def createReviewComment(userId: UserId, c: CreateComment) =
     ZIO.serviceWithZIO[DatabaseService](_.createReviewComment(userId, c))
 
   def getUsers = ZIO.serviceWithZIO[DatabaseService](_.getUsers)
 
-  def getUserById(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getUserById(userId))
+  def getUserById(userId: UserId) = ZIO.serviceWithZIO[DatabaseService](_.getUserById(userId))
 
-  def getUserSession(sessionId: String) =
+  def getUserSession(sessionId: SessionId) =
     ZIO.serviceWithZIO[DatabaseService](_.getUserSession(sessionId))
 
   def getReview(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReview(reviewId))
 
   def getReviewEntity(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewEntity(reviewId))
 
-  def getReviewWithPermissions(reviewId: UUID, userId: String) =
+  def getReviewWithPermissions(reviewId: UUID, userId: UserId) =
     ZIO.serviceWithZIO[DatabaseService](_.getReviewWithPermissions(reviewId, userId))
 
-  def getReviewsWithPermissions(reviewIds: List[UUID], userId: String) =
+  def getReviewsWithPermissions(reviewIds: List[UUID], userId: UserId) =
     ZIO.serviceWithZIO[DatabaseService](_.getReviewsWithPermissions(reviewIds, userId))
 
   def getAllChildReviews(reviewIds: List[UUID]) = ZIO.serviceWithZIO[DatabaseService](_.getAllChildReviews(reviewIds))
 
-  def getUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getUserReviews(userId))
+  def getUserReviews(userId: UserId) = ZIO.serviceWithZIO[DatabaseService](_.getUserReviews(userId))
 
-  def getAllUserReviews(userId: String) = ZIO.serviceWithZIO[DatabaseService](_.getAllUserReviews(userId))
+  def getAllUserReviews(userId: UserId) = ZIO.serviceWithZIO[DatabaseService](_.getAllUserReviews(userId))
 
-  def getUserReviewsExternal(sourceUserId: String, viewerUserId: String) =
+  def getUserReviewsExternal(sourceUserId: UserId, viewerUserId: UserId) =
     ZIO.serviceWithZIO[DatabaseService](_.getUserReviewsExternal(sourceUserId, viewerUserId))
 
   def getReviewComments(reviewId: UUID) = ZIO.serviceWithZIO[DatabaseService](_.getReviewComments(reviewId))
 
-  def getComment(id: Long) = ZIO.serviceWithZIO[DatabaseService](_.getComment(id))
+  def getComment(id: Long, userId: UserId) = ZIO.serviceWithZIO[DatabaseService](_.getComment(id, userId))
 
-  def getComments(ids: List[Long]) = ZIO.serviceWithZIO[DatabaseService](_.getComments(ids))
+  def getComments(ids: List[Long], userId: UserId) = ZIO.serviceWithZIO[DatabaseService](_.getComments(ids, userId))
 
   def getCommentEntities(id: Long) = ZIO.serviceWithZIO[DatabaseService](_.getCommentEntities(id))
+
+  def getAllCommentChildren(commentId: Long, userId: UserId) =
+    ZIO.serviceWithZIO[DatabaseService](_.getAllCommentChildren(commentId, userId))
 
   def getAllUsersWithAccess(reviewIds: List[UUID]) =
     ZIO.serviceWithZIO[DatabaseService](_.getAllUsersWithAccess(reviewIds))
@@ -233,12 +215,12 @@ object DatabaseService {
   def deleteUserSession(sessionId: String) =
     ZIO.serviceWithZIO[DatabaseService](_.deleteUserSession(sessionId))
 
-  def canModifyReview(userId: String, reviewId: UUID) =
+  def canModifyReview(userId: UserId, reviewId: UUID) =
     ZIO.serviceWithZIO[DatabaseService](_.canModifyReview(userId, reviewId))
 
-  def canModifyComment(userId: String, reviewId: UUID, commentId: Long) =
+  def canModifyComment(userId: UserId, reviewId: UUID, commentId: Long) =
     ZIO.serviceWithZIO[DatabaseService](_.canModifyComment(userId, reviewId, commentId))
 
-  def canMakeComment(userId: String, reviewId: UUID) =
+  def canMakeComment(userId: UserId, reviewId: UUID) =
     ZIO.serviceWithZIO[DatabaseService](_.canMakeComment(userId, reviewId))
 }

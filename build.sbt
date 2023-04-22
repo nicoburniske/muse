@@ -1,18 +1,3 @@
-ThisBuild / version      := "0.1.0"
-ThisBuild / organization := "io.nicoburniske"
-ThisBuild / name         := "muse"
-ThisBuild / scalaVersion := "3.2.2"
-
-val zio          = "2.0.0"
-val zioJson      = "0.4.2"
-val zioConfig    = "3.0.1"
-val zhttp        = "2.0.0-RC10"
-val protoQuill   = "4.6.0"
-val postgresql   = "42.3.6"
-val flyway       = "8.5.12"
-val sttp         = "3.7.0"
-val slf4jVersion = "2.0.1"
-
 lazy val mainMethod = "muse.Main"
 
 inThisBuild(
@@ -31,6 +16,11 @@ inThisBuild(
 lazy val root = (project in file("."))
   .enablePlugins(JavaAppPackaging, DockerPlugin)
   .settings(
+    // This is required by nixpacks
+    organization                     := "io.nicoburniske",
+    version                          := "0.1.0",
+    scalaVersion                     := "3.2.2",
+    executableScriptName             := "main",
     name                             := "muse",
     assembly / assemblyJarName       := "muse.jar",
     Compile / mainClass              := Some(mainMethod),
@@ -38,54 +28,58 @@ lazy val root = (project in file("."))
     assembly / mainClass             := Some(mainMethod),
     Compile / discoveredMainClasses  := Seq(),
     libraryDependencies ++= Seq(
-      "dev.zio"                       %% "zio"                           % zio,
-      "dev.zio"                       %% "zio-json"                      % zioJson,
-      "dev.zio"                       %% "zio-nio"                       % zio,
-      "dev.zio"                       %% "zio-cache"                     % "0.2.0",
-      "dev.zio"                       %% "zio-metrics-prometheus"        % zio,
-      "dev.zio"                       %% "zio-metrics-connectors"        % zio,
-      "com.stuart"                    %% "zcaffeine"                     % "1.0.0-M2",
-      "nl.vroste"                     %% "rezilience"                    % "0.9.0",
+      "dev.zio"                       %% "zio"                           % Version.zio,
+      "dev.zio"                       %% "zio-prelude"                   % Version.zioPrelude,
+      "dev.zio"                       %% "zio-schema"                    % Version.zioSchema,
+      "dev.zio"                       %% "zio-schema-json"               % Version.zioSchema,
+      "dev.zio"                       %% "zio-schema-protobuf"           % Version.zioSchema,
+      "dev.zio"                       %% "zio-json"                      % Version.zioJson,
+      "dev.zio"                       %% "zio-nio"                       % Version.zioNio,
+      "dev.zio"                       %% "zio-cache"                     % Version.zioCache,
+      "dev.zio"                       %% "zio-redis"                     % Version.zioRedis,
+      "dev.zio"                       %% "zio-metrics-prometheus"        % Version.zioMetrics,
+      "dev.zio"                       %% "zio-metrics-connectors"        % Version.zioMetrics,
+      "com.stuart"                    %% "zcaffeine"                     % Version.zcaffiene,
+      "nl.vroste"                     %% "rezilience"                    % Version.rezilience,
       // ZIO Config.
-      "dev.zio"                       %% "zio-config"                    % zioConfig,
-      "dev.zio"                       %% "zio-config-typesafe"           % zioConfig,
+      "dev.zio"                       %% "zio-config"                    % Version.zioConfig,
+      "dev.zio"                       %% "zio-config-typesafe"           % Version.zioConfig,
       // HTTP Server.
-      "io.d11"                        %% "zhttp"                         % zhttp,
+      "dev.zio"                       %% "zio-http"                      % Version.zioHttp,
       // HTTP Client.
-      "com.softwaremill.sttp.client3" %% "core"                          % sttp,
-      "com.softwaremill.sttp.client3" %% "async-http-client-backend-zio" % sttp,
-      "com.softwaremill.sttp.client3" %% "zio-json"                      % sttp,
+      "com.softwaremill.sttp.client3" %% "core"                          % Version.sttp,
+      "com.softwaremill.sttp.client3" %% "async-http-client-backend-zio" % Version.sttp,
+      "com.softwaremill.sttp.client3" %% "zio-json"                      % Version.sttp,
       // Database.
-      "io.getquill"                   %% "quill-jdbc-zio"                % protoQuill,
-      "org.postgresql"                 % "postgresql"                    % postgresql,
-      "org.flywaydb"                   % "flyway-core"                   % flyway,
+      "io.getquill"                   %% "quill-jdbc-zio"                % Version.protoQuill,
+      "org.postgresql"                 % "postgresql"                    % Version.postgresql,
+      "org.flywaydb"                   % "flyway-core"                   % Version.flyway,
       // Logging.
-      "dev.zio"                       %% "zio-logging-slf4j"             % zio,
-      "org.slf4j"                      % "slf4j-api"                     % slf4jVersion,
-      "ch.qos.logback"                 % "logback-classic"               % "1.4.1",
-
+      "dev.zio"                       %% "zio-logging-slf4j"             % Version.zioLogging,
+      "org.slf4j"                      % "slf4j-api"                     % Version.slf4j,
+      "ch.qos.logback"                 % "logback-classic"               % Version.logback,
       // Graphql.
-      "com.github.ghostdogpr" %% "caliban"          % "2.0.1",
-      "com.github.ghostdogpr" %% "caliban-zio-http" % "2.0.1",
+      "com.github.ghostdogpr"         %% "caliban"                       % Version.caliban,
+      "com.github.ghostdogpr"         %% "caliban-zio-http"              % Version.caliban,
+      "com.softwaremill.sttp.tapir"   %% "tapir-json-zio"                % "1.2.11",
       // Test Libraries.
-      "dev.zio"               %% "zio-test"         % zio % Test
-    ),
-    scalacOptions ++= Seq(
-      "-Xmax-inlines:55"
+      "dev.zio"                       %% "zio-test"                      % Version.zio      % Test,
+      "dev.zio"                       %% "zio-redis-embedded"            % Version.zioRedis % Test
     ),
     testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
     resolvers ++= Seq(
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
     ),
     excludeDependencies ++= Seq(
-      ExclusionRule("org.scala-lang.modules", "scala-collection-compat_2.13")
+      ExclusionRule("org.scala-lang.modules", "scala-collection-compat_2.13"),
+      ExclusionRule("com.lihaoyi", "geny_2.13")
     ),
     assembly / assemblyMergeStrategy := {
       case PathList("module-info.class") => MergeStrategy.discard
       case PathList("META-INF", xs @ _*) => MergeStrategy.discard
       case _                             => MergeStrategy.first
     }
-  ).settings(dockerSettings: _*)
+  ).settings(dockerSettings*)
 
 lazy val dockerSettings = Seq(
   Docker / packageName := "muse_server",
@@ -96,7 +90,7 @@ lazy val dockerSettings = Seq(
   dockerBaseImage      := "azul/zulu-openjdk:17",
   Universal / javaOptions ++= Seq(
     "-J-XX:ActiveProcessorCount=4", // Overrides the automatic detection mechanism of the JVM that doesn't work very well in k8s.
-    "-J-XX:MaxRAMPercentage=80.0",  // 80% * 1280Mi = 1024Mi (See https://github.com/conduktor/conduktor-devtools-builds/pull/96/files#diff-1c0a26888454bc51fc9423622b5d4ee82456b0420f169518a371f3f0e23d443cR67-R70)
+//    "-J-XX:MaxRAMPercentage=80.0",  // 80% * 1280Mi = 1024Mi (See https://github.com/conduktor/conduktor-devtools-builds/pull/96/files#diff-1c0a26888454bc51fc9423622b5d4ee82456b0420f169518a371f3f0e23d443cR67-R70)
     "-J-XX:+ExitOnOutOfMemoryError",
     "-J-XX:+HeapDumpOnOutOfMemoryError",
     "-J-XshowSettings:system",      // https://developers.redhat.com/articles/2022/04/19/java-17-whats-new-openjdks-container-awareness#recent_changes_in_openjdk_s_container_awareness_code

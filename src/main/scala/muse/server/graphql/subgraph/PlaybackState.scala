@@ -1,5 +1,6 @@
 package muse.server.graphql.subgraph
 
+import caliban.schema.Schema.auto.*
 import muse.domain.spotify.{PlaybackContext, PlaybackDevice}
 
 case class PlaybackState(
