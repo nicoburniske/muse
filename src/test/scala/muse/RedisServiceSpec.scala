@@ -1,7 +1,7 @@
 package muse
 
 import muse.service.RedisService
-import zio.{ZIO, ZLayer}
+import zio.*
 import zio.redis.{CodecSupplier, Redis, RedisExecutor, SingleNodeExecutor}
 import zio.schema.{DeriveSchema, Schema}
 import zio.schema.codec.{BinaryCodec, ProtobufCodec}
@@ -19,67 +19,63 @@ object RedisServiceSpec extends ZIOSpecDefault {
 
   final case class Item(id: String, price: Double)
   object Item {
-    final def itemKey(item: Item): String = s"item:${item.id}"
+    final def itemKey(item: Item): String   = s"item:${item.id}"
+    final def itemKey(item: String): String = s"item:$item"
 
     given Schema[Item] = DeriveSchema.gen[Item]
   }
 
   def spec = suite("Integration test") {
-    test("get and set strings") {
+    test("cacheOrExecute") {
       for {
-        key    <- ZIO.random.flatMap(_.nextUUID).map(_.toString)
-        value  <- ZIO.random.flatMap(_.nextUUID).map(_.toString)
-        _      <- ZIO.logInfo(s"String key $key with value $value")
+        random <- ZIO.random
+        id     <- random.nextUUID.map(_.toString)
+        price  <- random.nextDoubleBetween(0.0, 100.0)
+        item    = Item(id, price)
+        key     = Item.itemKey(item)
+
         redis  <- ZIO.service[Redis]
-        _      <- ZIO.logInfo("Setting string key")
-        _      <- redis.set(key, value)
-        _      <- ZIO.logInfo("Getting string value")
-        result <- redis.get(key).returning[String]
-      } yield assert(result)(isSome(equalTo(value)))
-    } + test("get and set positive integers") {
-      for {
-        key    <- ZIO.random.flatMap(_.nextIntBetween(0, Int.MaxValue))
-        value  <- ZIO.random.flatMap(_.nextIntBetween(0, Int.MaxValue))
-        _      <- ZIO.logInfo(s"Int key $key with value $value")
-        redis  <- ZIO.service[Redis]
-        _      <- ZIO.logInfo("Setting Int key")
-        _      <- redis.set(key, value)
-        _      <- ZIO.logInfo("Getting Int value")
-        result <- redis.get(key).returning[Int]
-      } yield assert(result)(isSome(equalTo(value)))
+        service = RedisService(redis)
+
+        before  <- redis.get(key).returning[Item]
+        execute <- service.cacheOrExecute(key, 10.seconds)(ZIO.succeed(item))
+
+        _     <- ZIO.sleep(100.millis)
+        after <- redis.get(key).returning[Item]
+      } yield assert(before)(isNone) && assertTrue(after.get == item, execute == item)
     } +
-      test("get and set items") {
-        val item = Item("1", 1.0)
-        val key  = Item.itemKey(item)
-        for {
-          redis  <- ZIO.service[Redis]
-          _      <- ZIO.logInfo("Setting item")
-          _      <- redis.set(key, item)
-          _      <- ZIO.logInfo("Getting item")
-          result <- redis.get(key).returning[Item]
-        } yield assert(result)(isSome(equalTo(item)))
-      } +
-      test("Redis Service get and set items") {
-        for {
-          random <- ZIO.random
-          id     <- random.nextUUID.map(_.toString)
-          price  <- random.nextDoubleBetween(0.0, 100.0)
-          item    = Item(id, price)
-          key     = Item.itemKey(item)
+      test("cacheOrExecuteBulk") {
+        ZIO
+          .foreach(Chunk.fill(10)(())) { _ =>
+            for {
+              random <- ZIO.random
+              id     <- random.nextUUID.map(_.toString)
+              price  <- random.nextDoubleBetween(0.0, 100.0)
+              item    = Item(id, price)
+            } yield item
+          }.flatMap { items =>
+            val (toStore, toRetrieve) = items.splitAt(5)
 
-          redis  <- ZIO.service[Redis]
-          service = RedisService(redis)
+            val allIds        = items.map(_.id).toList
+            val idToMap  = items.map(item => item.id -> item).toMap
+            val getItems = (ids: List[String]) => ids.map(id => id -> idToMap(id)).toMap
 
-          before <- redis.get(key).returning[Item]
-
-          execute <- service.cacheOrExecute(key, 10.seconds)(ZIO.succeed(item))
-          
-          _       <- ZIO.sleep(100.millis)
-          
-          after   <- redis.get(key).returning[Item]
-        } yield assert(before)(isNone) &&
-          assert(after)(isSome(equalTo(item))) &&
-          assert(execute)(equalTo(item))
+            for {
+              // Set up half of the items in the cache.
+              redis        <- ZIO.service[Redis]
+              _            <- ZIO.foreachDiscard(toStore) { item =>
+                                val key = Item.itemKey(item)
+                                redis.set(key, item)
+                              }
+              service       = RedisService(redis)
+              ref          <- Ref.make(List.empty[String])
+              result       <- service.cacheOrExecuteBulk(allIds, 10.seconds)(Item.itemKey) { ids =>
+                                ref.set(ids) *> ZIO.succeed(getItems(ids))
+                              }
+              retrievedIds <- ref.get
+            } yield assert(result)(hasSameElementsDistinct(items)) &&
+              assert(retrievedIds)(hasSameElementsDistinct(toRetrieve.map(_.id)))
+          }
       }
   }.provideShared(
     EmbeddedRedis.layer,
