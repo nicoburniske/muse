@@ -43,6 +43,7 @@ lazy val root = (project in file("."))
       "nl.vroste"                     %% "rezilience"                    % Version.rezilience,
       // ZIO Config.
       "dev.zio"                       %% "zio-config"                    % Version.zioConfig,
+      "dev.zio"                       %% "zio-config-magnolia"           % Version.zioConfig,
       "dev.zio"                       %% "zio-config-typesafe"           % Version.zioConfig,
       // HTTP Server.
       "dev.zio"                       %% "zio-http"                      % Version.zioHttp,

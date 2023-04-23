@@ -41,6 +41,7 @@ object Main extends ZIOAppDefault {
       AppConfig.layer,
       DatabaseService.layer,
       RedisService.layer,
+      RedisService.connectionLayer,
       RedisService.redisLayer,
       MigrationService.layer,
       UserSessions.layer,

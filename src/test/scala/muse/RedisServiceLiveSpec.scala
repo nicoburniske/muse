@@ -1,6 +1,7 @@
 package muse
 
-import muse.service.RedisServiceLive
+import muse.config.RateLimitConfig
+import muse.service.{RedisService, RedisServiceLive}
 import zio.*
 import zio.redis.{CodecSupplier, Redis, RedisExecutor, SingleNodeExecutor}
 import zio.schema.{DeriveSchema, Schema}
@@ -34,9 +35,9 @@ object RedisServiceLiveSpec extends ZIOSpecDefault {
         item    = Item(id, price)
         key     = Item.itemKey(item)
 
-        redis     <- ZIO.service[Redis]
-        semaphore <- Semaphore.make(1)
-        service    = RedisServiceLive(redis, semaphore)
+        service  <- ZIO.service[RedisService]
+        redisRef <- ZIO.service[Reloadable[Redis]]
+        redis    <- redisRef.get
 
         before  <- redis.get(key).returning[Item]
         execute <- service.cacheOrExecute(key, 10.seconds)(ZIO.succeed(item))
@@ -63,14 +64,14 @@ object RedisServiceLiveSpec extends ZIOSpecDefault {
 
             for {
               // Set up half of the items in the cache.
-              redis <- ZIO.service[Redis]
-              _     <- ZIO.foreachDiscard(toStore) { item =>
-                         val key = Item.itemKey(item)
-                         redis.set(key, item)
-                       }
+              redisRef <- ZIO.service[Reloadable[Redis]]
+              redis    <- redisRef.get
+              _        <- ZIO.foreachDiscard(toStore) { item =>
+                            val key = Item.itemKey(item)
+                            redis.set(key, item)
+                          }
 
-              semaphore    <- Semaphore.make(1)
-              service       = RedisServiceLive(redis, semaphore)
+              service      <- ZIO.service[RedisService]
               ref          <- Ref.make(List.empty[String])
               result       <- service.cacheOrExecuteBulk(allIds, 10.seconds)(Item.itemKey) { ids =>
                                 ref.set(ids) *> ZIO.succeed(getItems(ids))
@@ -83,7 +84,9 @@ object RedisServiceLiveSpec extends ZIOSpecDefault {
   }.provideShared(
     EmbeddedRedis.layer,
     SingleNodeExecutor.layer,
-    Redis.layer,
-    ZLayer.succeed(ProtobufCodecSupplier)
+    Redis.layer.reloadableManual,
+    RedisService.layer,
+    ZLayer.succeed(ProtobufCodecSupplier),
+    ZLayer.succeed(RateLimitConfig(10, 10.seconds))
   ) @@ TestAspect.timeout(10.seconds) @@ TestAspect.withLiveClock
 }

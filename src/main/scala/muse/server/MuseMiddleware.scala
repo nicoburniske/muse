@@ -34,24 +34,21 @@ object MuseMiddleware {
       override def apply[Env <: SessionEnv, Err >: Throwable](handler: Handler[Env, Err, Request, Response])(
           implicit trace: Trace): Handler[Env, Err, Request, Response] =
         Handler.fromFunctionZIO[Request] { request =>
-          // Init Session.
           for {
-            sessionData        <- {
+            // Initialize Session.
+            session       <- {
               extractRequestAuth(request) match
                 case None            => ZIO.fail(Unauthorized("Missing Auth Header"))
-                case Some(sessionId) => UserSessions.getSessionAndBulkhead(SessionId(sessionId))
+                case Some(sessionId) => UserSessions.getUserSession(SessionId(sessionId))
             }
-            (session, bulkhead) = sessionData
-            _                  <- RequestSession.set[UserSession](Some(session))
-            spotify            <- SpotifyService.live(session.accessToken)
-            _                  <- RequestSession.set[SpotifyService](Some(spotify))
-            // Run handler with bulkhead.
-            result             <- bulkhead {
-                                    handler.runZIO(request)
-                                  }.mapError {
-                                    case WrappedError(error)        => error
-                                    case Bulkhead.BulkheadRejection => RateLimited
-                                  }
+            _             <- RequestSession.set[UserSession](Some(session))
+            spotify       <- SpotifyService.live(session.accessToken)
+            _             <- RequestSession.set[SpotifyService](Some(spotify))
+            // Rate Limiting.
+            isRateLimited <- RedisService.rateLimited(session.userId).orDie
+            _             <- ZIO.logError(s"Rate Limited ${session.userId}").when(isRateLimited)
+            result        <- if isRateLimited then ZIO.fail(RateLimited)
+                             else handler.runZIO(request)
           } yield result
         }
     }
