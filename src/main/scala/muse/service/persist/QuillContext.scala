@@ -1,13 +1,14 @@
 package muse.service.persist
 
 import io.getquill.jdbczio.Quill
-import io.getquill.{LowerCase, NamingStrategy, PostgresZioJdbcContext, SnakeCase}
+import io.getquill.*
 import muse.domain.common.EntityType
 import muse.domain.common.Types.{RefreshToken, SessionId, UserId}
 import muse.domain.table.AccessLevel
 import muse.service.persist.QuillContext.{Decoder, Encoder, decoder, encoder}
 import zio.{Schedule, durationInt}
 
+import java.time.Instant
 import java.sql.Types
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
@@ -43,4 +44,8 @@ object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, Low
 
   given Decoder[RefreshToken] =
     decoder((index, row, _) => RefreshToken(row.getString(index)))
+
+  extension (inline a: Instant)
+    inline def >(b: Instant) = quote { sql"($a > $b)".as[Boolean] }
+    inline def <(b: Instant) = quote { sql"($a < $b)".as[Boolean] }
 }

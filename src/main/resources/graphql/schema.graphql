@@ -9,7 +9,7 @@ scalar Instant
 
 scalar Long
 
-union ReviewUpdate = CreatedComment | DeletedComment | UpdatedComment | UpdatedCommentIndex
+union ReviewUpdate = CreatedComment | DeletedComment | UpdatedComment
 
 enum AccessLevel {
   Collaborator
@@ -70,11 +70,6 @@ input DeleteReviewLinkInput {
   childReviewId: ID!
 }
 
-input GetPlaylistTracksInput {
-  playlistId: String!
-  numTracks: Int!
-}
-
 input InitialLinkInput {
   parentReviewId: ID!
 }
@@ -133,9 +128,10 @@ input UpdateReviewLinkInput {
 }
 
 interface ReviewEntity {
+  id: String!
   name: String!
   uri: String!
-  id: String!
+  externalUrls: [KVStringString!]
   href: String!
 }
 
@@ -164,6 +160,7 @@ type Artist implements ReviewEntity {
   id: String!
   uri: String!
   name: String!
+  externalUrls: [KVStringString!]
   numFollowers: Int
   genres: [String!]
   images: [String!]
@@ -246,6 +243,9 @@ type Comment {
   commenter: User!
   comment: String
   entities: [ReviewEntity!]
+  parentComment: Comment
+  childComments: [Comment!]
+  allChildComments: [Comment!]
 }
 
 type Copyright {
@@ -291,37 +291,11 @@ type Mutations {
   shareReview(input: ShareReviewInput!): Boolean
 }
 
-type NewCommentIndex {
-  commentId: Long!
-  commentIndex: Int!
-}
-
-type PaginationResultAlbum {
-  limit: Int!
-  nextOffset: Int
-  itemsLeft: Int!
-  items: [Album!]!
-}
-
-type PaginationResultArtist {
-  limit: Int!
-  nextOffset: Int
-  itemsLeft: Int!
-  items: [Artist!]!
-}
-
-type PaginationResultPlaylist {
-  limit: Int!
-  nextOffset: Int
-  itemsLeft: Int!
-  items: [Playlist!]!
-}
-
-type PaginationResultTrack {
-  limit: Int!
-  nextOffset: Int
-  itemsLeft: Int!
-  items: [Track!]!
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
 }
 
 type PlaybackContext {
@@ -363,9 +337,9 @@ type Playlist implements ReviewEntity {
   public: Boolean
   description: String
   numberOfTracks: Int!
-  externalUrls: [KVStringString!]!
   images: [String!]!
   owner: User!
+  externalUrls: [KVStringString!]
   snapshotId: String
   numberOfFollowers: Int
   tracks: [PlaylistTrack!]
@@ -385,7 +359,9 @@ type Queries {
   searchUser(displayName: String!): [User!]
   review(id: ID!): Review
   reviews(reviewIds: [ID!]!): [Review!]
-  search(query: String!, types: [EntityType!]!, pagination: PaginationInput = {first: 10, offset: 0}): SearchResult
+  feed(first: Int, after: String): ReviewConnection
+  comment(id: Long!): Comment
+  comments(commentIds: [Long!]!): [Comment!]
   getPlaylist(id: String!): Playlist
   getAlbum(id: String!): Album
   getTrack(id: String!): Track
@@ -407,11 +383,14 @@ type Review {
   collaborators: [Collaborator!]
 }
 
-type SearchResult {
-  albums: PaginationResultAlbum
-  artists: PaginationResultArtist
-  playlists: PaginationResultPlaylist
-  tracks: PaginationResultTrack
+type ReviewConnection {
+  pageInfo: PageInfo!
+  edges: [ReviewEdge!]!
+}
+
+type ReviewEdge {
+  cursor: String!
+  node: Review!
 }
 
 type SpotifyProfile {
@@ -427,7 +406,6 @@ type SpotifyProfile {
 type Subscriptions {
   nowPlaying(tickInterval: Int!): PlaybackState
   availableDevices: [PlaybackDevice!]
-  playlistTracks(input: GetPlaylistTracksInput!): PlaylistTrack
   reviewUpdates(reviewIds: [ID!]!): ReviewUpdate
 }
 
@@ -463,11 +441,6 @@ type Track implements ReviewEntity {
 
 type UpdatedComment {
   comment: Comment!
-}
-
-type UpdatedCommentIndex {
-  reviewId: ID!
-  updatedIndices: [NewCommentIndex!]!
 }
 
 type User {

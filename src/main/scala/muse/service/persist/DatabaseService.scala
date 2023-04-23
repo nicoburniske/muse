@@ -83,6 +83,20 @@ trait DatabaseService {
   def getCommentEntities(commentId: Long): IO[SQLException, List[ReviewCommentEntity]]
 
   /**
+   * Gets relevant reviews for a given user.
+   *
+   * @param userId
+   *   the user to get reviews for
+   * @param offset
+   *   starting from
+   * @param limit
+   *   max number of results to return.
+   * @return
+   *   (total count, list of (review, review entity))
+   */
+  def getFeed(userId: UserId, offset: Option[UUID], limit: Int): IO[SQLException, (Int, List[(Review, Option[ReviewEntity])])]
+
+  /**
    * Update!
    */
   def updateReview(review: UpdateReview): IO[SQLException, Review]
@@ -184,6 +198,9 @@ object DatabaseService {
 
   def getAllUsersWithAccess(reviewIds: List[UUID]) =
     ZIO.serviceWithZIO[DatabaseService](_.getAllUsersWithAccess(reviewIds))
+
+  def getFeed(userId: UserId, offset: Option[UUID], limit: Int) =
+    ZIO.serviceWithZIO[DatabaseService](_.getFeed(userId, offset, limit))
 
   def updateReview(review: UpdateReview) =
     ZIO.serviceWithZIO[DatabaseService](_.updateReview(review))

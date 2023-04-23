@@ -3,6 +3,7 @@ package muse.server.graphql
 import caliban.CalibanError.{ExecutionError, ParsingError, ValidationError}
 import caliban.ResponseValue.ObjectValue
 import caliban.Value.StringValue
+import caliban.relay.PageInfo
 import caliban.schema.Schema.stringSchema
 import caliban.schema.{ArgBuilder, GenericSchema, Schema}
 import caliban.wrappers.ApolloTracing.apolloTracing
@@ -18,7 +19,7 @@ import muse.domain.spotify.AlbumType
 import muse.domain.table.ReviewComment
 import muse.domain.{spotify, table}
 import muse.server.graphql.resolver.GetSearch.PaginationResult
-import muse.server.graphql.resolver.UserPlaylistsInput
+import muse.server.graphql.resolver.{FeedInput, ReviewConnection, ReviewEdge, UserPlaylistsInput}
 import muse.server.graphql.subgraph.*
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyError, SpotifyService}
@@ -104,6 +105,13 @@ object MuseGraphQL {
   given Schema[Env, SpotifyProfile]     = Schema.gen
   given Schema[Env, Pagination]         = Schema.gen
   given ArgBuilder[Pagination]          = ArgBuilder.gen
+
+  given Schema[Env, FeedInput]        = Schema.gen
+  given ArgBuilder[FeedInput]         = ArgBuilder.gen
+  given Schema[Env, ReviewConnection] = Schema.gen
+  given Schema[Env, ReviewEdge]       = Schema.gen
+  given Schema[Env, PageInfo]      = Schema.gen
+  given ArgBuilder[PageInfo]       = ArgBuilder.gen
 
   // Mutation.
   given Schema[Env, CreateReview]      = Schema.gen

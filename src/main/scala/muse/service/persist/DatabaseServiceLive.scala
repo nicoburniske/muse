@@ -7,6 +7,7 @@ import muse.domain.table.*
 import zio.{Clock, IO, ZIO, ZLayer, durationInt}
 
 import java.sql.SQLException
+import java.time.Instant
 import java.util.UUID
 import javax.sql.DataSource
 
@@ -216,6 +217,33 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     commentEntity
       .filter(entity => entity.commentId == lift(commentId))
   }.provideLayer(layer)
+
+  def getFeed(userId: UserId, offset: Option[UUID], limit: Int) = {
+    for {
+      now        <- Clock.instant
+      newestTime <- run {
+                      for {
+                        review <- review.filter(r => lift(offset).contains(r.reviewId))
+                      } yield review.createdAt
+                    }.map(_.headOption.getOrElse(now))
+      result     <- run {
+                      getFeedReviews(userId, newestTime)
+                        .distinctOn(_.reviewId)
+                        .size
+                      // Need to account for how many were requested!
+                    }.map(s => Math.max(0, s - limit).toInt) <&> run {
+                      (for {
+                        review <- getFeedReviews(userId, newestTime).sortBy(_.createdAt)(Ord.desc)
+                        entity <- reviewEntity.leftJoin(_.reviewId == review.reviewId)
+                      } yield (review, entity)).take(lift(limit))
+                    }
+    } yield result
+  }.provideLayer(layer)
+
+  private inline def getFeedReviews(userId: UserId, newestTime: Instant) = {
+    userSharedReviews(lift(userId)) union
+      review.filter(_.isPublic).filter(_.creatorId != lift(userId))
+  }.filter(r => r.createdAt < lift(newestTime))
 
   /**
    * Create!
@@ -670,11 +698,11 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
    */
 
   inline def reviewCreator(inline reviewId: UUID): EntityQuery[String] =
-    review.filter(_.reviewId == reviewId).map(_.creatorId)
+    review.filter(_.reviewId == lift(reviewId)).map(_.creatorId)
 
   inline def usersWithWriteAccess(inline reviewId: UUID): EntityQuery[String] =
     reviewAccess
-      .filter(_.reviewId == reviewId)
+      .filter(_.reviewId == lift(reviewId))
       .filter(_.accessLevel == lift(AccessLevel.Collaborator))
       .map(_.userId)
 
@@ -687,7 +715,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     review.filter(_.isPublic) union allUserReviews(userId)
 
   override def canModifyReview(userId: UserId, reviewId: UUID) = run {
-    reviewCreator(lift(reviewId)).contains(lift(userId))
+    reviewCreator(reviewId).contains(lift(userId))
   }.provide(layer)
 
   override def canModifyComment(userId: UserId, reviewId: UUID, commentId: Long) = run {
