@@ -36,7 +36,6 @@ object AppConfig {
     server         <- ZLayer.succeed(appConfigEnv.get.serverConfig)
     spotifyService <- ZLayer.succeed(appConfigEnv.get.spotify.service)
     redisConfig    <- ZLayer.succeed(appConfigEnv.get.redisConfig)
-    _              <- ZLayer.fromZIO(ZIO.logInfo(s"Loaded config: $redisConfig"))
   } yield appConfigEnv ++ spotify ++ sql ++ server ++ spotifyService ++ redisConfig
 
   lazy val layer = appConfigLayer >>> flattened

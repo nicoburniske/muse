@@ -1,6 +1,6 @@
 package muse
 
-import muse.service.RedisService
+import muse.service.RedisServiceLive
 import zio.*
 import zio.redis.{CodecSupplier, Redis, RedisExecutor, SingleNodeExecutor}
 import zio.schema.{DeriveSchema, Schema}
@@ -12,14 +12,14 @@ import zio.durationInt
 import zio.redis.embedded.EmbeddedRedis
 import zio.test.TestAspect.withLiveClock
 
-object RedisServiceSpec extends ZIOSpecDefault {
+object RedisServiceLiveSpec extends ZIOSpecDefault {
   object ProtobufCodecSupplier extends CodecSupplier {
     def get[A: Schema]: BinaryCodec[A] = ProtobufCodec.protobufCodec
   }
 
   final case class Item(id: String, price: Double)
   object Item {
-    final def itemKey(item: Item): String   = s"item:${item.id}"
+    final def itemKey(item: Item): String   = itemKey(item.id)
     final def itemKey(item: String): String = s"item:$item"
 
     given Schema[Item] = DeriveSchema.gen[Item]
@@ -34,8 +34,9 @@ object RedisServiceSpec extends ZIOSpecDefault {
         item    = Item(id, price)
         key     = Item.itemKey(item)
 
-        redis  <- ZIO.service[Redis]
-        service = RedisService(redis)
+        redis     <- ZIO.service[Redis]
+        semaphore <- Semaphore.make(1)
+        service    = RedisServiceLive(redis, semaphore)
 
         before  <- redis.get(key).returning[Item]
         execute <- service.cacheOrExecute(key, 10.seconds)(ZIO.succeed(item))
@@ -56,18 +57,20 @@ object RedisServiceSpec extends ZIOSpecDefault {
           }.flatMap { items =>
             val (toStore, toRetrieve) = items.splitAt(5)
 
-            val allIds        = items.map(_.id).toList
+            val allIds   = items.map(_.id).toList
             val idToMap  = items.map(item => item.id -> item).toMap
             val getItems = (ids: List[String]) => ids.map(id => id -> idToMap(id)).toMap
 
             for {
               // Set up half of the items in the cache.
-              redis        <- ZIO.service[Redis]
-              _            <- ZIO.foreachDiscard(toStore) { item =>
-                                val key = Item.itemKey(item)
-                                redis.set(key, item)
-                              }
-              service       = RedisService(redis)
+              redis <- ZIO.service[Redis]
+              _     <- ZIO.foreachDiscard(toStore) { item =>
+                         val key = Item.itemKey(item)
+                         redis.set(key, item)
+                       }
+
+              semaphore    <- Semaphore.make(1)
+              service       = RedisServiceLive(redis, semaphore)
               ref          <- Ref.make(List.empty[String])
               result       <- service.cacheOrExecuteBulk(allIds, 10.seconds)(Item.itemKey) { ids =>
                                 ref.set(ids) *> ZIO.succeed(getItems(ids))

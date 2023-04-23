@@ -9,7 +9,7 @@ import muse.domain.error.{MuseError, RateLimited, Unauthorized}
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService}
-import muse.service.{RequestSession, UserSessions}
+import muse.service.{RedisService, RequestSession, UserSessions}
 import muse.utils.Utils
 import nl.vroste.rezilience.Bulkhead
 import nl.vroste.rezilience.Bulkhead.{BulkheadError, BulkheadException, WrappedError}
@@ -26,8 +26,8 @@ import java.time.Instant
 
 object MuseMiddleware {
 
-  type SessionEnv = Redis & UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService] & SttpBackend[Task, Any] &
-    Ref[Option[Long]]
+  type SessionEnv = RedisService & UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService] &
+    SttpBackend[Task, Any] & Ref[Option[Long]]
 
   final def InjectSessionAndRateLimit: RequestHandlerMiddleware.Simple[SessionEnv, Throwable] =
     new RequestHandlerMiddleware.Simple[SessionEnv, Throwable] {

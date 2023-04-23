@@ -7,7 +7,7 @@ import muse.domain.common.Types.UserId
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.*
-import muse.service.{RedisService, RequestSession, UserSessions}
+import muse.service.{RedisService, RedisServiceLive, RequestSession, UserSessions}
 import muse.utils.Givens
 import muse.utils.Givens.given
 import muse.utils.Utils.addTimeLog
@@ -65,7 +65,7 @@ object SpotifyService {
     retryAfter <- ZIO.service[Ref[Option[Long]]]
     asLibRef    = Givens.zioRef(retryAfter)
     spotify     = SpotifyAPI(backend, asLibRef, accessToken)
-    redis      <- ZIO.service[Redis]
+    redis      <- ZIO.service[RedisService]
   } yield SpotifyServiceLive(spotify, redis)
 
   def getCurrentUserProfile = ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserProfile)
@@ -158,7 +158,7 @@ object SpotifyService {
 
 case class SpotifyServiceLive(
     s: SpotifyAPI[Task],
-    redis: Redis
+    redisService: RedisService
 ) extends SpotifyService {
 
   import zio.durationInt
@@ -169,8 +169,6 @@ case class SpotifyServiceLive(
   given Schema[Track]          = DeriveSchema.gen[Track]
   given Schema[Album]          = DeriveSchema.gen[Album]
   given Schema[PublicUser]     = DeriveSchema.gen[PublicUser]
-
-  val redisService = RedisService(redis)
 
   def getCurrentUserProfile                          = s.getCurrentUserProfile
   def getTrackRecommendations(input: TrackRecsInput) = s.getTrackRecommendations(input).map(_.tracks)

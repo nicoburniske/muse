@@ -40,6 +40,7 @@ object Main extends ZIOAppDefault {
       // Muse layers.
       AppConfig.layer,
       DatabaseService.layer,
+      RedisService.layer,
       RedisService.redisLayer,
       MigrationService.layer,
       UserSessions.layer,
