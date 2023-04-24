@@ -51,11 +51,11 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
    * Read!
    */
 
-  inline def userReviews(inline userId: UserId) = review.filter(_.creatorId == userId)
+  inline def userReviews(inline userId: UserId) = review.filter(_.creatorId == lift(userId))
 
   inline def userSharedReviews(inline userId: UserId) =
     reviewAccess
-      .filter(_.userId == userId)
+      .filter(_.userId == lift(userId))
       .join(review)
       .on((access, review) => review.reviewId == access.reviewId)
       .map(_._2)
@@ -70,14 +70,14 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .map(_._2)
 
   override def getAllUserReviews(userId: UserId) = run {
-    allUserReviews(lift(userId))
+    allUserReviews(userId)
       .leftJoin(reviewEntity)
       .on((review, entity) => review.reviewId == entity.reviewId)
   }.provide(layer)
 
   override def getUserReviewsExternal(sourceUserId: UserId, viewerUserId: UserId) = run {
     for {
-      review <- userReviews(lift(sourceUserId)).filter(_.isPublic) union userSharedReviews(lift(viewerUserId))
+      review <- userReviews(sourceUserId).filter(_.isPublic) union userSharedReviews(viewerUserId)
       if review.creatorId == lift(sourceUserId)
       entity <- reviewEntity.leftJoin(_.reviewId == review.reviewId)
     } yield (review, entity)
@@ -104,7 +104,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     .map(_.headOption)
 
   override def getReviewWithPermissions(reviewId: UUID, userId: UserId) = run {
-    allViewableReviews(lift(userId))
+    allViewableReviews(userId)
       .filter(_.reviewId == lift(reviewId))
       .leftJoin(reviewEntity)
       .on((review, entity) => review.reviewId == entity.reviewId)
@@ -112,7 +112,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     .map(_.headOption)
 
   override def getReviewsWithPermissions(reviewIds: List[UUID], userId: UserId) = run {
-    allViewableReviews(lift(userId))
+    allViewableReviews(userId)
       .filter(r => liftQuery(reviewIds.toSet).contains(r.reviewId))
       .leftJoin(reviewEntity)
       .on((review, entity) => review.reviewId == entity.reviewId)
@@ -145,14 +145,14 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.map(_.headOption).provide(layer)
 
   override def getUserReviews(userId: UserId) = run {
-    userReviews(lift(userId))
+    userReviews(userId)
       .leftJoin(reviewEntity)
       .on((review, entity) => review.reviewId == entity.reviewId)
   }.provide(layer)
 
   override def getComment(commentId: Long, userId: UserId) = run {
     for {
-      comment       <- allViewableComments(lift(userId)).filter(_.commentId == lift(commentId))
+      comment       <- allViewableComments(userId).filter(_.commentId == lift(commentId))
       commentIndex  <- commentIndex.join(_.commentId == comment.commentId)
       parentComment <- commentParentChild.leftJoin(_.childCommentId == comment.commentId)
       entity        <- commentEntity.leftJoin(_.commentId == comment.commentId)
@@ -173,7 +173,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
 
   override def getComments(commentIds: List[Long], userId: UserId) = run {
-    val comments = allViewableComments(lift(userId)).filter(c => liftQuery(commentIds).contains(c.commentId))
+    val comments = allViewableComments(userId).filter(c => liftQuery(commentIds).contains(c.commentId))
     getAllCommentData(comments)
   }.provide(layer)
 
@@ -191,7 +191,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
         SELECT * FROM children WHERE comment_id != ${lift(commentId)}
        """.as[Query[Long]]
 
-    val childComments = allViewableComments(lift(userId)).filter(c => allChildrenIds.contains(c.commentId))
+    val childComments = allViewableComments(userId).filter(c => allChildrenIds.contains(c.commentId))
     getAllCommentData(childComments)
   }.provide(layer)
 
@@ -240,8 +240,8 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
     } yield result
   }.provideLayer(layer)
 
-  private inline def getFeedReviews(userId: UserId, newestTime: Instant) = {
-    userSharedReviews(lift(userId)) union
+  private inline def getFeedReviews(inline userId: UserId, inline newestTime: Instant) = {
+    userSharedReviews(userId) union
       review.filter(_.isPublic).filter(_.creatorId != lift(userId))
   }.filter(r => r.createdAt < lift(newestTime))
 
@@ -727,7 +727,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
 
   override def canMakeComment(userId: UserId, reviewId: UUID): IO[SQLException, Boolean] = run {
-    allUsersWithWriteAccess(lift(reviewId)).filter(_ == lift(userId))
+    allUsersWithWriteAccess(reviewId).filter(_ == lift(userId))
   }.map(_.nonEmpty).provide(layer)
 
 }
