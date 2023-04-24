@@ -99,7 +99,7 @@ object Mutations {
     result    <- DatabaseService.createReviewComment(user.userId, create).map {
                    case (comment, index, parentChild, entities) => (comment, index, parentChild.fold(Nil)(List(_)), entities)
                  }
-    published <- ZIO.serviceWithZIO[ReviewUpdateService](_.publish(CreatedComment.apply.tupled(result)))
+    published <- ReviewUpdateService.publish(CreatedComment.apply.tupled(result))
     _         <- ZIO.logError("Failed to publish comment creation").unless(published)
   } yield Comment.fromTable.tupled(result)) @@ createCommentMetric.trackDuration
 
@@ -141,7 +141,7 @@ object Mutations {
     commentData <- DatabaseService
                      .getComment(update.commentId, user.userId)
                      .someOrFail(BadRequest(Some("Comment does not exist")))
-    published   <- ZIO.serviceWithZIO[ReviewUpdateService](_.publish(UpdatedComment.apply.tupled(commentData)))
+    published   <- ReviewUpdateService.publish(UpdatedComment.apply.tupled(commentData))
     _           <- ZIO.logError("Failed to publish comment update").unless(published)
 
   } yield Comment.fromTable.tupled(commentData)) @@ updateCommentMetric.trackDuration
@@ -162,9 +162,8 @@ object Mutations {
     case Nil => ZIO.succeed(true)
     case _   =>
       for {
-        hub       <- ZIO.service[ReviewUpdateService]
         updates   <- DatabaseService.getComments(commentIds, userId).map(UpdatedComment.fromTableRows)
-        published <- ZIO.foreachPar(updates)(c => hub.publish(c)).map(_.forall(identity))
+        published <- ZIO.foreachPar(updates)(c => ReviewUpdateService.publish(c)).map(_.forall(identity))
         _         <- if published then ZIO.logInfo("Successfully published update messages")
                      else ZIO.logError("Failed to publish comment update")
       } yield published
@@ -179,11 +178,8 @@ object Mutations {
   } yield deleted.nonEmpty || updated.nonEmpty).addTimeLog("DeleteComment")
 
   def publishDeletedComments(userId: UserId, reviewId: UUID, deletedCommentIds: List[Long], updatedCommentIds: List[Long]) = for {
-    hub    <- ZIO.service[ReviewUpdateService]
-    deletes = ZIO.foreachPar(deletedCommentIds)(id => hub.publish(DeletedComment(reviewId, id)))
-    updates = publishUpdatedComments(updatedCommentIds, userId)
-
-    published           <- updates <&> deletes
+    published           <- publishUpdatedComments(updatedCommentIds, userId) <&>
+                             ZIO.foreachPar(deletedCommentIds)(id => ReviewUpdateService.publish(DeletedComment(reviewId, id)))
     (_, delete)          = published
     publishDeletesResult = delete.forall(identity)
     _                   <- ZIO.logError("Failed to publish comment delete events").unless(publishDeletesResult)

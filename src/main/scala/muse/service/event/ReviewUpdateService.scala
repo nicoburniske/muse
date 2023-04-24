@@ -18,8 +18,8 @@ object ReviewUpdateService {
 
   val SUBJECT = "review-updates"
 
-  def publish(update: ReviewUpdateEvent)   = ZIO.serviceWithZIO[ReviewUpdateService](_.publish(update))
-  def subscribe(update: ReviewUpdateEvent) = ZIO.serviceWithZIO[ReviewUpdateService](_.subscribe(update))
+  def publish(update: ReviewUpdateEvent) = ZIO.serviceWithZIO[ReviewUpdateService](_.publish(update))
+  def subscribe(reviewIds: Set[UUID])    = ZIO.serviceWithZIO[ReviewUpdateService](_.subscribe(reviewIds))
 }
 
 final case class ReviewUpdateServiceLive(eventService: EventService) extends ReviewUpdateService {

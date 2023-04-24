@@ -2,6 +2,7 @@ package muse.service.event
 
 import io.nats.client.Connection
 import io.nats.client.Message
+import muse.config.NatsConfig
 import zio.schema.Schema
 import zio.schema.codec.{BinaryCodec, DecodeError, ProtobufCodec}
 import zio.*
@@ -20,9 +21,14 @@ object EventService {
   val layer = ZLayer.fromFunction(EventServiceLive(_, _))
 
   val natsLayer = ZLayer
-    .fromZIO(ZIO.attempt(io.nats.client.Nats.connect())).tap { c =>
-      ZIO.logInfo(s"Connected to NATS server at ${c.get.getConnectedUrl}")
-    }.tapError { e => ZIO.logError(s"Failed to connect to NATS server: ${e.toString}") }
+    .fromZIO {
+      for {
+        natsConfig <- ZIO.service[NatsConfig]
+        connection <- ZIO.attempt(io.nats.client.Nats.connect(natsConfig.url))
+      } yield connection
+    }.tap { c => ZIO.logInfo(s"Connected to NATS server at ${c.get.getConnectedUrl}") }.tapError { e =>
+      ZIO.logError(s"Failed to connect to NATS server: ${e.toString}")
+    }
 
   val codecLayer = ZLayer.succeed(new EventCodecSupplier {
     def get[E: Schema]: BinaryCodec[E] = ProtobufCodec.protobufCodec

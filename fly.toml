@@ -18,6 +18,7 @@ kill_timeout = 5
   REDIS_HOST = "fly-muselabs.upstash.io"
   REDIS_PORT = "6379"
   REDIS_USERNAME = "default"
+  NATS_URL = "iad.muse-hub.internal"
 
 #[build]
 #  dockerfile = "target/docker/stage/Dockerfile"
