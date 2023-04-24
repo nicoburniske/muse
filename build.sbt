@@ -63,6 +63,8 @@ lazy val root = (project in file("."))
       "com.github.ghostdogpr"         %% "caliban"                       % Version.caliban,
       "com.github.ghostdogpr"         %% "caliban-zio-http"              % Version.caliban,
       "com.softwaremill.sttp.tapir"   %% "tapir-json-zio"                % "1.2.11",
+      // Event.
+      "io.nats"                        % "jnats"                         % Version.jnats,
       // Test Libraries.
       "dev.zio"                       %% "zio-test"                      % Version.zio      % Test,
       "dev.zio"                       %% "zio-redis-embedded"            % Version.zioRedis % Test

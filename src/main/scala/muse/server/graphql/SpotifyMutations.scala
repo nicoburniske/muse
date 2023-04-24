@@ -2,7 +2,6 @@ package muse.server.graphql
 
 import muse.domain.common.EntityType
 import muse.domain.error.*
-import muse.domain.event.ReviewUpdate
 import muse.domain.mutate.*
 import muse.domain.session.UserSession
 import muse.domain.spotify.{
@@ -13,6 +12,7 @@ import muse.domain.spotify.{
   UriOffset,
   PositionOffset as SpotifyPostionOffset
 }
+import muse.server.graphql.subgraph.ReviewUpdate
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService

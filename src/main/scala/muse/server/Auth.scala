@@ -92,9 +92,9 @@ object Auth {
     case Method.GET -> !! / "token"   =>
       // Guaranteed to have a valid access token for next 60 min.
       for {
-        session    <- RequestSession.get[UserSession]
-        newSession <- UserSessions.refreshUserSession(session.sessionId)
-      } yield Response.text(newSession.accessToken)
+        session     <- RequestSession.get[UserSession]
+        accessToken <- UserSessions.getFreshAccessToken(session.sessionId)
+      } yield Response.text(accessToken)
   }
 
   val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {

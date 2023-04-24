@@ -12,7 +12,6 @@ import caliban.{CalibanError, GraphQL, GraphQLInterpreter, RootResolver}
 import muse.domain.common.EntityType
 import muse.domain.common.Types.UserId
 import muse.domain.error.*
-import muse.domain.event.ReviewUpdate
 import muse.domain.mutate.*
 import muse.domain.session.UserSession
 import muse.domain.spotify.AlbumType
@@ -21,6 +20,7 @@ import muse.domain.{spotify, table}
 import muse.server.graphql.resolver.GetSearch.PaginationResult
 import muse.server.graphql.resolver.{FeedInput, ReviewConnection, ReviewEdge, UserPlaylistsInput}
 import muse.server.graphql.subgraph.*
+import muse.service.event.ReviewUpdateService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyError, SpotifyService}
 import muse.service.{RequestSession, UserSessions}
@@ -34,8 +34,7 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & Hub[ReviewUpdate] &
-    Scope
+  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & ReviewUpdateService & Scope
 
   given Schema[Env, spotify.PlaybackDevice]  = Schema.gen
   given Schema[Env, spotify.ExternalIds]     = Schema.gen

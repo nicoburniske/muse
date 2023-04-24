@@ -15,9 +15,10 @@ kill_timeout = 5
   SERVER_PORT = "8080"
   SPOTIFY_REDIRECT_URI = "https://api.muselabs.xyz/callback"
 
-  REDIS_HOST = "fly-muselabs.upstash.io"
+  REDIS_HOST = "fly-muse-redis.upstash.io"
   REDIS_PORT = "6379"
   REDIS_USERNAME = "default"
+  NATS_URL = "iad.muse-hub.internal"
 
 #[build]
 #  dockerfile = "target/docker/stage/Dockerfile"

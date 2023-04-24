@@ -7,7 +7,8 @@ import muse.domain.common.Types.UserId
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.*
-import muse.service.{RedisService, RedisServiceLive, RequestSession, UserSessions}
+import muse.service.cache.{RedisService, RedisServiceLive}
+import muse.service.{RequestSession, UserSessions}
 import muse.utils.Givens
 import muse.utils.Givens.given
 import muse.utils.Utils.addTimeLog

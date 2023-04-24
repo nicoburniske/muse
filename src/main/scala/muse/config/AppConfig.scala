@@ -14,12 +14,14 @@ final case class AppConfig(
     db: SqlConfig,
     server: ServerConfig,
     redis: RedisCacheConfig,
+    nats: NatsConfig,
     rateLimit: RateLimitConfig)
 
-final case class ServerConfig(domain: Option[String], frontendUrl: String, port: Int, schemaFile: String, nThreads: Int)
+final case class ServerConfig(domain: Option[String], frontendUrl: String, port: Int, schemaFile: String)
 final case class SpotifyConfig(clientID: String, clientSecret: String, redirectURI: String, service: SpotifyServiceConfig)
 final case class SqlConfig(database: String, host: String, port: Int, user: String, password: String)
 final case class RedisCacheConfig(host: String, port: Int, username: String, password: String)
+final case class NatsConfig(url: String)
 final case class RateLimitConfig(maxRequests: Int, timeWindow: Duration)
 
 // Unused for now.
@@ -38,7 +40,8 @@ object AppConfig {
       ZLayer.service[AppConfig].project(_.db) ++
       ZLayer.service[AppConfig].project(_.server) ++
       ZLayer.service[AppConfig].project(_.redis) ++
-      ZLayer.service[AppConfig].project(_.rateLimit)
+      ZLayer.service[AppConfig].project(_.rateLimit) ++
+      ZLayer.service[AppConfig].project(_.nats)
 
   lazy val layer = appConfigLayer >>> flattened
 

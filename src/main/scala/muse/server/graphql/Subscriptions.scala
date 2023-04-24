@@ -1,29 +1,30 @@
 package muse.server.graphql
 
-import muse.domain.event.ReviewUpdate
+import muse.domain.event.{CreatedComment, DeletedComment, UpdatedComment}
 import muse.domain.session.UserSession
 import muse.domain.spotify.{PlaybackDevice, Track, PlaybackState as SpotPlaybackState}
 import muse.server.graphql.resolver.GetPlaylistTracks
-import muse.server.graphql.subgraph.{PlaybackState, PlaylistTrack}
+import muse.server.graphql.subgraph.{Comment, PlaybackState, PlaylistTrack, ReviewUpdate}
+import muse.service.event.ReviewUpdateService
 import muse.service.spotify.SpotifyService
 import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils.*
 import zio.stream.{ZPipeline, ZStream}
-import zio.{Schedule, *}
+import zio.*
 
 import java.util.UUID
 
-type Sessions = UserSessions & RequestSession[SpotifyService] & RequestSession[UserSession]
 final case class Subscriptions(
-    nowPlaying: NowPlayingInput => ZStream[Sessions, Throwable, PlaybackState],
-    availableDevices: ZStream[Sessions, Throwable, List[PlaybackDevice]],
-    reviewUpdates: ReviewUpdatesInput => ZStream[Sessions & Hub[ReviewUpdate] & Scope, Throwable, ReviewUpdate]
+    nowPlaying: NowPlayingInput => ZStream[Subscriptions.Env, Throwable, PlaybackState],
+    availableDevices: ZStream[Subscriptions.Env, Throwable, List[PlaybackDevice]],
+    reviewUpdates: ReviewUpdatesInput => ZStream[Subscriptions.Env & Scope, Throwable, ReviewUpdate]
 )
 
 case class NowPlayingInput(tickInterval: Int)
 case class ReviewUpdatesInput(reviewIds: Set[UUID])
 
 object Subscriptions {
+  type Env = UserSessions & ReviewUpdateService & RequestSession[SpotifyService] & RequestSession[UserSession]
   val live: Subscriptions = Subscriptions(
     a => playbackState(a.tickInterval),
     availableDevices,
@@ -69,13 +70,16 @@ object Subscriptions {
       .tapErrorCause(cause => ZIO.logErrorCause(s"Error while getting availableDevices: $cause", cause))
 
   def reviewUpdates(reviewIds: Set[UUID]) = for {
-    queue  <- ZStream.fromZIO(ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.subscribe))
-    update <- ZStream.fromQueue(queue)
-    if reviewIds.contains(update.reviewId)
-  } yield update
-  // TODO: Add user session references to see who is viewing review live.
-//    .ensuring(
-//    )
+    service <- ZStream.service[ReviewUpdateService]
+    events  <- ZStream.fromZIO(service.subscribe(reviewIds))
+    event   <- events
+  } yield event match
+    case CreatedComment(r, index, parentChild, entities) =>
+      ReviewUpdate.CreatedComment(Comment.fromTable(r, index, parentChild, entities))
+    case UpdatedComment(r, index, parentChild, entities) =>
+      ReviewUpdate.UpdatedComment(Comment.fromTable(r, index, parentChild, entities))
+    case DeletedComment(reviewId, commentId)             =>
+      ReviewUpdate.DeletedComment(reviewId, commentId)
 
   private def getSpotifyPipeline = ZPipeline.mapZIO(_ => ZIO.serviceWithZIO[RequestSession[SpotifyService]](_.get))
 

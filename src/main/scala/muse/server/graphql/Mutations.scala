@@ -4,8 +4,7 @@ import caliban.schema.{ArgBuilder, Schema}
 import muse.domain.common.EntityType
 import muse.domain.common.Types.UserId
 import muse.domain.error.*
-import muse.domain.event.ReviewUpdate
-import muse.domain.event.ReviewUpdate.{CreatedComment, DeletedComment, UpdatedComment}
+import muse.domain.event.{CreatedComment, DeletedComment, UpdatedComment}
 import muse.domain.mutate.*
 import muse.domain.session.UserSession
 import muse.domain.spotify.{
@@ -19,6 +18,7 @@ import muse.domain.spotify.{
 import muse.domain.{spotify, table}
 import muse.server.graphql.subgraph.{Comment, Review}
 import muse.service.RequestSession
+import muse.service.event.ReviewUpdateService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyError, SpotifyService}
 import muse.utils.Utils.*
@@ -31,7 +31,7 @@ import java.util.UUID
 
 // TODO: add checking for what constitutes a valid comment. What does rating represent?
 // TODO: Consider adding ZQuery for batched operations to DB.
-type MutationEnv   = RequestSession[UserSession] & DatabaseService & RequestSession[SpotifyService] & Hub[ReviewUpdate]
+type MutationEnv   = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & ReviewUpdateService
 type MutationError = Throwable | MuseError
 type Mutation[A]   = ZIO[MutationEnv, MutationError, A]
 
@@ -99,10 +99,9 @@ object Mutations {
     result    <- DatabaseService.createReviewComment(user.userId, create).map {
                    case (comment, index, parentChild, entities) => (comment, index, parentChild.fold(Nil)(List(_)), entities)
                  }
-    comment    = Comment.fromTable.tupled(result)
-    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(CreatedComment(comment)))
+    published <- ReviewUpdateService.publish(CreatedComment.apply.tupled(result))
     _         <- ZIO.logError("Failed to publish comment creation").unless(published)
-  } yield comment) @@ createCommentMetric.trackDuration
+  } yield Comment.fromTable.tupled(result)) @@ createCommentMetric.trackDuration
 
   def linkReviews(link: LinkReviews) = for {
     user   <- RequestSession.get[UserSession]
@@ -136,16 +135,16 @@ object Mutations {
 
   val updateCommentMetric                  = timer("UpdateComment", ChronoUnit.MILLIS)
   def updateComment(update: UpdateComment) = (for {
-    user      <- RequestSession.get[UserSession]
-    _         <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
-    _         <- DatabaseService.updateComment(update)
-    comment   <- DatabaseService
-                   .getComment(update.commentId, user.userId)
-                   .someOrFail(BadRequest(Some("Comment does not exist")))
-                   .map(Comment.fromTable.tupled)
-    published <- ZIO.serviceWithZIO[Hub[ReviewUpdate]](_.publish(UpdatedComment(comment)))
-    _         <- ZIO.logError("Failed to publish comment update").unless(published)
-  } yield comment) @@ updateCommentMetric.trackDuration
+    user        <- RequestSession.get[UserSession]
+    _           <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
+    _           <- DatabaseService.updateComment(update)
+    commentData <- DatabaseService
+                     .getComment(update.commentId, user.userId)
+                     .someOrFail(BadRequest(Some("Comment does not exist")))
+    published   <- ReviewUpdateService.publish(UpdatedComment.apply.tupled(commentData))
+    _           <- ZIO.logError("Failed to publish comment update").unless(published)
+
+  } yield Comment.fromTable.tupled(commentData)) @@ updateCommentMetric.trackDuration
 
   val updateCommentIndexMetric = timer("UpdateCommentIndex", ChronoUnit.MILLIS)
 
@@ -155,19 +154,19 @@ object Mutations {
     _    <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
 
     // ID -> Index
-    updatedCommentIndices: List[(Long, Int)] <- DatabaseService.updateCommentIndex(update.commentId, update.index)
+    updated: List[(Long, Int)] <- DatabaseService.updateCommentIndex(update.commentId, update.index)
+    _                          <- publishUpdatedComments(updated.map(_._1), user.userId).forkDaemon
+  } yield true).addTimeLog("UpdateCommentIndex") @@ updateCommentIndexMetric.trackDuration
 
-    result <- updatedCommentIndices match
-                case Nil     => ZIO.succeed(false)
-                case updated =>
-                  (for {
-                    hub       <- ZIO.service[Hub[ReviewUpdate]]
-                    comments  <- DatabaseService.getComments(updated.map(_._1), user.userId).map(Comment.fromTableRows)
-                    published <- ZIO.foreachPar(comments)(c => hub.publish(UpdatedComment(c))).map(_.forall(identity))
-                    _         <- ZIO.logError("Failed to publish comment update").unless(published)
-                    _         <- ZIO.logInfo("Successfully published update messages")
-                  } yield ()).forkDaemon.as(true)
-  } yield result).addTimeLog("UpdateCommentIndex") @@ updateCommentIndexMetric.trackDuration
+  private def publishUpdatedComments(commentIds: List[Long], userId: UserId) = commentIds match
+    case Nil => ZIO.succeed(true)
+    case _   =>
+      for {
+        updates   <- DatabaseService.getComments(commentIds, userId).map(UpdatedComment.fromTableRows)
+        published <- ZIO.foreachPar(updates)(c => ReviewUpdateService.publish(c)).map(_.forall(identity))
+        _         <- if published then ZIO.logInfo("Successfully published update messages")
+                     else ZIO.logError("Failed to publish comment update")
+      } yield published
 
   def deleteComment(d: DeleteComment): Mutation[Boolean] = (for {
     user              <- RequestSession.get[UserSession]
@@ -179,16 +178,12 @@ object Mutations {
   } yield deleted.nonEmpty || updated.nonEmpty).addTimeLog("DeleteComment")
 
   def publishDeletedComments(userId: UserId, reviewId: UUID, deletedCommentIds: List[Long], updatedCommentIds: List[Long]) = for {
-    updatedComments             <- DatabaseService.getComments(updatedCommentIds, userId)
-    fromTable                    = Comment.fromTableRows(updatedComments)
-    hub                         <- ZIO.service[Hub[ReviewUpdate]]
-    updates                      = ZIO.foreachPar(fromTable)(c => hub.publish(UpdatedComment(c)))
-    deletes                      = ZIO.foreachPar(deletedCommentIds)(id => hub.publish(DeletedComment(reviewId, id)))
-    published                   <- updates <&> deletes
-    (updateResult, deleteResult) = published
-    allSuccess                   = updateResult.forall(identity) && deleteResult.forall(identity)
-    _                           <- ZIO.logError("Failed to publish comment delete events").unless(allSuccess)
-  } yield ()
+    published           <- publishUpdatedComments(updatedCommentIds, userId) <&>
+                             ZIO.foreachPar(deletedCommentIds)(id => ReviewUpdateService.publish(DeletedComment(reviewId, id)))
+    (_, delete)          = published
+    publishDeletesResult = delete.forall(identity)
+    _                   <- ZIO.logError("Failed to publish comment delete events").unless(publishDeletesResult)
+  } yield publishDeletesResult
 
   def deleteReview(d: DeleteReview): Mutation[Boolean] = for {
     user   <- RequestSession.get[UserSession]

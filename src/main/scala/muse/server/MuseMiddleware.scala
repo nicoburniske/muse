@@ -8,8 +8,9 @@ import muse.domain.common.Types.SessionId
 import muse.domain.error.{MuseError, RateLimited, Unauthorized}
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
+import muse.service.cache.RedisService
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService}
-import muse.service.{RedisService, RequestSession, UserSessions}
+import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils
 import nl.vroste.rezilience.Bulkhead
 import nl.vroste.rezilience.Bulkhead.{BulkheadError, BulkheadException, WrappedError}
