@@ -1,1 +1,0 @@
-sbt -mem 2048 "docker:stage"
