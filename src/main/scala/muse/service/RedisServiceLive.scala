@@ -33,11 +33,6 @@ object RedisService {
         config <- ZIO.service[RedisCacheConfig]
         _      <- redis.get.auth(config.username, config.password)
         _      <- ZIO.logInfo("Successfully authorized with Redis")
-        _      <- redis
-                    .get.ping().timeout(1.second).tap {
-                      case Some(_) => ZIO.logInfo("Redis ping success.")
-                      case None    => ZIO.logError("Redis ping failure.")
-                    }.schedule(Schedule.spaced(5.minutes) && Schedule.forever).forkDaemon
       } yield ()
     }.reloadableManual
 
