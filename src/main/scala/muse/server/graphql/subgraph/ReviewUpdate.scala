@@ -1,4 +1,4 @@
-package muse.domain.event
+package muse.server.graphql.subgraph
 
 import caliban.schema.Annotations.{GQLDescription, GQLInterface}
 import muse.server.graphql.subgraph.Comment

@@ -19,6 +19,14 @@ services:
     restart: always
     ports:
       - "6379:6379"
+  nats:
+    image: nats:latest
+    container_name: muse_nats
+    restart: always
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+      - "6222:6222"
 #  backend:
 #    container_name: muse_backend
 #    environment:

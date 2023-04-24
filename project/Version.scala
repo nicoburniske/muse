@@ -23,4 +23,6 @@ object Version {
   val slf4j   = "2.0.5"
   val logback = "1.4.6"
   val caliban = "2.1.0"
+
+  val jnats = "2.16.10"
 }

@@ -10,9 +10,10 @@ import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
 import muse.server.{Auth, MuseMiddleware, MuseServer}
 import muse.service.cache.RedisService
+import muse.service.event.{EventService, ReviewUpdateService}
 import muse.service.persist.{DatabaseService, MigrationService, QuillContext}
 import muse.service.spotify.{RateLimitRef, SpotifyAuthService, SpotifyCache}
-import muse.service.{RequestSession, ReviewUpdates, UserSessions}
+import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.Duration.*
@@ -36,20 +37,25 @@ object Main extends ZIOAppDefault {
       Client.default,
       // Spotify layers
       SpotifyAuthService.layer,
-//      SpotifyCache.layer,
       RateLimitRef.layer,
       // Muse layers.
       AppConfig.layer,
       DatabaseService.layer,
+      QuillContext.dataSourceLayer,
+      MigrationService.layer,
+      // Redis layers.
       RedisService.layer,
       RedisService.connectionLayer,
       RedisService.redisLayer,
-      MigrationService.layer,
+      // Session layers.
       UserSessions.layer,
-      ReviewUpdates.hub,
       RequestSession.userSessionLayer,
       RequestSession.spotifySessionLayer,
-      QuillContext.dataSourceLayer,
+      // Event layers.
+      EventService.layer,
+      EventService.natsLayer,
+      EventService.codecLayer,
+      ReviewUpdateService.layer,
       // Metrics.
       zio.metrics.connectors.prometheus.publisherLayer,
       zio.metrics.connectors.prometheus.prometheusLayer,

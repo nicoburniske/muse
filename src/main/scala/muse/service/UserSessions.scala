@@ -23,6 +23,7 @@ import java.time.temporal.ChronoUnit
 
 trait UserSessions {
   def getUserSession(sessionId: SessionId): IO[Throwable, UserSession]
+  def getFreshAccessToken(sessionId: SessionId): IO[Throwable, AccessToken]
   def deleteUserSession(sessionId: SessionId): IO[Throwable, Boolean]
   def refreshUserSession(sessionId: SessionId): IO[Throwable, UserSession]
 }
@@ -39,7 +40,7 @@ object UserSessions {
     } yield UserSessionsLive(retrievalCache, authService, redisService, databaseService)
   }
 
-  private def retrieveSession(sessionId: SessionId) = {
+  def retrieveSession(sessionId: SessionId) = {
     val retrySchedule = Schedule.recurs(2) && Schedule.exponential(50.millis) && Schedule.recurWhile {
       case SpotifyAuthError(status, _) if status.isServerError => true
       case _                                                   => false
@@ -56,10 +57,10 @@ object UserSessions {
     execute.retry(retrySchedule)
   }
 
-  def getUserSession(sessionId: SessionId)     = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
-  def deleteUserSession(sessionId: SessionId)  = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
-  def refreshUserSession(sessionId: SessionId) = ZIO.serviceWithZIO[UserSessions](_.refreshUserSession(sessionId))
-
+  def getUserSession(sessionId: SessionId)      = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
+  def getFreshAccessToken(sessionId: SessionId) = ZIO.serviceWithZIO[UserSessions](_.getFreshAccessToken(sessionId))
+  def deleteUserSession(sessionId: SessionId)   = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
+  def refreshUserSession(sessionId: SessionId)  = ZIO.serviceWithZIO[UserSessions](_.refreshUserSession(sessionId))
 }
 
 final case class UserSessionsLive(
@@ -75,6 +76,9 @@ final case class UserSessionsLive(
 
   override def getUserSession(sessionId: SessionId) =
     redisService.cacheOrExecute(sessionId, 59.minutes)(retrievalCache.get(sessionId))
+
+  override def getFreshAccessToken(sessionId: SessionId) =
+    UserSessions.retrieveSession(sessionId).map(_.accessToken).provide(layer)
 
   override def refreshUserSession(sessionId: SessionId) =
     redisService.delete(sessionId) *> getUserSession(sessionId)
