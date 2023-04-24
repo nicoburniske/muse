@@ -4,6 +4,7 @@ import muse.domain.common.Types.{AccessToken, SessionId, UserId}
 import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.auth.{AuthCodeFlowData, SpotifyAuthError, SpotifyAuthErrorResponse}
+import muse.service.cache.RedisService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.utils.Utils
@@ -12,6 +13,7 @@ import sttp.client3.SttpBackend
 import zio.*
 import zio.cache.{Cache, Lookup}
 import zio.json.*
+import zio.schema.{DeriveSchema, Schema}
 import zio.stream.{ZPipeline, ZStream}
 
 import java.io.IOException
@@ -21,7 +23,6 @@ import java.time.temporal.ChronoUnit
 
 trait UserSessions {
   def getUserSession(sessionId: SessionId): IO[Throwable, UserSession]
-  def getUserBulkhead(userId: UserId): UIO[Bulkhead]
   def deleteUserSession(sessionId: SessionId): IO[Throwable, Boolean]
   def refreshUserSession(sessionId: SessionId): IO[Throwable, UserSession]
 }
@@ -29,73 +30,57 @@ trait UserSessions {
 object UserSessions {
   val layer = ZLayer.fromZIO {
     for {
-      cache           <- Cache.make(
-                           1000,
-                           // Default TTL is 1 hour.
-                           59.minutes,
-                           Lookup(getUserSessionLive)
-                         )
-      // This is a cache just to make sure we don't grow forever?
-      bulkheadCache   <- Cache.make(
-                           10000,
-                           1.hour,
-                           Lookup((_: String) => Bulkhead.make(maxInFlightCalls = 5, maxQueueing = 5))
-                         )
+      redisService    <- ZIO.service[RedisService]
       databaseService <- ZIO.service[DatabaseService]
-      _               <- startCacheReporter(cache)
-    } yield UserSessionsLive(cache, bulkheadCache, databaseService)
+      authService     <- ZIO.service[SpotifyAuthService]
+
+      // This is to de-duplicate requests that are made within second.
+      retrievalCache <- Cache.make(10000, 1.second, Lookup((sessionId: SessionId) => retrieveSession(sessionId)))
+    } yield UserSessionsLive(retrievalCache, authService, redisService, databaseService)
   }
 
-  def getUserSession(sessionId: SessionId) = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
-  def getUserBulkhead(userId: UserId)      = ZIO.serviceWithZIO[UserSessions](_.getUserBulkhead(userId))
+  private def retrieveSession(sessionId: SessionId) = {
+    val retrySchedule = Schedule.recurs(2) && Schedule.exponential(50.millis) && Schedule.recurWhile {
+      case SpotifyAuthError(status, _) if status.isServerError => true
+      case _                                                   => false
+    }
 
-  def getSessionAndBulkhead(sessionId: SessionId) = for {
-    session  <- getUserSession(sessionId)
-    bulkhead <- getUserBulkhead(session.userId)
-  } yield (session, bulkhead)
+    val execute = for {
+      maybeSession <- DatabaseService.getUserSession(sessionId)
+      session      <- ZIO.fromOption(maybeSession).orElseFail(Unauthorized(s"Invalid User Session."))
+      authInfo     <- SpotifyAuthService
+                        .requestNewAccessToken(session.refreshToken)
+                        .retry(retrySchedule)
+    } yield UserSession(SessionId(sessionId), UserId(session.userId), AccessToken(authInfo.accessToken))
 
+    execute.retry(retrySchedule)
+  }
+
+  def getUserSession(sessionId: SessionId)     = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
   def deleteUserSession(sessionId: SessionId)  = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
   def refreshUserSession(sessionId: SessionId) = ZIO.serviceWithZIO[UserSessions](_.refreshUserSession(sessionId))
 
-  private def getUserSessionLive(sessionId: SessionId) = for {
-    maybeSession <- DatabaseService.getUserSession(sessionId)
-    session      <- ZIO.fromOption(maybeSession).orElseFail(Unauthorized(s"Invalid User Session."))
-    authInfo     <- SpotifyAuthService
-                      .requestNewAccessToken(session.refreshToken)
-                      .retry(retrySchedule)
-  } yield UserSession(SessionId(sessionId), UserId(session.userId), AccessToken(authInfo.accessToken))
-
-  def startCacheReporter(cache: Cache[SessionId, Throwable, UserSession]) = {
-    val reporter = CacheUtils.ZioCacheStatReporter("user_sessions", cache)
-    reporter.report.repeat(Schedule.spaced(10.seconds) && Schedule.forever).forkDaemon
-  }
-
-  val retrySchedule = Schedule.recurs(2) && Schedule.exponential(50.millis) && Schedule.recurWhile {
-    case SpotifyAuthError(status, _) if status.isServerError => true
-    case _                                                   => false
-  }
 }
 
 final case class UserSessionsLive(
-    userCache: Cache[SessionId, Throwable, UserSession],
-    bulkheadCache: Cache[UserId, Nothing, Bulkhead],
+    retrievalCache: Cache[SessionId, Throwable, UserSession],
+    authService: SpotifyAuthService,
+    redisService: RedisService,
     databaseService: DatabaseService)
     extends UserSessions {
 
-  override def getUserSession(sessionId: SessionId)     = getSession(sessionId)
-  override def getUserBulkhead(userId: UserId)          = bulkheadCache.get(userId)
-  override def refreshUserSession(sessionId: SessionId) = userCache.invalidate(sessionId) *> getSession(sessionId)
+  val layer = ZLayer.succeed(authService) ++ ZLayer.succeed(redisService) ++ ZLayer.succeed(databaseService)
 
-  private def getSession(sessionId: SessionId) = userCache.get(sessionId).flatMapError {
-    // After we get a revocation error delete the session from DB.
-    case SpotifyAuthError(_, SpotifyAuthErrorResponse.revoked) =>
-      deleteUserSession(sessionId).ignore *> ZIO.succeed(Unauthorized("User Session Revoked."))
-    case e                                                     => ZIO.succeed(e)
-  }
+  given Schema[UserSession] = DeriveSchema.gen
+
+  override def getUserSession(sessionId: SessionId) =
+    redisService.cacheOrExecute(sessionId, 59.minutes)(retrievalCache.get(sessionId))
+
+  override def refreshUserSession(sessionId: SessionId) =
+    redisService.delete(sessionId) *> getUserSession(sessionId)
 
   override def deleteUserSession(sessionId: SessionId) = for {
-    session <- userCache.get(sessionId)
-    _       <- bulkheadCache.invalidate(session.userId) <&> userCache.invalidate(sessionId)
+    _       <- redisService.delete(sessionId).retry(Schedule.recurs(2))
     deleted <- databaseService.deleteUserSession(sessionId).retry(Schedule.recurs(2))
   } yield deleted
 }

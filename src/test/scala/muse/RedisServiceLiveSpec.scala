@@ -1,7 +1,7 @@
 package muse
 
 import muse.config.RateLimitConfig
-import muse.service.{RedisService, RedisServiceLive}
+import muse.service.cache.{RedisService, RedisServiceLive}
 import zio.*
 import zio.redis.{CodecSupplier, Redis, RedisExecutor, SingleNodeExecutor}
 import zio.schema.{DeriveSchema, Schema}

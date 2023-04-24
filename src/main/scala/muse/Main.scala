@@ -9,9 +9,10 @@ import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
 import muse.server.{Auth, MuseMiddleware, MuseServer}
+import muse.service.cache.RedisService
 import muse.service.persist.{DatabaseService, MigrationService, QuillContext}
 import muse.service.spotify.{RateLimitRef, SpotifyAuthService, SpotifyCache}
-import muse.service.{RedisService, RequestSession, ReviewUpdates, UserSessions}
+import muse.service.{RequestSession, ReviewUpdates, UserSessions}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.Duration.*
