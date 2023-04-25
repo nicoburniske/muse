@@ -106,9 +106,9 @@ final case class RedisServiceLive(redisRef: Reloadable[Redis], config: RateLimit
       previousKey    = s"$identifier:$previousWindow"
       redis         <- redisRef.get
       remaining     <- executeOrReset {
-        _.eval(lua, Chunk(currentKey, previousKey), Chunk(tokens.toLong, now, windowSize))(StringInput, LongInput)
-          .returning[Long](LongOutput)
-      }(s"Rate limit $identifier")
+                         _.eval(lua, Chunk(currentKey, previousKey), Chunk(tokens.toLong, now, windowSize))(StringInput, LongInput)
+                           .returning[Long](LongOutput)
+                       }(s"Rate limit $identifier")
       _             <- ZIO.logDebug(s"Remaining requests for $identifier: $remaining")
     } yield remaining <= 0
   }
@@ -125,12 +125,10 @@ final case class RedisServiceLive(redisRef: Reloadable[Redis], config: RateLimit
                                case None        => ZIO.fail(RedisTimeoutError(label))
   } yield result
 
-  private def reloadRedis = ZIO.whenZIO(semaphore.available.map(_ > 0)) {
-    semaphore.withPermit {
-      for {
-        _ <- ZIO.logInfo("Resetting Redis connection")
-        _ <- redisRef.reload
-      } yield ()
+  private def reloadRedis = semaphore.withPermit {
+    val needsReload = redisRef.get.flatMap(_.ping()).timeout(50.millis).map(_.isEmpty)
+    ZIO.whenZIO(needsReload) {
+      ZIO.logInfo("Resetting Redis connection") *> redisRef.reload
     }
   }
 }
