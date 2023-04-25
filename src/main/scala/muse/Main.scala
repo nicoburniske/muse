@@ -63,7 +63,7 @@ object Main extends ZIOAppDefault {
       Runtime.enableRuntimeMetrics
     )
     .tapError {
-      case RedisError.IOError(t) => ZIO.logError(s"Failed to start server ${t.toString}")
+      case RedisError.IOError(t) => ZIO.logError(s"Failed to start server. Redis error ${t.toString}")
       case t: Throwable          => ZIO.logError(s"Failed to start server ${t.toString}")
     }
     .exitCode

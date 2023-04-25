@@ -1,7 +1,6 @@
 package muse.service.event
 
-import io.nats.client.Connection
-import io.nats.client.Message
+import io.nats.client.{Connection, Message, Nats}
 import muse.config.NatsConfig
 import zio.schema.Schema
 import zio.schema.codec.{BinaryCodec, DecodeError, ProtobufCodec}
@@ -24,7 +23,7 @@ object EventService {
     .fromZIO {
       for {
         natsConfig <- ZIO.service[NatsConfig]
-        connection <- ZIO.attempt(io.nats.client.Nats.connect(natsConfig.url))
+        connection <- ZIO.attempt(Nats.connect(natsConfig.url))
       } yield connection
     }.tap { c => ZIO.logInfo(s"Connected to NATS server at ${c.get.getConnectedUrl}") }.tapError { e =>
       ZIO.logError(s"Failed to connect to NATS server: ${e.toString}")
@@ -39,14 +38,13 @@ final case class EventServiceLive(connection: Connection, codec: EventCodecSuppl
   override def publish[E: Schema](subject: String, event: E) =
     ZIO.attempt(connection.publish(subject, codec.get.encode(event).toArray)).isSuccess
 
-  override def subscribe[E: Schema](subject: String) = ZIO
-    .acquireRelease {
-      ZIO.attempt(connection.createDispatcher())
-    } { dispatcher => ZIO.attempt(dispatcher.unsubscribe(subject)).ignore }.map { dispatcher =>
-      ZStream.async[Any, DecodeError, E] { cb =>
-        dispatcher.subscribe(subject: String, (message: Message) => cb(decode(message)))
+  override def subscribe[E: Schema](subject: String) =
+    ZIO
+      .acquireRelease {
+        ZIO.attempt(connection.createDispatcher())
+      } { dispatcher => ZIO.attempt(dispatcher.unsubscribe(subject)).ignore }.map { dispatcher =>
+        ZStream.async[Any, DecodeError, E] { cb => dispatcher.subscribe(subject, message => cb(decode(message))) }
       }
-    }
 
   private def decode[E: Schema](message: Message): IO[Option[DecodeError], Chunk[E]] =
     codec.get.decode(Chunk.fromArray(message.getData)) match

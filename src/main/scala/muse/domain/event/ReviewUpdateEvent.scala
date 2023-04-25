@@ -6,19 +6,19 @@ import java.util.UUID
 
 sealed trait ReviewUpdateEvent:
   def reviewId: UUID = this match
-    case CreatedComment(r, _, _, _)  => r.reviewId
-    case UpdatedComment(r, _, _, _)  => r.reviewId
-    case DeletedComment(reviewId, _) => reviewId
+    case CreatedComment(comment, _, _, _) => comment.reviewId
+    case UpdatedComment(comment, _, _, _) => comment.reviewId
+    case DeletedComment(reviewId, _)      => reviewId
 
 final case class CreatedComment(
-    r: table.ReviewComment,
+    commetn: table.ReviewComment,
     index: table.ReviewCommentIndex,
     parentChild: List[table.ReviewCommentParentChild],
     entities: List[table.ReviewCommentEntity])
     extends ReviewUpdateEvent
 
 final case class UpdatedComment(
-    r: table.ReviewComment,
+    comment: table.ReviewComment,
     index: table.ReviewCommentIndex,
     parentChild: List[table.ReviewCommentParentChild],
     entities: List[table.ReviewCommentEntity])

@@ -14,6 +14,7 @@ target/
 *.iws
 .idea
 .bsp
+.run/*
 
 # metals
 .bloop
