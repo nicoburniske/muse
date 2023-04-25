@@ -62,10 +62,7 @@ object Main extends ZIOAppDefault {
       metricsConfig,
       Runtime.enableRuntimeMetrics
     )
-    .tapError {
-      case RedisError.IOError(t) => ZIO.logError(s"Failed to start server. Redis error ${t.toString}")
-      case t: Throwable          => ZIO.logError(s"Failed to start server ${t.toString}")
-    }
+    .tapErrorCause(e => ZIO.logErrorCause(s"Failed to start server", e))
     .exitCode
 
   val serverConfig = ZLayer.fromFunction { (config: ServerConfig) => Server.defaultWithPort(config.port) }.flatten

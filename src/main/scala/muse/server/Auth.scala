@@ -69,11 +69,12 @@ object Auth {
                 )
                 Response.redirect(config.frontendUrl).addCookie(cookie)
               }
-            }.flatMapError { cause =>
-              ZIO.logError(s"Failed to login user: ${cause.toString}") as Response.fromHttpError {
-                HttpError.InternalServerError("Failed to login user.")
+            }.tapErrorCause(cause => ZIO.logErrorCause("Failed to login user.", cause))
+              .catchAll { e =>
+                ZIO.succeed {
+                  Response.fromHttpError(HttpError.InternalServerError("Failed to login user.", Some(e)))
+                }
               }
-            }
           }
     }
 
@@ -129,8 +130,8 @@ object Auth {
       _            <- ZIO.logInfo(s"Retrieved profile data for user $spotifyUserId")
       _            <- DatabaseService
                         .createOrUpdateUser(newSessionId, RefreshToken(auth.refreshToken), UserId(spotifyUserId))
-                        .timeout(10.seconds)
-                        .tapError(_ => ZIO.logError("Failed to process user login."))
+                        .timeoutFail(new Exception("Database createOrUpdateUser timed out."))(10.seconds)
+                        .tapErrorCause(e => ZIO.logErrorCause("Failed to process user login.", e))
       _            <- ZIO.logInfo(s"Successfully logged in $spotifyUserId.")
     } yield newSessionId
 }

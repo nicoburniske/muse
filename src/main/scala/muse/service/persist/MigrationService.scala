@@ -25,10 +25,10 @@ case class MigrationServiceLive(datasource: DataSource) extends MigrationService
                     .dataSource(datasource)
                     .load()
                 }
-                .tapError(e => ZIO.logErrorCause(s"Error while loading flyway: $e", Cause.fail(e)))
+                .tapErrorCause(e => ZIO.logErrorCause(s"Error while loading flyway: $e", e))
     _      <- ZIO
                 .attempt(flyway.migrate())
-                .tapError(e => ZIO.logErrorCause(s"Error while running flyway migrations: $e", Cause.fail(e)))
+                .tapErrorCause(e => ZIO.logErrorCause(s"Error while running flyway migrations: $e", e))
     _      <- ZIO.logInfo("Flyway migrations ran successfully")
   } yield ()
 }

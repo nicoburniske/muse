@@ -10,7 +10,6 @@ import scala.util.control.NoStackTrace
 
 final case class RedisServiceLive(redisRef: Reloadable[Redis], config: RateLimitConfig, semaphore: Semaphore)
     extends RedisService {
-  val layer           = ZLayer.succeed(redisRef)
   val timeoutDuration = 500.millis
 
   def get[K: Schema, V: Schema](key: K) =
@@ -89,7 +88,7 @@ final case class RedisServiceLive(redisRef: Reloadable[Redis], config: RateLimit
         redis.call("PEXPIRE", currentKey, window * 2 + 1000) -- Enough time to overlap with a new window + 1 second
       end
       return tokens - newValue
-                |""".stripMargin
+    |""".stripMargin
 
     import zio.redis.Input.*
     import zio.redis.Output.*
@@ -104,7 +103,6 @@ final case class RedisServiceLive(redisRef: Reloadable[Redis], config: RateLimit
       currentKey     = s"$identifier:$currentWindow"
       previousWindow = currentWindow - windowSize
       previousKey    = s"$identifier:$previousWindow"
-      redis         <- redisRef.get
       remaining     <- executeOrReset {
                          _.eval(lua, Chunk(currentKey, previousKey), Chunk(tokens.toLong, now, windowSize))(StringInput, LongInput)
                            .returning[Long](LongOutput)
@@ -128,7 +126,10 @@ final case class RedisServiceLive(redisRef: Reloadable[Redis], config: RateLimit
   private def reloadRedis = semaphore.withPermit {
     val needsReload = redisRef.get.flatMap(_.ping()).timeout(50.millis).map(_.isEmpty)
     ZIO.whenZIO(needsReload) {
-      ZIO.logInfo("Resetting Redis connection") *> redisRef.reload
+      ZIO.logInfo("Resetting Redis connection") *> redisRef
+        .reload.foldCause(
+          e => ZIO.logErrorCause(s"Failed to reload Redis connection ${e.toString}", e),
+          _ => ZIO.logInfo("Successfully reloaded Redis connection"))
     }
   }
 }
