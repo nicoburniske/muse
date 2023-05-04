@@ -8,6 +8,7 @@ import muse.domain.table.User
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.service.{RequestSession, UserSessions}
+import muse.service.cache.RedisService
 import sttp.client3.SttpBackend
 import zio.http.model.{Cookie, HttpError, Method, Scheme}
 import zio.http.*
@@ -15,46 +16,28 @@ import zio.json.*
 import zio.{Cause, Chunk, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer, durationInt}
 
 object Auth {
-  val scopes = List(
-    "user-library-read",
-    // To ensure premium subscription.
-    "user-read-private",
-    // Playlist permissions.
-    "playlist-read-private",
-    "playlist-read-collaborative",
-    // playback state.
-    "user-modify-playback-state",
-    "user-read-playback-state",
-    "user-read-currently-playing",
-    // Library.
-    "user-library-modify",
-    // Streaming permissions!
-    "streaming",
-    // Playlist editing permissions!
-    "playlist-modify-public",
-    "playlist-modify-private"
-  ).mkString(" ")
 
   val loginEndpoints = Http
     .collectZIO[Request] {
-      case Method.GET -> !! / "login"          =>
-        generateRedirectUrl
-          .tap(url => ZIO.logInfo(s"Redirecting to ${url.encode}"))
-          .map(url => Response.redirect(url.encode, false))
-      case req @ Method.GET -> !! / "callback" =>
-        req
-          .url
-          .queryParams
-          .get("code")
-          .flatMap(_.headOption)
-          .fold {
+      case request @ Method.GET -> !! / "login" =>
+        val redirectTo = request.url.queryParams.get("redirect").flatMap(_.headOption)
+        generateRedirectUrl(redirectTo).mapBoth(
+          e => Response.fromHttpError(HttpError.InternalServerError("Failed to generate redirect url.", Some(e))),
+          url => Response.redirect(url.encode, false))
+      case req @ Method.GET -> !! / "callback"  =>
+        val queryParams = req.url.queryParams
+        val code        = queryParams.get("code").flatMap(_.headOption)
+        val state       = queryParams.get("state").flatMap(_.headOption)
+        code -> state match {
+          case (None, _)                 =>
             ZIO.fail(Response.fromHttpError(HttpError.BadRequest("Missing 'code' query parameter")))
-          } { code =>
+          case (_, None)                 =>
+            ZIO.fail(Response.fromHttpError(HttpError.BadRequest("Missing 'state' query parameter")))
+          case (Some(code), Some(state)) =>
             {
               for {
-                authData     <- SpotifyAuthService.getAuthCode(code)
-                _            <- ZIO.logInfo("Received auth data for login")
-                newSessionId <- handleUserLogin(authData)
+                redirect     <- getRedirectFromState(state)
+                newSessionId <- handleUserLogin(code)
                 config       <- ZIO.service[ServerConfig]
                 _            <- ZIO.logInfo(s"Successfully added session.")
               } yield {
@@ -67,24 +50,26 @@ object Auth {
                   // On localhost dev, we don't want a cookie domain.
                   domain = config.domain
                 )
-                Response.redirect(config.frontendUrl).addCookie(cookie)
+                Response.redirect(redirect).addCookie(cookie)
               }
-            }.tapErrorCause(cause => ZIO.logErrorCause("Failed to login user.", cause))
-              .catchAll { e =>
-                ZIO.succeed {
-                  Response.fromHttpError(HttpError.InternalServerError("Failed to login user.", Some(e)))
-                }
+              // TODO: this seems a little weird. Revise.
+              // Success channel can be responses that are failures.
+              // Errors are only server errors.
+            }.catchSome { case r: Response => ZIO.succeed(r) }
+              .tapErrorCause(cause => ZIO.logErrorCause("Failed to login user.", cause))
+              .mapError {
+                case t: Throwable => Response.fromHttpError(HttpError.InternalServerError("Failed to login user.", Some(t)))
               }
-          }
+        }
     }
 
   // @@ csrfGenerate() // TODO: get this working?
-  val logoutEndpoint = Http.collectZIO[Request] {
+  val sessionEndpoints = Http.collectZIO[Request] {
     case Method.POST -> !! / "logout" =>
       for {
         session <- RequestSession.get[UserSession]
         _       <- UserSessions.deleteUserSession(session.sessionId)
-        _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId} with cookie: ${session.sessionId.take(10)}")
+        _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId}")
       } yield Response.ok
     case Method.GET -> !! / "session" =>
       for {
@@ -98,40 +83,96 @@ object Auth {
       } yield Response.text(accessToken)
   }
 
-  val generateRedirectUrl: URIO[SpotifyConfig, URL] = for {
-    c     <- ZIO.service[SpotifyConfig]
-    state <- Random.nextUUID
+  private val retrySchedule = Schedule.exponential(10.millis).jittered && Schedule.recurs(4)
+
+  private def getRedirectFromState(state: String): ZIO[RedisService, RedisService.Error | Response, String] =
+    RedisService
+      .get[String, String](state).retry(retrySchedule).zipLeft(RedisService.delete(state).ignore)
+      .someOrFail(Response.fromHttpError(HttpError.BadRequest("Invalid 'state' query parameter")))
+
+  def generateRedirectUrl(redirectMaybe: Option[String]) = for {
+    spotifyConfig <- ZIO.service[SpotifyConfig]
+    serverConfig  <- ZIO.service[ServerConfig]
+    state         <- Random.nextUUID.map(_.toString.take(30))
+    redirect       = redirectMaybe
+                       .filter(r => URL.fromString(r).isRight)
+                       .getOrElse(serverConfig.frontendUrl)
+    _             <- RedisService.set(state, redirect, Some(10.seconds)).retry(retrySchedule)
   } yield URL(
     Path.decode("/authorize"),
     URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443),
     QueryParams(
       "response_type" -> Chunk("code"),
-      "client_id"     -> Chunk(c.clientID),
-      "redirect_uri"  -> Chunk(c.redirectURI),
+      "client_id"     -> Chunk(spotifyConfig.clientID),
+      "redirect_uri"  -> Chunk(spotifyConfig.redirectURI),
       "scope"         -> Chunk(scopes),
-      "state"         -> Chunk(state.toString.take(15))
+      "state"         -> Chunk(state)
     )
   )
 
   /**
-   * Handles a user login. TODO: add retry schedule.
+   * Handles a user login.
    *
-   * @param auth
-   *   current user auth data from spotify
+   * @param code
+   *   Auth code from Spotify.
+   *
    * @return
-   *   true if new User was created, false if current user was updated.
+   *   the new session id.
    */
-  def handleUserLogin(auth: AuthCodeFlowData) =
+  def handleUserLogin(code: String) =
     for {
+      auth        <- SpotifyAuthService.getAuthCode(code).retry(retrySchedule)
+      spotify     <- SpotifyService.live(auth.accessToken)
+      userProfile <- spotify.getCurrentUserProfile.retry(retrySchedule)
+      userId       = userProfile.id
+      _           <- ZIO
+                       .fail(Response.fromHttpError(HttpError.BadRequest(s"User $userId is not a premium subscriber.")))
+                       .when(!userProfile.product.contains("premium"))
+
       newSessionId <- Random.nextUUID.map(_.toString).map(SessionId(_))
-      spotify      <- SpotifyService.live(auth.accessToken)
-      userInfo     <- spotify.getCurrentUserProfile.retry(Schedule.recurs(2))
-      spotifyUserId = userInfo.id
-      _            <- ZIO.logInfo(s"Retrieved profile data for user $spotifyUserId")
       _            <- DatabaseService
-                        .createOrUpdateUser(newSessionId, RefreshToken(auth.refreshToken), UserId(spotifyUserId))
-                        .timeoutFail(new Exception("Database createOrUpdateUser timed out."))(10.seconds)
-                        .tapErrorCause(e => ZIO.logErrorCause("Failed to process user login.", e))
-      _            <- ZIO.logInfo(s"Successfully logged in $spotifyUserId.")
+                        .createOrUpdateUser(newSessionId, RefreshToken(auth.refreshToken), UserId(userId))
+                        .tapErrorCause(e => ZIO.logErrorCause(s"Failed to process user $userId login.", e))
+                        .zipLeft(ZIO.logInfo(s"Successfully logged in $userId."))
     } yield newSessionId
+
+  val scopes = List(
+    /**
+     * Playback state.
+     */
+
+    // So users can change their playback state from the Muse's integrated player.
+    "user-modify-playback-state",
+    // So users can see their playback state from the Muse's integrated player.
+    "user-read-playback-state",
+    // So users can see their currently playing track from the Muse's integrated player.
+    "user-read-currently-playing",
+
+    /**
+     * Library.
+     */
+
+    // So users can see their liked status for songs.
+    "user-library-read",
+    // So users can save/unsave tracks.
+    "user-library-modify",
+
+    /**
+     * Playlist permissions.
+     */
+
+    // So users can review their private playlists.
+    "playlist-read-private",
+    // So users can review their collaborative playlists.
+    "playlist-read-collaborative",
+    // So users can add/remove/reorder tracks from their public playlists.
+    "playlist-modify-public",
+    // So users can add/remove/reorder tracks from their private playlists.
+    "playlist-modify-private",
+
+    // So music can be streamed to Muse's integrated player.
+    "streaming",
+    // To ensure users have premium subscriptions.
+    "user-read-private"
+  ).mkString(" ")
 }

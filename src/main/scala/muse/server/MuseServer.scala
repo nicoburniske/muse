@@ -20,6 +20,7 @@ import zio.http.middleware.RequestHandlerMiddlewares
 import zio.http.model.{HttpError, Method}
 import zio.http.*
 import zio.http.HttpAppMiddleware.cors
+import zio.http.HttpAppMiddleware.metrics
 import zio.metrics.connectors.prometheus.PrometheusPublisher
 import zio.{Tag, Task, ZIO}
 
@@ -31,14 +32,14 @@ object MuseServer {
     _                  <- MigrationService.runMigrations
     protectedEndpoints <- createProtectedEndpoints
     cors               <- getCorsConfig
-    allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ cors
+    allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ cors @@ metrics()
     _                  <- Server.serve(allEndpoints) <&> metricsServer
   } yield ()
 
   def createProtectedEndpoints = endpointsGraphQL.map {
     case (rest, websocket) =>
       val protectedRest =
-        ((rest ++ Auth.logoutEndpoint) @@ MuseMiddleware.InjectSessionAndRateLimit @@ RequestHandlerMiddlewares.beautifyErrors)
+        ((rest ++ Auth.sessionEndpoints) @@ MuseMiddleware.InjectSessionAndRateLimit @@ RequestHandlerMiddlewares.beautifyErrors)
           .mapError {
             case RateLimited     => RateLimited.response
             case u: Unauthorized => u.response
@@ -67,7 +68,11 @@ object MuseServer {
   }
 
   val metricsServer =
-    Server.serve(metricsRouter).provideSomeLayer[PrometheusPublisher](Server.defaultWithPort(9091))
+    Server
+      .install(metricsRouter).provideSomeLayer[PrometheusPublisher](Server.defaultWithPort(9091))
+      .flatMap(p => ZIO.logInfo(s"Metrics server started on port $p"))
+      .tapErrorCause(cause => ZIO.logErrorCause(s"Metrics server failed: ${cause.prettyPrint}", cause))
+      .forkDaemon
 
   val metricsRouter: HttpApp[PrometheusPublisher, Nothing] = Http.collectZIO[Request] {
     case Method.GET -> !! / "metrics" => ZIO.serviceWithZIO[PrometheusPublisher](_.get.map(Response.text))

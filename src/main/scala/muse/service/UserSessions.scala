@@ -41,7 +41,7 @@ object UserSessions {
   }
 
   def retrieveSession(sessionId: SessionId) = {
-    val retrySchedule = Schedule.recurs(2) && Schedule.exponential(50.millis) && Schedule.recurWhile {
+    val retrySchedule = Schedule.recurs(4) && Schedule.exponential(50.millis).jittered && Schedule.recurWhile {
       case SpotifyAuthError(status, _) if status.isServerError => true
       case _                                                   => false
     }
