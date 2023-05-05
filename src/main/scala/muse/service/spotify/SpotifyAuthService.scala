@@ -3,8 +3,7 @@ package muse.service.spotify
 import muse.config.SpotifyConfig
 import muse.domain.spotify.auth.*
 import muse.service.UserSessions
-import zio.http.model.*
-import zio.http.{Body, Client, Path, URL}
+import zio.http.*
 import zio.json.*
 import zio.{Task, ZIO, ZLayer}
 
@@ -87,8 +86,10 @@ case class SpotifyAuthLive(config: SpotifyConfig, client: Client) extends Spotif
       ).mapError(SpotifyAuthError(status, _))
 
   private def executePost(body: Map[String, String]) = {
-    val headers = Headers.basicAuthorizationHeader(config.clientID, config.clientSecret) ++
-      Headers.contentType(HeaderValues.applicationXWWWFormUrlencoded)
+    val headers = Headers(
+      Header.Authorization.Basic(config.clientID, config.clientSecret),
+      Header.ContentType(MediaType.application.`x-www-form-urlencoded`)
+    )
     Client.request(TOKEN_ENDPOINT.encode, Method.POST, headers, Body.fromString(encodeFormBody(body)))
   }
 

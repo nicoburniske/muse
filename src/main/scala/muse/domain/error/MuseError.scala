@@ -1,7 +1,7 @@
 package muse.domain.error
 
 import muse.domain.common.EntityType
-import zio.http.model.HttpError
+import zio.http.HttpError
 import zio.http.{Body, Response}
 
 sealed trait MuseError extends Throwable:

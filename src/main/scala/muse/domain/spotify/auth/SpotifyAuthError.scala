@@ -1,6 +1,6 @@
 package muse.domain.spotify.auth
 
-import zio.http.model.Status
+import zio.http.Status
 import zio.json.{DeriveJsonDecoder, JsonDecoder, SnakeCase, jsonMemberNames}
 
 final case class SpotifyAuthError(status: Status, content: AuthErrorContent) extends Exception

@@ -25,7 +25,9 @@ object EventService {
         natsConfig <- ZIO.service[NatsConfig]
         connection <- ZIO.attempt(Nats.connect(natsConfig.url))
       } yield connection
-    }.tap { c => ZIO.logInfo(s"Connected to NATS server at ${c.get.getConnectedUrl}") }.tapErrorCause { e =>
+    }.tap { c => 
+      ZIO.logInfo(s"Connected to NATS server at ${c.get.getConnectedUrl}") 
+    }.tapErrorCause { e =>
       ZIO.logErrorCause(s"Failed to connect to NATS server", e)
     }
 

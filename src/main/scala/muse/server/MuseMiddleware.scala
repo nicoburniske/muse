@@ -1,7 +1,7 @@
 package muse.server
 
 import caliban.Value.StringValue
-import caliban.interop.tapir.{StreamTransformer, WebSocketHooks}
+import caliban.interop.tapir.{StreamTransformer, WebSocketHooks, WebSocketInterpreter}
 import caliban.*
 import io.netty.handler.codec.http.HttpHeaderNames
 import muse.domain.common.Types.SessionId
@@ -17,9 +17,8 @@ import nl.vroste.rezilience.Bulkhead.{BulkheadError, BulkheadException, WrappedE
 import sttp.client3.SttpBackend
 import zio.*
 import zio.http.Http.Route
-import zio.http.middleware.*
-import zio.http.model.HttpError
 import zio.http.*
+import zio.http.Header.Authorization
 import zio.redis.Redis
 import zio.stream.ZStream
 
@@ -27,8 +26,13 @@ import java.time.Instant
 
 object MuseMiddleware {
 
-  type SessionEnv = RedisService & UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService] &
+  type SessionEnv      = RedisService & UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService] &
     SttpBackend[Task, Any] & Ref[Option[Long]]
+  
+  
+  type SessionEnvNoSpotify = RedisService & UserSessions & UserSession & SttpBackend[Task, Any] & Ref[Option[Long]]
+  
+  type SessionEnv2 = RedisService & UserSessions & UserSession & SpotifyService 
 
   final def InjectSessionAndRateLimit: RequestHandlerMiddleware.Simple[SessionEnv, Throwable] =
     new RequestHandlerMiddleware.Simple[SessionEnv, Throwable] {
@@ -38,7 +42,7 @@ object MuseMiddleware {
           for {
             // Initialize Session.
             session       <- {
-              extractRequestAuth(request) match
+              extractRequestAuth(request.headers) match
                 case None            => ZIO.fail(Unauthorized("Missing Auth Header"))
                 case Some(sessionId) => UserSessions.getUserSession(SessionId(sessionId))
             }
@@ -54,10 +58,29 @@ object MuseMiddleware {
         }
     }
 
-  private def extractRequestAuth(request: Request) = request
-    .cookieValue(COOKIE_KEY)
-    .orElse(request.authorization)
-    .map(_.toString)
+  val InjectSessionAndRateLimit2 = HttpAppMiddleware.customAuthProvidingZIO(
+    getSession,
+    Headers.empty,
+    Status.Unauthorized
+  )
+
+  def getSession(headers: Headers) = for {
+    session       <- extractRequestAuth(headers) match
+                       case None            => ZIO.fail(Unauthorized("Missing Auth Header"))
+                       case Some(sessionId) => UserSessions.getUserSession(SessionId(sessionId))
+    isRateLimited <- RedisService.rateLimited(session.userId).orDie
+    _             <- { ZIO.logError(s"Rate Limited ${session.userId}") *> ZIO.fail(RateLimited) }.when(isRateLimited)
+  } yield Option.apply(session)
+
+  private def extractRequestAuth(headers: Headers) = {
+    val cookie = headers.header(Header.Cookie).flatMap { c => c.value.find { c => c.name == COOKIE_KEY }.map(_.content) }
+
+    val token = headers.header(Header.Authorization).flatMap {
+      case Authorization.Bearer(token) => Some(token)
+      case _                           => None
+    }
+    cookie.orElse(token)
+  }
 
   /**
    * Logs the requests made to the server.
@@ -92,7 +115,7 @@ object MuseMiddleware {
 
     def live[R](interpreter: GraphQLInterpreter[R, CalibanError]) =
       Http.fromHttpZIO[Request] { request =>
-        val maybeAuth = extractRequestAuth(request)
+        val maybeAuth = extractRequestAuth(request.headers)
         MuseMiddleware.Websockets.configure(interpreter, maybeAuth)
       }
 
@@ -124,10 +147,7 @@ object MuseMiddleware {
             for {
               sessionId     <- authSession.get.map(_.sessionId)
               latestSession <- UserSessions.getUserSession(sessionId)
-              spotify       <- SpotifyService.live(latestSession.accessToken)
-              _             <- authSession.set(Some(latestSession)) <&>
-                                 RequestSession.set[UserSession](Some(latestSession)) <&>
-                                 RequestSession.set[SpotifyService](Some(spotify))
+              _             <- authSession.set(Some(latestSession))
             } yield ()
           ) *> stream
       })
@@ -135,8 +155,18 @@ object MuseMiddleware {
       import sttp.tapir.json.zio.*
 
       ZHttpAdapter.makeWebSocketService(
-        interpreter,
-        webSocketHooks = connectionInit ++ transformService
+        WebSocketInterpreter(
+          interpreter,
+          webSocketHooks = connectionInit ++ transformService
+        )
+//          .intercept[SessionEnvNoSpotify, SessionEnv2](
+//          ZLayer.fromZIO {
+//            for {
+//              session <- authSession.get
+//              spotify <- SpotifyService.live(session.accessToken)
+//            } yield spotify
+//          }
+//        )
       )
     }
 

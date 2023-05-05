@@ -10,7 +10,7 @@ import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.service.{RequestSession, UserSessions}
 import muse.service.cache.RedisService
 import sttp.client3.SttpBackend
-import zio.http.model.{Cookie, HttpError, Method, Scheme}
+import zio.http.{Cookie, HttpError, Method, Scheme}
 import zio.http.*
 import zio.json.*
 import zio.{Cause, Chunk, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer, durationInt}
@@ -23,7 +23,7 @@ object Auth {
         val redirectTo = request.url.queryParams.get("redirect").flatMap(_.headOption)
         generateRedirectUrl(redirectTo).mapBoth(
           e => Response.fromHttpError(HttpError.InternalServerError("Failed to generate redirect url.", Some(e))),
-          url => Response.redirect(url.encode, false))
+          url => Response.redirect(url, false))
       case req @ Method.GET -> !! / "callback"  =>
         val queryParams = req.url.queryParams
         val code        = queryParams.get("code").flatMap(_.headOption)
@@ -37,20 +37,21 @@ object Auth {
             {
               for {
                 redirect     <- getRedirectFromState(state)
+                redirectUrl  <- ZIO.fromEither(URL.decode(redirect)).orDieWith(e => new Exception("Failed to decode redirect url.", e))
                 newSessionId <- handleUserLogin(code)
                 config       <- ZIO.service[ServerConfig]
                 _            <- ZIO.logInfo(s"Successfully added session.")
               } yield {
-                val cookie = Cookie(
+                val cookie = Cookie.Response(
                   COOKIE_KEY,
                   newSessionId,
                   isSecure = true,
                   isHttpOnly = true,
-                  maxAge = Some(365.days.toSeconds),
+                  maxAge = Some(7.days),
                   // On localhost dev, we don't want a cookie domain.
                   domain = config.domain
                 )
-                Response.redirect(redirect).addCookie(cookie)
+                Response.redirect(redirectUrl).addCookie(cookie)
               }
               // TODO: this seems a little weird. Revise.
               // Success channel can be responses that are failures.
@@ -95,7 +96,7 @@ object Auth {
     serverConfig  <- ZIO.service[ServerConfig]
     state         <- Random.nextUUID.map(_.toString.take(30))
     redirect       = redirectMaybe
-                       .filter(r => URL.fromString(r).isRight)
+                       .filter(r => URL.decode(r).isRight)
                        .getOrElse(serverConfig.frontendUrl)
     _             <- RedisService.set(state, redirect, Some(10.seconds)).retry(retrySchedule)
   } yield URL(
