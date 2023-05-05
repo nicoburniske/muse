@@ -6,6 +6,7 @@ import muse.service.spotify.SpotifyService
 import muse.utils.Utils
 import zio.metrics.Metric
 import zio.query.{DataSource, Request, ZQuery}
+import zio.ZIO
 
 import java.time.temporal.ChronoUnit
 
@@ -17,10 +18,9 @@ object GetPlaylist {
 
   def metric = Utils.timer("GetPlaylist", ChronoUnit.MILLIS)
 
-  val PlaylistDataSource: DataSource[RequestSession[SpotifyService], GetPlaylist] =
+  val PlaylistDataSource: DataSource[SpotifyService, GetPlaylist] =
     DataSource.fromFunctionZIO("PlaylistDataSource") { req =>
-      RequestSession
-        .get[SpotifyService]
+      ZIO.service[SpotifyService]
         .flatMap(_.getPlaylist(req.id))
         .map(Playlist.fromSpotify)
         @@ metric.trackDuration

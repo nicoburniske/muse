@@ -25,7 +25,7 @@ object GetCollaborators {
 
   def metric = Utils.timer("GetCollaborators", ChronoUnit.MILLIS)
 
-  val CollaboratorsDataSource: DataSource[DatabaseService & RequestSession[UserSession], GetCollaborators] =
+  val CollaboratorsDataSource: DataSource[DatabaseService & UserSession, GetCollaborators] =
     DataSource.Batched.make("CollaboratorsDataSource") { reqs =>
       ZIO
         .foreachPar(reqs.grouped(MAX_COLLABORATORS_PER_REQUEST).toVector) { batch =>

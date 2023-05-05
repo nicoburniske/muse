@@ -20,14 +20,14 @@ object GetTrackAudioFeatures {
 
   def query(trackId: String) = ZQuery.fromRequest(GetTrackAudioFeatures(trackId))(AudioFeatureDataSource)
 
-  val AudioFeatureDataSource: DataSource[RequestSession[SpotifyService], GetTrackAudioFeatures] =
+  val AudioFeatureDataSource: DataSource[SpotifyService, GetTrackAudioFeatures] =
     DataSource.Batched.make("AudioFeaturesDataSource") { (reqs: Chunk[GetTrackAudioFeatures]) =>
       DatasourceUtils
         .createBatchedDataSource(
           reqs,
           MAX_PER_REQUEST,
-          req => RequestSession.get[SpotifyService].flatMap(_.getTrackAudioFeatures(req.trackId)),
-          reqs => RequestSession.get[SpotifyService].flatMap(_.getTracksAudioFeatures(reqs.map(_.trackId))),
+          req => ZIO.service[SpotifyService].flatMap(_.getTrackAudioFeatures(req.trackId)),
+          reqs => ZIO.service[SpotifyService].flatMap(_.getTracksAudioFeatures(reqs.map(_.trackId))),
           identity,
           _.trackId,
           _.id

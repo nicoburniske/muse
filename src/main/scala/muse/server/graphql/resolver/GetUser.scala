@@ -13,7 +13,7 @@ import zio.query.{DataSource, Request, ZQuery}
 case class GetUser(id: UserId) extends Request[Nothing, User]
 
 object GetUser {
-  type Env = RequestSession[UserSession] & DatabaseService
+  type Env = UserSession & DatabaseService
   def query(maybeId: Option[UserId]) = maybeId match
     case None     => currentUser
     case Some(id) => ZQuery.succeed(queryByUserId(id))
@@ -22,17 +22,17 @@ object GetUser {
     User(userId, GetUserReviews.query(userId), GetSpotifyProfile.query(userId), GetUserPlaylists.boxedQuery(userId))
 
   def currentUser = for {
-    userId <- ZQuery.fromZIO(RequestSession.get[UserSession]).map(_.userId)
+    userId <- ZQuery.fromZIO(ZIO.service[UserSession]).map(_.userId)
   } yield User(userId, GetUserReviews.query(userId, All), GetSpotifyProfile.query(userId), GetUserPlaylists.boxedQuery(userId))
 
   // TODO: This needs to be revised.
   // Incorporate a limit of how many users can be returned.
 
-  type SearchEnv = RequestSession[SpotifyService] with DatabaseService
+  type SearchEnv = SpotifyService with DatabaseService
 
   def fromDisplayName(search: String) = ZQuery.fromZIO {
     for {
-      spotify        <- RequestSession.get[SpotifyService]
+      spotify        <- ZIO.service[SpotifyService]
       allUserIds     <- DatabaseService.getUsers.map(_.map(_.userId))
       profiles       <- ZIO.foreachPar(allUserIds)(spotify.getUserProfile)
       lowercaseSearch = search.toLowerCase()

@@ -35,7 +35,7 @@ case class FeedInput(
     with Request[SQLException, ReviewConnection]
 
 object GetFeed {
-  type Env = DatabaseService with RequestSession[UserSession]
+  type Env = DatabaseService with UserSession
   def query(input: FeedInput) = ZQuery.fromRequest(input)(feedDataSource)
   val DEFAULT_LIMIT           = 10
 
@@ -44,7 +44,7 @@ object GetFeed {
       val limit  = Math.min(req.first.getOrElse(DEFAULT_LIMIT), DEFAULT_LIMIT)
       val offset = req.after.flatMap(s => Try(UUID.fromString(s)).toOption)
       for {
-        userId <- RequestSession.get[UserSession].map(_.userId)
+        userId <- ZIO.service[UserSession].map(_.userId)
         feed   <-
           DatabaseService.getFeed(userId, offset, limit).map {
             case (remaining, reviews) =>

@@ -13,8 +13,9 @@ import zio.query.ZQuery
 final case class UserPlaylistsInput(pagination: Option[Pagination])
 
 object GetUserPlaylists:
+  type Env = SpotifyService & UserSession
   def boxedQuery(userId: UserId)(input: UserPlaylistsInput)
-      : ZQuery[RequestSession[SpotifyService] & RequestSession[UserSession], Throwable, List[Playlist]] =
+      : ZQuery[SpotifyService & UserSession, Throwable, List[Playlist]] =
     query(userId)(input.pagination)
 
   def query(userId: UserId)(p: Option[Pagination]) = ZQuery.fromZIO {
@@ -22,7 +23,7 @@ object GetUserPlaylists:
   }
 
   def userPlaylistsZIO(userId: UserId, p: Option[Pagination]) = for {
-    spotify  <- RequestSession.get[SpotifyService]
+    spotify  <- ZIO.service[SpotifyService]
     indices  <- getUserPlaylistIndices(userId, p)
     results  <- ZIO.foreachPar(indices)(index => spotify.getUserPlaylists(userId, 50, Some(index)))
     playlists = results.flatMap(_.items).toList
@@ -33,7 +34,7 @@ object GetUserPlaylists:
       ZIO.succeed(getIndicesPagination(p))
     case None    =>
       for {
-        spotify <- RequestSession.get[SpotifyService]
+        spotify  <- ZIO.service[SpotifyService]
         total   <- spotify.getUserPlaylists(userId, 1).map(_.total)
       } yield (0 until total).grouped(50).map(_.start).toVector
 

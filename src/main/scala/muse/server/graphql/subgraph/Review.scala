@@ -22,17 +22,17 @@ final case class Review(
     creator: User,
     reviewName: String,
     isPublic: Boolean,
-    comments: ZQuery[DatabaseService, Throwable, List[Comment]],
-    entity: ZQuery[RequestSession[SpotifyService], Throwable, Option[ReviewEntity]],
+    comments: ZQuery[GetReviewComments.Env, Throwable, List[Comment]],
+    entity: ZQuery[SpotifyService, Throwable, Option[ReviewEntity]],
     childReviews: ZQuery[DatabaseService, Throwable, List[Review]],
     // TODO: this can be forbidden.
-    collaborators: ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Collaborator]]
+    collaborators: ZQuery[UserSession & DatabaseService, Throwable, List[Collaborator]]
 )
 
 case class Collaborator(
     user: User,
     accessLevel: AccessLevel,
-    review: ZQuery[DatabaseService & RequestSession[UserSession], Throwable, Review])
+    review: ZQuery[GetReview.Env, Throwable, Review])
 
 object Collaborator {
   def fromTable(r: table.ReviewAccess) = Collaborator(

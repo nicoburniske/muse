@@ -21,14 +21,14 @@ import java.sql.SQLException
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-trait UserSessions {
+trait UserSessionService {
   def getUserSession(sessionId: SessionId): IO[Throwable, UserSession]
   def getFreshAccessToken(sessionId: SessionId): IO[Throwable, AccessToken]
   def deleteUserSession(sessionId: SessionId): IO[Throwable, Boolean]
   def refreshUserSession(sessionId: SessionId): IO[Throwable, UserSession]
 }
 
-object UserSessions {
+object UserSessionService {
   val layer = ZLayer.fromZIO {
     for {
       redisService    <- ZIO.service[RedisService]
@@ -57,10 +57,10 @@ object UserSessions {
     execute.retry(retrySchedule)
   }
 
-  def getUserSession(sessionId: SessionId)      = ZIO.serviceWithZIO[UserSessions](_.getUserSession(sessionId))
-  def getFreshAccessToken(sessionId: SessionId) = ZIO.serviceWithZIO[UserSessions](_.getFreshAccessToken(sessionId))
-  def deleteUserSession(sessionId: SessionId)   = ZIO.serviceWithZIO[UserSessions](_.deleteUserSession(sessionId))
-  def refreshUserSession(sessionId: SessionId)  = ZIO.serviceWithZIO[UserSessions](_.refreshUserSession(sessionId))
+  def getUserSession(sessionId: SessionId)      = ZIO.serviceWithZIO[UserSessionService](_.getUserSession(sessionId))
+  def getFreshAccessToken(sessionId: SessionId) = ZIO.serviceWithZIO[UserSessionService](_.getFreshAccessToken(sessionId))
+  def deleteUserSession(sessionId: SessionId)   = ZIO.serviceWithZIO[UserSessionService](_.deleteUserSession(sessionId))
+  def refreshUserSession(sessionId: SessionId)  = ZIO.serviceWithZIO[UserSessionService](_.refreshUserSession(sessionId))
 }
 
 final case class UserSessionsLive(
@@ -68,7 +68,7 @@ final case class UserSessionsLive(
     authService: SpotifyAuthService,
     redisService: RedisService,
     databaseService: DatabaseService)
-    extends UserSessions {
+    extends UserSessionService {
 
   val layer = ZLayer.succeed(authService) ++ ZLayer.succeed(redisService) ++ ZLayer.succeed(databaseService)
 
@@ -78,7 +78,7 @@ final case class UserSessionsLive(
     redisService.cacheOrExecute(sessionId, 59.minutes)(retrievalCache.get(sessionId))
 
   override def getFreshAccessToken(sessionId: SessionId) =
-    UserSessions.retrieveSession(sessionId).map(_.accessToken).provide(layer)
+    UserSessionService.retrieveSession(sessionId).map(_.accessToken).provide(layer)
 
   override def refreshUserSession(sessionId: SessionId) =
     redisService.delete(sessionId) *> getUserSession(sessionId)

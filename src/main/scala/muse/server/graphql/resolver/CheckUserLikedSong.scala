@@ -22,12 +22,11 @@ object CheckUserLikedSong {
 
   def metric = Utils.timer("GetPlaylist", ChronoUnit.MILLIS)
 
-  val dataSource: DataSource[RequestSession[SpotifyService], CheckUserLikedSong] =
+  val dataSource: DataSource[SpotifyService, CheckUserLikedSong] =
     DataSource.Batched.make("CheckUserLikedSong") { req =>
       ZIO
         .foreachPar(req.toVector.grouped(MAX_PER_REQUEST).toVector) { batch =>
-          RequestSession
-            .get[SpotifyService]
+            ZIO.service[SpotifyService]
             .flatMap(_.checkUserSavedTracks(batch.map(_.trackId)))
             .either.map(batch -> _)
         }.map { results =>

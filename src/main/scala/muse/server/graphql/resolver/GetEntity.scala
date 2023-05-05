@@ -7,7 +7,7 @@ import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
 object GetEntity {
-  def query(entityId: String, entityType: EntityType): ZQuery[RequestSession[SpotifyService], Throwable, ReviewEntity] =
+  def query(entityId: String, entityType: EntityType): ZQuery[SpotifyService, Throwable, ReviewEntity] =
     entityType match
       case EntityType.Album    => GetAlbum.query(entityId)
       case EntityType.Artist   => GetArtist.query(entityId)

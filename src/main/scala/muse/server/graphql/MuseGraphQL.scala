@@ -20,10 +20,12 @@ import muse.domain.{spotify, table}
 import muse.server.graphql.resolver.GetSearch.PaginationResult
 import muse.server.graphql.resolver.{FeedInput, ReviewConnection, ReviewEdge, UserPlaylistsInput}
 import muse.server.graphql.subgraph.*
+import muse.service.cache.RedisService
 import muse.service.event.ReviewUpdateService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyError, SpotifyService}
-import muse.service.{RequestSession, UserSessions}
+import muse.service.{RequestSession, UserSessionService}
+import sttp.client3.SttpBackend
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.*
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
@@ -34,7 +36,9 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & ReviewUpdateService & Scope
+  type Env = UserSession & SpotifyService & DatabaseService & ReviewUpdateService & Scope
+//  type Env = UserSession & SpotifyService & DatabaseService & UserSessionService & ReviewUpdateService & Scope & Ref[Option[Long]] & RedisService & SttpBackend[Task, Any]
+  
 
   given Schema[Env, spotify.PlaybackDevice]  = Schema.gen
   given Schema[Env, spotify.ExternalIds]     = Schema.gen
@@ -231,7 +235,7 @@ object MuseGraphQL {
   val api = caliban.graphQL[Env, Queries, Mutations, Subscriptions](
     RootResolver(Queries.live, Mutations.live, Subscriptions.live)) @@ printErrors @@ apolloTracing
 
-  val interpreter = api.interpreter.map(errorHandler(_))
+  val interpreter: ZIO[Any, ValidationError, GraphQLInterpreter[Env, CalibanError]] = api.interpreter.map(errorHandler(_))
 
   // TODO: Consider handling Spotify 404 error.
   private def errorHandler[R](

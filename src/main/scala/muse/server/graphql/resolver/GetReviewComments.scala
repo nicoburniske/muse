@@ -13,11 +13,12 @@ import java.util.UUID
 case class GetReviewComments(reviewId: UUID) extends Request[SQLException, List[Comment]]
 
 object GetReviewComments {
+  type Env = DatabaseService
 
   def query(reviewId: UUID) = ZQuery.fromRequest(GetReviewComments(reviewId))(CommentDataSource)
 
   // TODO: incorporate permissions
-  val CommentDataSource: DataSource[DatabaseService, GetReviewComments] =
+  val CommentDataSource: DataSource[Env, GetReviewComments] =
     DataSource.fromFunctionZIO("ReviewCommentsDataSource") { (req: GetReviewComments) =>
       DatabaseService
         .getReviewComments(req.reviewId).map { comments => Comment.fromTableRows(comments) }

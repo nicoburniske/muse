@@ -26,7 +26,7 @@ object GetPlaylistTracks {
       .mapZIOPar(5)(offset => getTracks(playlistId, offset))
       .flatMap(ZStream.fromIterable(_))
 
-  val PlaylistTrackDataSource: DataSource[RequestSession[SpotifyService], GetPlaylistTracks] =
+  val PlaylistTrackDataSource: DataSource[SpotifyService, GetPlaylistTracks] =
     DataSource.fromFunctionZIO("PlaylistTrackDataSource") { req =>
       ZIO
         .foreachPar(requestOffsets(req.numTracks))(offset => getTracks(req.playlistId, offset))
@@ -41,8 +41,8 @@ object GetPlaylistTracks {
       .toList
 
   private def getTracks(playlistId: String, offset: Int) = {
-    RequestSession
-      .get[SpotifyService]
+    
+      ZIO.service[SpotifyService]
       .flatMap(_.getSomePlaylistTracks(playlistId, MAX_PLAYLIST_TRACKS_PER_REQUEST, Some(offset)))
       .map(_.items)
       .map(_.map(PlaylistTrack.fromSpotify(_, playlistId)))

@@ -6,6 +6,7 @@ import muse.server.graphql.subgraph.Review
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import zio.query.{DataSource, Request, ZQuery}
+import zio.ZIO
 
 import java.sql.SQLException
 
@@ -23,22 +24,23 @@ case object Owned extends WhichReviews
 case object WithAccess extends WhichReviews
 
 object GetUserReviews {
-  def query(userId: UserId): ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]] = for {
-    user   <- ZQuery.fromZIO(RequestSession.get[UserSession])
+  type Env = DatabaseService with UserSession
+  def query(userId: UserId): ZQuery[Env, Throwable, List[Review]] = for {
+    user   <- ZQuery.fromZIO(ZIO.service[UserSession])
     which   = if (user.userId == userId) All else WithAccess
     result <- query(userId, which)
   } yield result
 
   def query(userId: UserId, which: WhichReviews) = ZQuery.fromRequest(GetUserReviews(userId, which))(UserReviewsDataSource)
 
-  val UserReviewsDataSource: DataSource[DatabaseService & RequestSession[UserSession], GetUserReviews] =
+  val UserReviewsDataSource: DataSource[Env, GetUserReviews] =
     DataSource.fromFunctionZIO("UserReviewsDataSource") { req =>
       (req.which match {
         case All        => DatabaseService.getAllUserReviews(req.userId)
         case Owned      => DatabaseService.getUserReviews(req.userId)
         case WithAccess =>
           for {
-            viewer  <- RequestSession.get[UserSession].map(_.userId)
+            viewer  <- ZIO.service[UserSession].map(_.userId)
             reviews <- DatabaseService.getUserReviewsExternal(req.userId, viewer)
           } yield reviews
       }).map(_.map(Review.fromTable))

@@ -41,15 +41,15 @@ final case class Queries(
     feed: FeedInput => ZQuery[GetFeed.Env, Throwable, ReviewConnection],
     comment: CommentInput => ZQuery[GetComment.Env, Throwable, Option[Comment]],
     comments: CommentsInput => ZQuery[GetComment.Env, Throwable, List[Comment]],
-    //    search: SearchArgs => ZQuery[RequestSession[SpotifyService], Throwable, SearchResult],
-    getPlaylist: SpotifyEntityInput => ZQuery[RequestSession[SpotifyService], Throwable, Playlist],
-    getAlbum: SpotifyEntityInput => ZQuery[RequestSession[SpotifyService], Throwable, Album],
-    getTrack: SpotifyEntityInput => ZQuery[RequestSession[SpotifyService], Throwable, Track]
+    //    search: SearchArgs => ZQuery[SpotifyService, Throwable, SearchResult],
+    getPlaylist: SpotifyEntityInput => ZQuery[SpotifyService, Throwable, Playlist],
+    getAlbum: SpotifyEntityInput => ZQuery[SpotifyService, Throwable, Album],
+    getTrack: SpotifyEntityInput => ZQuery[SpotifyService, Throwable, Track]
 )
 
 object Queries {
   val live = Queries(
-    args => GetUser.query(args.id).orDie,
+    args => GetUser.query(args.id),
     args => GetUser.query(args.id),
     args => GetUser.fromDisplayName(args.displayName),
     args => GetReview.query(args.id),

@@ -13,7 +13,7 @@ import muse.service.cache.RedisService
 import muse.service.event.{EventService, ReviewUpdateService}
 import muse.service.persist.{DatabaseService, MigrationService, QuillContext}
 import muse.service.spotify.{RateLimitRef, SpotifyAuthService, SpotifyCache}
-import muse.service.{RequestSession, UserSessions}
+import muse.service.{RequestSession, UserSessionService}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.Duration.*
@@ -48,7 +48,7 @@ object Main extends ZIOAppDefault {
       RedisService.connectionLayer,
       RedisService.redisLayer,
       // Session layers.
-      UserSessions.layer,
+      UserSessionService.layer,
       RequestSession.userSessionLayer,
       RequestSession.spotifySessionLayer,
       // Event layers.

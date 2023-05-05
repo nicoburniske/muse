@@ -2,7 +2,7 @@ package muse.service.spotify
 
 import muse.config.SpotifyConfig
 import muse.domain.spotify.auth.*
-import muse.service.UserSessions
+import muse.service.UserSessionService
 import zio.http.*
 import zio.json.*
 import zio.{Task, ZIO, ZLayer}

@@ -7,7 +7,7 @@ import muse.domain.spotify.auth.AuthCodeFlowData
 import muse.domain.table.User
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
-import muse.service.{RequestSession, UserSessions}
+import muse.service.{RequestSession, UserSessionService}
 import muse.service.cache.RedisService
 import sttp.client3.SttpBackend
 import zio.http.{Cookie, HttpError, Method, Scheme}
@@ -68,19 +68,19 @@ object Auth {
   val sessionEndpoints = Http.collectZIO[Request] {
     case Method.POST -> !! / "logout" =>
       for {
-        session <- RequestSession.get[UserSession]
-        _       <- UserSessions.deleteUserSession(session.sessionId)
+        session <- ZIO.service[UserSession]
+        _       <- UserSessionService.deleteUserSession(session.sessionId)
         _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId}")
       } yield Response.ok
     case Method.GET -> !! / "session" =>
       for {
-        session <- RequestSession.get[UserSession]
+        session <- ZIO.service[UserSession]
       } yield Response.text(session.sessionId)
     case Method.GET -> !! / "token"   =>
       // Guaranteed to have a valid access token for next 60 min.
       for {
-        session     <- RequestSession.get[UserSession]
-        accessToken <- UserSessions.getFreshAccessToken(session.sessionId)
+        session     <- ZIO.service[UserSession]
+        accessToken <- UserSessionService.getFreshAccessToken(session.sessionId)
       } yield Response.text(accessToken)
   }
 

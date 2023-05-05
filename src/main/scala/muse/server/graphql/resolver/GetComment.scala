@@ -6,13 +6,14 @@ import muse.server.graphql.subgraph.Comment
 import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import zio.query.{DataSource, Request, ZQuery}
+import zio.ZIO
 
 import java.sql.SQLException
 import java.util.UUID
 
 object GetComment {
   val MAX_COMMENT_PER_REQUEST = 200
-  type Env = DatabaseService with RequestSession[UserSession]
+  type Env = DatabaseService with UserSession
 
   final case class CommentRequest(id: Long) extends Request[SQLException, Option[Comment]]
 
@@ -23,7 +24,7 @@ object GetComment {
   val commentDataSource: DataSource[Env, CommentRequest] =
     DataSource.fromFunctionZIO("GetComment") { req =>
       for {
-        userId  <- RequestSession.get[UserSession].map(_.userId)
+        userId  <- ZIO.service[UserSession].map(_.userId)
         comment <-
           DatabaseService
             .getComment(req.id, userId)
@@ -39,7 +40,7 @@ object GetComment {
   val allChildrenDataSource: DataSource[Env, CommentChildrenRequest] =
     DataSource.fromFunctionZIO("AllCommentChildrenDataSource") { req =>
       for {
-        userId   <- RequestSession.get[UserSession].map(_.userId)
+        userId   <- ZIO.service[UserSession].map(_.userId)
         children <- DatabaseService.getAllCommentChildren(req.id, userId).map { Comment.fromTableRows }
       } yield children
     }

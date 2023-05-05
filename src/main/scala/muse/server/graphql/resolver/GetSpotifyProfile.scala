@@ -10,13 +10,13 @@ import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 case class GetSpotifyProfile(id: UserId) extends Request[Throwable, SpotifyProfile]
 
 object GetSpotifyProfile {
+  type Env = SpotifyService
   def query(userId: UserId) =
     ZQuery.fromRequest(GetSpotifyProfile(userId))(spotifyProfileDataSource)
 
-  val spotifyProfileDataSource: DataSource[RequestSession[SpotifyService], GetSpotifyProfile] =
+  val spotifyProfileDataSource: DataSource[Env, GetSpotifyProfile] =
     DataSource.fromFunctionZIO("SpotifyProfileDataSource") { req =>
-      RequestSession
-        .get[SpotifyService]
+      ZIO.service[SpotifyService]
         .flatMap(_.getUserProfile(req.id))
         .map(SpotifyProfile.fromSpotify)
     }

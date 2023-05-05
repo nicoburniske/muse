@@ -24,7 +24,7 @@ final case class Comment(
     childCommentIds: List[Long],
     commenter: User,
     comment: Option[String],
-    entities: ZQuery[RequestSession[SpotifyService], Throwable, List[ReviewEntity]],
+    entities: ZQuery[SpotifyService, Throwable, List[ReviewEntity]],
     parentComment: ZQuery[GetComment.Env, Throwable, Option[Comment]],
     childComments: ZQuery[GetComment.Env, Throwable, List[Comment]],
     allChildComments: ZQuery[GetComment.Env, Throwable, List[Comment]]

@@ -2,6 +2,7 @@ package muse.server
 
 import caliban.*
 import caliban.execution.QueryExecution
+import caliban.interop.tapir.WebSocketInterpreter
 import caliban.interop.tapir.HttpInterpreter
 import com.stuart.zcaffeine.Cache
 import io.netty.handler.codec.http.HttpHeaderNames
@@ -12,10 +13,11 @@ import muse.domain.spotify
 import muse.server.MuseMiddleware
 import muse.server.graphql.MuseGraphQL
 import muse.server.graphql.MuseGraphQL.Env
+import muse.service.cache.RedisService
 import muse.service.event.ReviewUpdateService
 import muse.service.persist.{DatabaseService, MigrationService}
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
-import muse.service.{RequestSession, UserSessions}
+import muse.service.{RequestSession, UserSessionService}
 import muse.utils.Utils
 import sttp.client3.SttpBackend
 import zio.http.RequestHandlerMiddlewares
@@ -43,9 +45,7 @@ object MuseServer {
       val protectedRest =
         ((rest ++ Auth.sessionEndpoints)
           @@ MuseMiddleware.InjectSessionAndRateLimit
-          @@ RequestHandlerMiddlewares.beautifyErrors
-//          @@ MuseMiddleware.InjectSessionAndRateLimit2
-          )
+          @@ RequestHandlerMiddlewares.beautifyErrors)
           .mapError {
             case RateLimited     => RateLimited.response
             case u: Unauthorized => u.response
@@ -65,22 +65,19 @@ object MuseServer {
             .makeHttpService(
               HttpInterpreter(interpreter)
                 .configure(Configurator.setQueryExecution(QueryExecution.Batched))
-//                .intercept(spotifyServiceLayer)
+                .intercept(MuseMiddleware.getSessionAndSpotifyTapir[DatabaseService & UserSessionService & ReviewUpdateService & Scope])
             )
       },
-      Http.collectHttp[Request] { case _ -> !! / "ws" / "graphql" => MuseMiddleware.Websockets.live(interpreter) }
+      Http.collectHttp[Request] {
+        case _ -> !! / "ws" / "graphql" =>
+          ZHttpAdapter.makeWebSocketService(
+            WebSocketInterpreter(
+              interpreter
+            ).intercept(MuseMiddleware.getSessionAndSpotifyTapir[DatabaseService & UserSessionService & ReviewUpdateService & Scope])
+          )
+      }
     )
   }
-
-  val spotifyServiceLayer = ZLayer.fromZIO {
-    for {
-      session <- ZIO.service[UserSession]
-      spotify <- SpotifyService.live(session.accessToken)
-    } yield spotify
-  } ++ ZLayer.service[UserSessions] ++
-    ZLayer.service[DatabaseService] ++
-    ZLayer.service[ReviewUpdateService] ++
-    ZLayer.service[Scope]
 
   val getCorsConfig = {
     import zio.http.internal.middlewares.Cors.CorsConfig

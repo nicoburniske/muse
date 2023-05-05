@@ -7,6 +7,7 @@ import muse.server.graphql.subgraph.*
 import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
+import zio.ZIO
 
 object GetSearch {
 
@@ -24,7 +25,7 @@ object GetSearch {
 
   def query(query: String, entityTypes: Set[EntityType], p: Pagination) = ZQuery.fromZIO {
     val Pagination(first, offset) = p
-    RequestSession.get[SpotifyService].flatMap(_.search(query, entityTypes, first, Some(offset))).map {
+    ZIO.service[SpotifyService].flatMap(_.search(query, entityTypes, first, Some(offset))).map {
       case spotify.SearchResult(albums, artists, playlists, tracks) =>
         SearchResult(
           albums.flatMap(a => createPaginationResult(a, Album.fromSpotifySimple)),

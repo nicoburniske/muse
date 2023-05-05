@@ -21,14 +21,14 @@ object GetTrack {
 
   def metric = Utils.timer("GetTrack", ChronoUnit.MILLIS)
 
-  val TrackDataSource: DataSource[RequestSession[SpotifyService], GetTrack] =
+  val TrackDataSource: DataSource[SpotifyService, GetTrack] =
     DataSource.Batched.make("TrackDataSource") { reqs =>
       DatasourceUtils
         .createBatchedDataSource(
           reqs,
           MAX_TRACKS_PER_REQUEST,
-          req => RequestSession.get[SpotifyService].flatMap(_.getTrack(req.id)),
-          reqs => RequestSession.get[SpotifyService].flatMap(_.getTracks(reqs.map(_.id))),
+          req => ZIO.service[SpotifyService].flatMap(_.getTrack(req.id)),
+          reqs => ZIO.service[SpotifyService].flatMap(_.getTracks(reqs.map(_.id))),
           Track.fromSpotify,
           _.id,
           _.id

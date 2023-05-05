@@ -21,14 +21,14 @@ object GetArtist {
 
   def metric = Utils.timer("GetArtist", ChronoUnit.MILLIS)
 
-  val ArtistDataSource: DataSource[RequestSession[SpotifyService], GetArtist] =
+  val ArtistDataSource: DataSource[SpotifyService, GetArtist] =
     DataSource.Batched.make("ArtistDataSource") { reqs =>
       DatasourceUtils
         .createBatchedDataSource(
           reqs,
           MAX_ARTISTS_PER_REQUEST,
-          req => RequestSession.get[SpotifyService].flatMap(_.getArtist(req.id)),
-          reqs => RequestSession.get[SpotifyService].flatMap(_.getArtists(reqs.map(_.id))),
+          req => ZIO.service[SpotifyService].flatMap(_.getArtist(req.id)),
+          reqs => ZIO.service[SpotifyService].flatMap(_.getArtists(reqs.map(_.id))),
           Artist.fromSpotify,
           _.id,
           _.id

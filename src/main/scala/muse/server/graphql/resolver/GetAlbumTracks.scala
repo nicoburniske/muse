@@ -24,18 +24,18 @@ object GetAlbumTracks {
    * @return
    *   the tracks from the album
    */
-  def query(albumId: String, numTracks: Option[Int]): ZQuery[RequestSession[SpotifyService], Throwable, List[Track]] =
+  def query(albumId: String, numTracks: Option[Int]): ZQuery[SpotifyService, Throwable, List[Track]] =
     ZQuery.fromZIO((numTracks match {
       case None        =>
-        RequestSession
-          .get[SpotifyService]
+        ZIO
+          .service[SpotifyService]
           .flatMap(_.getAllAlbumTracks(albumId))
           .map(_.map(t => Track.fromSpotifySimple(t, Some(albumId))).toList)
       case Some(total) =>
         ZIO
           .foreachPar((0 until total).grouped(MAX_TRACKS_PER_REQUEST).map(_.start).toList) { r =>
-            RequestSession
-              .get[SpotifyService]
+            ZIO
+              .service[SpotifyService]
               .flatMap(_.getSomeAlbumTracks(albumId, Some(MAX_TRACKS_PER_REQUEST), Some(r)))
               .map(_.items)
               .map(_.map(t => Track.fromSpotifySimple(t, Some(albumId))))

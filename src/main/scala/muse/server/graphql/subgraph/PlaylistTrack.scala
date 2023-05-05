@@ -14,7 +14,7 @@ final case class PlaylistTrack(
     addedBy: User,
     isLocal: Boolean,
     track: Track,
-    playlist: ZQuery[RequestSession[SpotifyService], Nothing, Playlist]
+    playlist: ZQuery[SpotifyService, Nothing, Playlist]
 )
 
 object PlaylistTrack {

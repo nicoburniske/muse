@@ -12,12 +12,9 @@ import zio.query.ZQuery
 
 final case class User(
     id: UserId,
-    reviews: ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Review]],
-    spotifyProfile: ZQuery[RequestSession[SpotifyService], Throwable, SpotifyProfile],
-    playlists: UserPlaylistsInput => ZQuery[
-      RequestSession[UserSession] & RequestSession[SpotifyService],
-      Throwable,
-      List[Playlist]]
+    reviews: ZQuery[GetUserReviews.Env, Throwable, List[Review]],
+    spotifyProfile: ZQuery[GetSpotifyProfile.Env, Throwable, SpotifyProfile],
+    playlists: UserPlaylistsInput => ZQuery[GetUserPlaylists.Env, Throwable, List[Playlist]]
 )
 
 object User {
