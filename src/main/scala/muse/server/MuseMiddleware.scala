@@ -83,10 +83,9 @@ object MuseMiddleware {
                                .find(_(0) == COOKIE_KEY).map(_(1))
                            }
           maybeAuth      = request.header(sttp.model.HeaderNames.Authorization).flatMap { value =>
-                             value.split(" ").toList match
-                               case "Bearer" :: token :: Nil => Some(token)
-                               case "bearer" :: token :: Nil => Some(token)
-                               case _                        => None
+                             val split = value.split(" ")
+                             if (split.length == 2 && split(0).toLowerCase == "bearer") Some(split(1))
+                             else None
                            }
           maybeSessionId = maybeCookie.orElse(maybeAuth)
           session       <- getSession(maybeSessionId)
@@ -123,7 +122,7 @@ object MuseMiddleware {
         .someOrFail[UserSession, Throwable | Unauthorized](Unauthorized("Invalid Session ID."))
         .tapErrorCause { c => ZIO.logErrorCause("Failed to get user session", c) }
     }
-    
+
     for {
       session <- retrieveSession
       _       <- ZIO

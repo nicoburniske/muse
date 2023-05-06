@@ -67,10 +67,11 @@ object Auth {
     .collectZIO[Request] {
       case Method.POST -> !! / "logout" =>
         for {
-          session <- ZIO.service[UserSession]
-          _       <- UserSessionService.deleteUserSession(session.sessionId)
-          _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId}")
-        } yield Response.ok
+          session      <- ZIO.service[UserSession]
+          _            <- UserSessionService.deleteUserSession(session.sessionId)
+          _            <- ZIO.logInfo(s"Successfully logged out user ${session.userId}")
+          expiredCookie = Cookie.Response(COOKIE_KEY, "", isSecure = true, isHttpOnly = true, maxAge = Some(0.seconds))
+        } yield Response.ok.addCookie(expiredCookie)
       // Guaranteed to have a valid access token for next 60 min.
       case Method.GET -> !! / "token"   =>
         for {

@@ -40,7 +40,8 @@ object MuseServer {
     val middleware       = MuseMiddleware.InjectSessionAndRateLimit[MuseGraphQL.ServiceEnv & SpotifyService.Env]
     val protectedZioHttp = Auth.sessionEndpoints @@ middleware
 
-    (gql ++ protectedZioHttp ++ Auth.loginEndpoints) @@ cors @@ metrics()
+    // ORDER MATTERS HERE. LOGIN ENDPOINTS MUST BE BEFORE PROTECTED ENDPOINTS.
+    (gql ++ Auth.loginEndpoints ++ protectedZioHttp ) @@ cors @@ metrics()
   }
 
   val endpointsGraphQL = {
