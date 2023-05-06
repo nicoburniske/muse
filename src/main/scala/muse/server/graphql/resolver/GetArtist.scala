@@ -3,7 +3,6 @@ package muse.server.graphql.resolver
 import muse.domain.common.EntityType
 import muse.domain.error.InvalidEntity
 import muse.server.graphql.subgraph.Artist
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import muse.utils.Utils
 import zio.ZIO

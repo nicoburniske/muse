@@ -2,7 +2,6 @@ package muse.server.graphql.resolver
 
 import muse.domain.session.UserSession
 import muse.server.graphql.subgraph.Review
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.utils.Utils
 import zio.ZIO

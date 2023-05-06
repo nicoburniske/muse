@@ -2,9 +2,9 @@ package muse.service.event
 
 import io.nats.client.{Connection, Message, Nats}
 import muse.config.NatsConfig
+import zio.*
 import zio.schema.Schema
 import zio.schema.codec.{BinaryCodec, DecodeError, ProtobufCodec}
-import zio.*
 import zio.stream.*
 
 trait EventService {
@@ -25,9 +25,7 @@ object EventService {
         natsConfig <- ZIO.service[NatsConfig]
         connection <- ZIO.attempt(Nats.connect(natsConfig.url))
       } yield connection
-    }.tap { c => 
-      ZIO.logInfo(s"Connected to NATS server at ${c.get.getConnectedUrl}") 
-    }.tapErrorCause { e =>
+    }.tap { c => ZIO.logInfo(s"Connected to NATS server at ${c.get.getConnectedUrl}") }.tapErrorCause { e =>
       ZIO.logErrorCause(s"Failed to connect to NATS server", e)
     }
 

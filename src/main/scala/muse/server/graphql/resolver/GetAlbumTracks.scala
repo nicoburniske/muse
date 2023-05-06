@@ -1,7 +1,6 @@
 package muse.server.graphql.resolver
 
 import muse.server.graphql.subgraph.Track
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import muse.utils.Utils
 import zio.ZIO

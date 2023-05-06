@@ -2,31 +2,26 @@ package muse.server
 
 import caliban.*
 import caliban.execution.QueryExecution
-import caliban.interop.tapir.WebSocketInterpreter
-import caliban.interop.tapir.HttpInterpreter
+import caliban.interop.tapir.{HttpInterpreter, WebSocketInterpreter}
 import com.stuart.zcaffeine.Cache
 import io.netty.handler.codec.http.HttpHeaderNames
 import muse.config.{AppConfig, ServerConfig, SpotifyConfig, SpotifyServiceConfig}
-import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify
 import muse.server.MuseMiddleware
 import muse.server.graphql.MuseGraphQL
 import muse.server.graphql.MuseGraphQL.Env
+import muse.service.UserSessionService
 import muse.service.cache.RedisService
 import muse.service.event.ReviewUpdateService
 import muse.service.persist.{DatabaseService, MigrationService}
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
-import muse.service.{RequestSession, UserSessionService}
 import muse.utils.Utils
 import sttp.client3.SttpBackend
-import zio.http.RequestHandlerMiddlewares
-import zio.http.{HttpError, Method}
-import zio.http.*
-import zio.http.HttpAppMiddleware.cors
-import zio.http.HttpAppMiddleware.metrics
-import zio.metrics.connectors.prometheus.PrometheusPublisher
 import zio.*
+import zio.http.HttpAppMiddleware.{cors, metrics}
+import zio.http.*
+import zio.metrics.connectors.prometheus.PrometheusPublisher
 
 // TODO: incorporate cookie signing.
 val COOKIE_KEY = "XSESSION"

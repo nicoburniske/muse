@@ -17,5 +17,6 @@ import java.time.Instant
 final case class UserSession(
     sessionId: SessionId,
     userId: UserId,
-    accessToken: AccessToken
+    accessToken: AccessToken,
+    expiration: Instant
 )

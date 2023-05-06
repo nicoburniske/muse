@@ -12,9 +12,10 @@ object ElasticCursor {
   lazy val decoder = Base64.getDecoder
   lazy val encoder = Base64.getEncoder
 
-  given schema: Schema[Any, ElasticCursor] = Schema.stringSchema.contramap(
-    Cursor[ElasticCursor].encode
-  )
+  given schema: Schema[Any, ElasticCursor] = Schema
+    .stringSchema.contramap(
+      Cursor[ElasticCursor].encode
+    )
 
   given Cursor[ElasticCursor] = new Cursor[ElasticCursor] {
     type T = String
@@ -31,4 +32,3 @@ object ElasticCursor {
     def value(c: ElasticCursor): T = c.value
   }
 }
-

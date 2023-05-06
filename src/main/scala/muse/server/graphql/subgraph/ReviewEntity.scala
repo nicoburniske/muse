@@ -5,7 +5,6 @@ import muse.domain.common.Types.UserId
 import muse.domain.spotify
 import muse.server.graphql.resolver.*
 import muse.server.graphql.subgraph
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 

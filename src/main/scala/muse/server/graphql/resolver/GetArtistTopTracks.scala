@@ -1,7 +1,6 @@
 package muse.server.graphql.resolver
 
 import muse.server.graphql.subgraph.Track
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import zio.ZIO
 import zio.query.{Request, ZQuery}
@@ -14,5 +13,5 @@ object GetArtistTopTracks {
     ZQuery
       .fromZIO {
         ZIO.service[SpotifyService].flatMap(_.getArtistTopTracks(artistId))
-      }.map(_.map(Track.fromSpotify(_)).toList)
+      }.map(_.map(Track.fromSpotify).toList)
 }

@@ -13,7 +13,6 @@ import muse.domain.spotify.{
   PositionOffset as SpotifyPostionOffset
 }
 import muse.server.graphql.subgraph.ReviewUpdate
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import zio.{Hub, ZIO}

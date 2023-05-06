@@ -2,7 +2,6 @@ package muse.server.graphql.resolver
 
 import muse.domain.common.EntityType
 import muse.server.graphql.subgraph.ReviewEntity
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 

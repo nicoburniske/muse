@@ -3,10 +3,9 @@ package muse.server.graphql.resolver
 import muse.domain.common.Types.UserId
 import muse.domain.session.UserSession
 import muse.server.graphql.subgraph.Review
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
-import zio.query.{DataSource, Request, ZQuery}
 import zio.ZIO
+import zio.query.{DataSource, Request, ZQuery}
 
 import java.sql.SQLException
 

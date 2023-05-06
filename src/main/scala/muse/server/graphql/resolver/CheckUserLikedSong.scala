@@ -4,7 +4,6 @@ import muse.domain.common.EntityType
 import muse.domain.error.InvalidEntity
 import muse.domain.session.UserSession
 import muse.server.graphql.subgraph.User
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import muse.utils.Utils
 import muse.utils.Utils.*
@@ -26,7 +25,8 @@ object CheckUserLikedSong {
     DataSource.Batched.make("CheckUserLikedSong") { req =>
       ZIO
         .foreachPar(req.toVector.grouped(MAX_PER_REQUEST).toVector) { batch =>
-            ZIO.service[SpotifyService]
+          ZIO
+            .service[SpotifyService]
             .flatMap(_.checkUserSavedTracks(batch.map(_.trackId)))
             .either.map(batch -> _)
         }.map { results =>

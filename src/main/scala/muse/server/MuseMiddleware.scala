@@ -1,28 +1,28 @@
 package muse.server
 
-import caliban.Value.StringValue
-import caliban.interop.tapir.{StreamTransformer, WebSocketHooks, WebSocketInterpreter}
 import caliban.*
+import caliban.Value.StringValue
 import caliban.interop.tapir.TapirAdapter.TapirResponse
+import caliban.interop.tapir.{StreamTransformer, WebSocketHooks, WebSocketInterpreter}
 import io.netty.handler.codec.http.HttpHeaderNames
 import muse.domain.common.Types.SessionId
-import muse.domain.error.{MuseError, Unauthorized}
+import muse.domain.error.MuseError
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
+import muse.service.UserSessionService
 import muse.service.cache.RedisService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService, SpotifyServiceLive}
-import muse.service.{RequestSession, UserSessionService}
 import muse.utils.Utils
 import nl.vroste.rezilience.Bulkhead
 import nl.vroste.rezilience.Bulkhead.{BulkheadError, BulkheadException, WrappedError}
 import sttp.client3.SttpBackend
-import sttp.tapir.model.ServerRequest
 import sttp.model.StatusCode
+import sttp.tapir.model.ServerRequest
 import zio.*
-import zio.http.Http.Route
 import zio.http.*
 import zio.http.Header.Authorization
+import zio.http.Http.Route
 import zio.redis.Redis
 import zio.stream.ZStream
 
@@ -48,7 +48,7 @@ object MuseMiddleware {
   def getSessionZioHttp(headers: Headers) = getSession(extractRequestAuth(headers))
     .mapBoth(
       {
-        case u: Unauthorized => u.response
+        case u: Unauthorized => Response.fromHttpError(HttpError.Unauthorized(u.message))
         case RateLimited     => Response.fromHttpError(HttpError.TooManyRequests("Too many concurrent requests"))
         case e: Throwable    => Response.fromHttpError(HttpError.InternalServerError(cause = Some(e)))
       },
@@ -82,7 +82,12 @@ object MuseMiddleware {
                                .filter(_.length == 2)
                                .find(_(0) == COOKIE_KEY).map(_(1))
                            }
-          maybeAuth      = request.header(sttp.model.HeaderNames.Authorization)
+          maybeAuth      = request.header(sttp.model.HeaderNames.Authorization).flatMap { value =>
+                             value.split(" ").toList match
+                               case "Bearer" :: token :: Nil => Some(token)
+                               case "bearer" :: token :: Nil => Some(token)
+                               case _                        => None
+                           }
           maybeSessionId = maybeCookie.orElse(maybeAuth)
           session       <- getSession(maybeSessionId)
         } yield session
@@ -107,22 +112,29 @@ object MuseMiddleware {
    */
 
   private case object RateLimited
+  private case class Unauthorized(message: String)
 
   private type GetSession = ZIO[UserSessionService, Throwable | RateLimited.type | Unauthorized, UserSession]
 
-  private def getSession(maybeSessionId: Option[String]): GetSession = for {
-    session       <- maybeSessionId match
-                       case None            => ZIO.fail(Unauthorized("Missing Session ID."))
-                       case Some(sessionId) =>
-                         UserSessionService
-                           .getUserSession(SessionId(sessionId))
-                           .tapErrorCause { c => ZIO.logErrorCause("Failed to get user session", c) }
-    isRateLimited <- UserSessionService
+  private def getSession(maybeSessionId: Option[String]): GetSession = {
+    val retrieveSession = maybeSessionId.fold(ZIO.fail(Unauthorized("Missing Session ID."))) { sessionId =>
+      UserSessionService
+        .getUserSession(SessionId(sessionId))
+        .someOrFail[UserSession, Throwable | Unauthorized](Unauthorized("Invalid Session ID."))
+        .tapErrorCause { c => ZIO.logErrorCause("Failed to get user session", c) }
+    }
+    
+    for {
+      session <- retrieveSession
+      _       <- ZIO
+                   .whenZIO[UserSessionService, Throwable | RateLimited.type] {
+                     UserSessionService
                        .isRateLimited(session.userId)
                        .tapErrorCause { c => ZIO.logErrorCause("Failed to check rate limit", c) }
-    _             <- {
-      ZIO.logError(s"Rate Limited ${session.userId}") *> ZIO.fail(RateLimited)
-    }.when(isRateLimited)
-  } yield session
+                   } {
+                     ZIO.logError(s"Rate Limited ${session.userId}") *> ZIO.fail(RateLimited)
+                   }
+    } yield session
+  }
 
 }

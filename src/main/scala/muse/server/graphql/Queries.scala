@@ -4,13 +4,11 @@ import caliban.schema.Annotations.GQLDefault
 import caliban.schema.Schema.stringSchema
 import muse.domain.common.EntityType
 import muse.domain.common.Types.UserId
-import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.PlaybackDevice
 import muse.server.graphql.Pagination.Default
 import muse.server.graphql.resolver.*
 import muse.server.graphql.subgraph.*
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import zio.ZIO

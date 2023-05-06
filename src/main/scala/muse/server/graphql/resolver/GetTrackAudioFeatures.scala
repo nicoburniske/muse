@@ -3,7 +3,6 @@ package muse.server.graphql.resolver
 import muse.domain.common.EntityType
 import muse.domain.error.InvalidEntity
 import muse.domain.spotify.AudioFeatures
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import muse.utils.Utils
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}

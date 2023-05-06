@@ -4,10 +4,9 @@ import muse.domain.common.EntityType
 import muse.domain.spotify
 import muse.server.graphql.Pagination
 import muse.server.graphql.subgraph.*
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
-import zio.query.ZQuery
 import zio.ZIO
+import zio.query.ZQuery
 
 object GetSearch {
 

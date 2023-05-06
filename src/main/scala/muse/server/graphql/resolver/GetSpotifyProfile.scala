@@ -2,7 +2,6 @@ package muse.server.graphql.resolver
 
 import muse.domain.common.Types.UserId
 import muse.server.graphql.subgraph.SpotifyProfile
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import zio.ZIO
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
@@ -16,7 +15,8 @@ object GetSpotifyProfile {
 
   val spotifyProfileDataSource: DataSource[Env, GetSpotifyProfile] =
     DataSource.fromFunctionZIO("SpotifyProfileDataSource") { req =>
-      ZIO.service[SpotifyService]
+      ZIO
+        .service[SpotifyService]
         .flatMap(_.getUserProfile(req.id))
         .map(SpotifyProfile.fromSpotify)
     }

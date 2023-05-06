@@ -6,14 +6,12 @@ import caliban.schema.ArgBuilder.auto.*
 import muse.domain.session.UserSession
 import muse.server.graphql.ElasticCursor
 import muse.server.graphql.subgraph.Review
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import zio.*
 import zio.query.*
 
 import java.sql.SQLException
-import java.util.Base64
-import java.util.UUID
+import java.util.{Base64, UUID}
 import scala.util.{Success, Try}
 
 /**

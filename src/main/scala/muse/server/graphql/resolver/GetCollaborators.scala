@@ -4,7 +4,6 @@ import muse.domain.session.UserSession
 import muse.domain.table
 import muse.domain.table.ReviewAccess
 import muse.server.graphql.subgraph.Collaborator
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.utils.Utils
 import zio.ZIO

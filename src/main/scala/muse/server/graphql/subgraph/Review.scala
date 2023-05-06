@@ -2,12 +2,11 @@ package muse.server.graphql.subgraph
 
 import caliban.schema.Schema
 import muse.domain.common.EntityType
-import muse.domain.error.{Forbidden, Unauthorized}
+import muse.domain.error.Forbidden
 import muse.domain.session.UserSession
 import muse.domain.table
 import muse.domain.table.AccessLevel
 import muse.server.graphql.resolver.*
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import zio.ZIO
@@ -29,10 +28,7 @@ final case class Review(
     collaborators: ZQuery[UserSession & DatabaseService, Throwable, List[Collaborator]]
 )
 
-case class Collaborator(
-    user: User,
-    accessLevel: AccessLevel,
-    review: ZQuery[GetReview.Env, Throwable, Review])
+case class Collaborator(user: User, accessLevel: AccessLevel, review: ZQuery[GetReview.Env, Throwable, Review])
 
 object Collaborator {
   def fromTable(r: table.ReviewAccess) = Collaborator(

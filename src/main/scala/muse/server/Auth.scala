@@ -5,12 +5,11 @@ import muse.domain.common.Types.{RefreshToken, SessionId, UserId}
 import muse.domain.session.UserSession
 import muse.domain.spotify.auth.AuthCodeFlowData
 import muse.domain.table.User
+import muse.service.UserSessionService
+import muse.service.cache.RedisService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
-import muse.service.{RequestSession, UserSessionService}
-import muse.service.cache.RedisService
 import sttp.client3.SttpBackend
-import zio.http.{Cookie, HttpError, Method, Scheme}
 import zio.http.*
 import zio.json.*
 import zio.{Cause, Chunk, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer, durationInt}
@@ -54,12 +53,10 @@ object Auth {
                 )
                 Response.redirect(redirectUrl).addCookie(cookie)
               }
-              // TODO: this seems a little weird. Revise.
-              // Success channel can be responses that are failures.
-              // Errors are only server errors.
-            }.catchSome { case r: Response => ZIO.succeed(r) }
+            }
               .tapErrorCause(cause => ZIO.logErrorCause("Failed to login user.", cause))
               .mapError {
+                case r: Response  => r
                 case t: Throwable => Response.fromHttpError(HttpError.InternalServerError("Failed to login user.", Some(t)))
               }
         }
@@ -74,19 +71,21 @@ object Auth {
           _       <- UserSessionService.deleteUserSession(session.sessionId)
           _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId}")
         } yield Response.ok
-      case Method.GET -> !! / "session" =>
-        for {
-          session <- ZIO.service[UserSession]
-        } yield Response.text(session.sessionId)
+      // Guaranteed to have a valid access token for next 60 min.
       case Method.GET -> !! / "token"   =>
-        // Guaranteed to have a valid access token for next 60 min.
         for {
           session     <- ZIO.service[UserSession]
-          accessToken <- UserSessionService.getFreshAccessToken(session.sessionId)
+          accessToken <- UserSessionService
+                           .getFreshAccessToken(session.sessionId)
+                           // This should never happen.
+                           .someOrFail(Response.fromHttpError(HttpError.Unauthorized("Invalid Session.")))
         } yield Response.text(accessToken)
     }
     .tapErrorCauseZIO { c => ZIO.logErrorCause(s"Failed to handle session request.", c) }
-    .mapError { t => Response.fromHttpError(HttpError.InternalServerError(cause = Some(t))) }
+    .mapError {
+      case r: Response  => r
+      case t: Throwable => Response.fromHttpError(HttpError.InternalServerError(cause = Some(t)))
+    }
 
   private val retrySchedule = Schedule.exponential(10.millis).jittered && Schedule.recurs(4)
 

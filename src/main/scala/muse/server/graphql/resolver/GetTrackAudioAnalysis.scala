@@ -2,12 +2,11 @@ package muse.server.graphql.resolver
 
 import muse.domain.spotify.AudioAnalysis
 import muse.server.graphql.subgraph.Playlist
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import muse.utils.Utils
+import zio.ZIO
 import zio.metrics.Metric
 import zio.query.{DataSource, Request, ZQuery}
-import zio.ZIO
 
 import java.time.temporal.ChronoUnit
 

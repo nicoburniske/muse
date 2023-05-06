@@ -87,8 +87,7 @@ final case class RedisServiceLive(redisRef: Reloadable[Redis], config: RateLimit
         -- So we only need the expire command once
         redis.call("PEXPIRE", currentKey, window * 2 + 1000) -- Enough time to overlap with a new window + 1 second
       end
-      return tokens - newValue
-    |""".stripMargin
+      return tokens - newValue|""".stripMargin
 
     import zio.redis.Input.*
     import zio.redis.Output.*

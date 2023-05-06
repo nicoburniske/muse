@@ -5,12 +5,12 @@ import muse.domain.session.UserSession
 import muse.domain.spotify.{PlaybackDevice, Track, PlaybackState as SpotPlaybackState}
 import muse.server.graphql.resolver.GetPlaylistTracks
 import muse.server.graphql.subgraph.{Comment, PlaybackState, PlaylistTrack, ReviewUpdate}
+import muse.service.UserSessionService
 import muse.service.event.ReviewUpdateService
 import muse.service.spotify.SpotifyService
-import muse.service.{RequestSession, UserSessionService}
 import muse.utils.Utils.*
-import zio.stream.{ZPipeline, ZStream}
 import zio.*
+import zio.stream.{ZPipeline, ZStream}
 
 import java.util.UUID
 

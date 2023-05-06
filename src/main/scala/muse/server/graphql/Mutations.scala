@@ -17,7 +17,6 @@ import muse.domain.spotify.{
 }
 import muse.domain.{spotify, table}
 import muse.server.graphql.subgraph.{Comment, Review}
-import muse.service.RequestSession
 import muse.service.event.ReviewUpdateService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyError, SpotifyService}
@@ -204,9 +203,7 @@ object Mutations {
     result <- DatabaseService.shareReview(s)
   } yield result
 
-  private def validateEntity(
-      entityId: String,
-      entityType: EntityType): ZIO[SpotifyService, Throwable | InvalidEntity, Unit] =
+  private def validateEntity(entityId: String, entityType: EntityType): ZIO[SpotifyService, Throwable | InvalidEntity, Unit] =
     ZIO.service[SpotifyService].flatMap(_.isValidEntity(entityId, entityType)).flatMap {
       case true  => ZIO.unit
       case false => ZIO.fail(InvalidEntity(entityId, entityType))

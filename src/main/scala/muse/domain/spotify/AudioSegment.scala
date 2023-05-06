@@ -1,7 +1,7 @@
 package muse.domain.spotify
 
-import zio.json.{DeriveJsonDecoder, JsonDecoder}
 import zio.json.ast.JsonCursor
+import zio.json.{DeriveJsonDecoder, JsonDecoder}
 
 final case class AudioSegment(
     start: Double,

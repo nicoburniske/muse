@@ -1,10 +1,8 @@
 package muse.server.graphql.resolver
 
 import muse.domain.common.Types.UserId
-import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.server.graphql.subgraph.{SpotifyProfile, User}
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import zio.ZIO
