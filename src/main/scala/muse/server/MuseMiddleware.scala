@@ -29,8 +29,30 @@ import zio.stream.ZStream
 import java.time.Instant
 
 object MuseMiddleware {
+//  RequestHandlerMiddleware.WithOut[
+//    R0 with R with Context,
+//    R,
+//    E,
+//    Any,
+//    ({type OutEnv[Env] = R0 with R})#OutEnv,
+//    ({type OutErr[Err] = Err})#OutErr,
+//  ]
 
-  val InjectSessionAndRateLimit = HttpAppMiddleware.customAuthProvidingZIO(
+  def InjectSessionAndRateLimit[R]:
+//    RequestHandlerMiddleware.WithOut[
+//    RedisService & UserSessionService & UserSession,
+//    RedisService & UserSessionService,
+//    Response,
+//    Any,
+//    RedisService & UserSessionService,
+//    Response,
+//  ]
+  RequestHandlerMiddleware.Contextual[
+    RedisService & UserSessionService & UserSession,
+    RedisService & UserSessionService & R,
+    Response,
+    Any,
+  ] = HttpAppMiddleware.customAuthProvidingZIO(
     getSessionZioHttp,
     Headers.empty,
     Status.Unauthorized
@@ -63,32 +85,56 @@ object MuseMiddleware {
       Some(_)
     )
 
-  def getSessionTapir = ZLayer.fromZIO {
-    {
-      for {
-        request       <- ZIO.service[ServerRequest]
-        maybeCookie    = request.cookies.flatMap(_.toOption).find(c => c.name == COOKIE_KEY).map(_.value)
-        maybeAuth      = request.headers.find(c => c.name == "Authorization").map(_.value)
-        maybeSessionId = maybeCookie.orElse(maybeAuth)
-        session       <- getSession(maybeSessionId)
-      } yield session
-    }.mapError {
-      case u: Unauthorized => TapirResponse(StatusCode.Unauthorized, u.message)
-      case RateLimited     => TapirResponse(StatusCode.TooManyRequests)
-      case e: Throwable    => TapirResponse(StatusCode.InternalServerError, e.getMessage)
-    }
-  }
+  /**
+   * Caliban / Tapir related middleware
+   */
 
-  def getSessionAndSpotifyTapir[R: Tag]: ZLayer[
-    RedisService with UserSessionService with ServerRequest with SttpBackend[Task, Any] with Ref[Option[Long]] with R,
-    TapirResponse,
-    UserSession with SpotifyService with R] =
-    getSessionTapir ++ (getSessionTapir >>> ZLayer.fromZIO {
-      for {
-        session <- ZIO.service[UserSession]
-        spotify <- SpotifyService.live(session.accessToken)
-      } yield spotify
-    }) ++ ZLayer.fromZIOEnvironment(ZIO.environment[R])
+  val getSessionTapir: ZLayer[RedisService with UserSessionService with ServerRequest, TapirResponse, UserSession] =
+    ZLayer.fromZIO {
+      {
+        for {
+          request       <- ZIO.service[ServerRequest]
+          maybeCookie    = request.cookies.flatMap(_.toOption).find(c => c.name == COOKIE_KEY).map(_.value)
+          maybeAuth      = request.headers.find(c => c.name == "Authorization").map(_.value)
+          maybeSessionId = maybeCookie.orElse(maybeAuth)
+          session       <- getSession(maybeSessionId)
+        } yield session
+      }.mapError {
+        case u: Unauthorized => TapirResponse(StatusCode.Unauthorized, u.message)
+        case RateLimited     => TapirResponse(StatusCode.TooManyRequests)
+        case e: Throwable    => TapirResponse(StatusCode.InternalServerError, e.getMessage)
+      }
+    }
+
+//  /**
+//   * Provide UserSession and SpotifyService to GraphQL Interpreter.
+//   */
+//  def getSessionAndSpotifyTapir[R](makeSpotify: String => SpotifyService) = {
+//    ZLayer.fromZIOEnvironment(ZIO.environment[R]) ++
+//      getSessionTapir ++ {
+//        getSessionTapir >>> ZLayer.fromZIO {
+//          ZIO.service[UserSession].map(session => makeSpotify(session.accessToken))
+//        }
+//      }
+//  }
+
+  /**
+   * Provide UserSession and SpotifyService to GraphQL Interpreter.
+   */
+//  def getSessionAndSpotifyTapir[R] = {
+//    ZLayer.environment[R] ++
+//      getSessionTapir >+> ZLayer.fromZIO {
+//        ZIO.serviceWithZIO[UserSession](session => SpotifyService.live(session.accessToken))
+//      }
+//  }
+
+  def getSessionAndSpotifyTapir[R] = ZLayer.makeSome[
+    R with UserSessionService with RedisService with ServerRequest with SpotifyService.Env,
+    R with UserSession with SpotifyService
+  ](
+    getSessionTapir,
+    ZLayer.fromZIO(ZIO.serviceWithZIO[UserSession](session => SpotifyService.live(session.accessToken)))
+  )
 
   private def extractRequestAuth(headers: Headers) = {
     val cookie = headers.header(Header.Cookie).flatMap { c => c.value.find { c => c.name == COOKIE_KEY }.map(_.content) }

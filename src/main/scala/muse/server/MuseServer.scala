@@ -44,7 +44,7 @@ object MuseServer {
     case (rest, websocket) =>
       val protectedRest =
         ((rest ++ Auth.sessionEndpoints)
-          @@ MuseMiddleware.InjectSessionAndRateLimit
+          @@ MuseMiddleware.InjectSessionAndRateLimit[MuseGraphQL.ServiceEnv & SpotifyService.Env]
           @@ RequestHandlerMiddlewares.beautifyErrors)
           .mapError {
             case RateLimited     => RateLimited.response
@@ -58,25 +58,27 @@ object MuseServer {
     import sttp.tapir.json.zio.*
     for {
       interpreter <- MuseGraphQL.interpreter
-    } yield (
+    } yield {
+      val interceptor = MuseMiddleware.getSessionAndSpotifyTapir[MuseGraphQL.ServiceEnv]
+
       Http.collectHttp[Request] {
         case _ -> !! / "api" / "graphql" =>
           ZHttpAdapter
             .makeHttpService(
               HttpInterpreter(interpreter)
                 .configure(Configurator.setQueryExecution(QueryExecution.Batched))
-                .intercept(MuseMiddleware.getSessionAndSpotifyTapir[DatabaseService & UserSessionService & ReviewUpdateService & Scope])
+                .intercept(interceptor)
             )
-      },
-      Http.collectHttp[Request] {
-        case _ -> !! / "ws" / "graphql" =>
-          ZHttpAdapter.makeWebSocketService(
-            WebSocketInterpreter(
-              interpreter
-            ).intercept(MuseMiddleware.getSessionAndSpotifyTapir[DatabaseService & UserSessionService & ReviewUpdateService & Scope])
-          )
-      }
-    )
+      } ->
+        Http.collectHttp[Request] {
+          case _ -> !! / "ws" / "graphql" =>
+            ZHttpAdapter.makeWebSocketService(
+              WebSocketInterpreter(interpreter)
+                .intercept(interceptor)
+            )
+        }
+
+    }
   }
 
   val getCorsConfig = {

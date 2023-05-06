@@ -36,8 +36,12 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  type Env = UserSession & SpotifyService & DatabaseService & ReviewUpdateService & Scope
-//  type Env = UserSession & SpotifyService & DatabaseService & UserSessionService & ReviewUpdateService & Scope & Ref[Option[Long]] & RedisService & SttpBackend[Task, Any]
+
+  type Env = SessionEnv & ServiceEnv
+  // To be provided by GraphQL Interceptor.
+  type SessionEnv = UserSession & SpotifyService
+  // Global Services.
+  type ServiceEnv = DatabaseService & ReviewUpdateService & Scope
   
 
   given Schema[Env, spotify.PlaybackDevice]  = Schema.gen

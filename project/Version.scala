@@ -11,6 +11,7 @@ object Version {
   val zioHttp    = "3.0.0-RC1"
   val zioRedis   = "0.2.0+9-266abfb3-SNAPSHOT"
   val zioSchema  = "0.4.10"
+  val zioQuery   = "0.4.0"
 
   val rezilience = "0.9.3"
   val zcaffiene  = "1.0.0-M2"

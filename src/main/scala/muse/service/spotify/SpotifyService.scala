@@ -59,9 +59,9 @@ trait SpotifyService {
 }
 
 object SpotifyService {
-  
-  type Env = SttpBackend[Task, Any] & RedisService  & Ref[Option[Long]] 
 
+  type Env = SttpBackend[Task, Any] & RedisService & Ref[Option[Long]]
+  
   def live(accessToken: String) = for {
     backend    <- ZIO.service[SttpBackend[Task, Any]]
     // RetryAfter time in seconds.
@@ -70,6 +70,9 @@ object SpotifyService {
     spotify     = SpotifyAPI(backend, asLibRef, accessToken)
     redis      <- ZIO.service[RedisService]
   } yield SpotifyServiceLive(spotify, redis)
+
+//  def live(accessToken: String, retryAfterRef: Ref[Option[Long]], backend: SttpBackend[Task, Any], redis: RedisService) =
+//    SpotifyServiceLive(SpotifyAPI(backend, Givens.zioRef(retryAfterRef), accessToken), redis)
 
   def getCurrentUserProfile = ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserProfile)
 

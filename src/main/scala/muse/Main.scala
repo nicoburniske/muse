@@ -30,6 +30,7 @@ object Main extends ZIOAppDefault {
   override def run = MuseServer
     .live
     .provide(
+//      ZLayer.succeed(()).asInstanceOf[ZLayer[Any, Nothing, Nothing]],
       ZLayer.Debug.mermaid,
       Scope.default,
       AsyncHttpClientZioBackend.layer(),
