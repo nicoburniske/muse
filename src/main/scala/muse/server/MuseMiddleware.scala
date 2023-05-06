@@ -93,6 +93,7 @@ object MuseMiddleware {
       }
     }
 
+  // TODO: This will fail after an hour when the access token expires. Make it reloadable?
   def getSessionAndSpotifyTapir[R] = ZLayer.makeSome[
     R with UserSessionService with SpotifyService.Env with ServerRequest,
     R with UserSession with SpotifyService
@@ -100,7 +101,6 @@ object MuseMiddleware {
     getSessionTapir,
     ZLayer.fromZIO(ZIO.serviceWithZIO[UserSession](session => SpotifyService.live(session.accessToken)))
   )
-
 
   /**
    * Implementation.

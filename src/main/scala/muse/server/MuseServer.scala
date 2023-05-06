@@ -39,14 +39,13 @@ object MuseServer {
   } yield ()
 
   def makeEndpoints = for {
-    cors             <- getCorsConfig
-    gql              <- endpointsGraphQL
-    (rest, websocket) = gql
+    cors <- getCorsConfig
+    gql  <- endpointsGraphQL
   } yield {
     val middleware       = MuseMiddleware.InjectSessionAndRateLimit[MuseGraphQL.ServiceEnv & SpotifyService.Env]
     val protectedZioHttp = Auth.sessionEndpoints @@ middleware
 
-    (rest ++ websocket ++ protectedZioHttp ++ Auth.loginEndpoints) @@ cors @@ metrics()
+    (gql ++ protectedZioHttp ++ Auth.loginEndpoints) @@ cors @@ metrics()
   }
 
   val endpointsGraphQL = {
@@ -64,15 +63,13 @@ object MuseServer {
                 .configure(Configurator.setQueryExecution(QueryExecution.Batched))
                 .intercept(interceptor)
             ).mapError { case t: Throwable => Response.fromHttpError(HttpError.InternalServerError(cause = Some(t))) }
-      } ->
-        Http.collectHttp[Request] {
-          case _ -> !! / "ws" / "graphql" =>
-            ZHttpAdapter.makeWebSocketService(
-              WebSocketInterpreter(interpreter)
-                .intercept(interceptor)
-            )
-        }
 
+        case _ -> !! / "ws" / "graphql" =>
+          ZHttpAdapter.makeWebSocketService(
+            WebSocketInterpreter(interpreter)
+              .intercept(interceptor)
+          )
+      }
     }
   }
 

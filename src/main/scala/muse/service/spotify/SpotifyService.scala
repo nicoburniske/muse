@@ -71,9 +71,6 @@ object SpotifyService {
     redis      <- ZIO.service[RedisService]
   } yield SpotifyServiceLive(spotify, redis)
 
-//  def live(accessToken: String, retryAfterRef: Ref[Option[Long]], backend: SttpBackend[Task, Any], redis: RedisService) =
-//    SpotifyServiceLive(SpotifyAPI(backend, Givens.zioRef(retryAfterRef), accessToken), redis)
-
   def getCurrentUserProfile = ZIO.serviceWithZIO[SpotifyService](_.getCurrentUserProfile)
 
   def search(query: String, entityTypes: Set[EntityType], limit: Int = 50, offset: Option[Int] = None) =
