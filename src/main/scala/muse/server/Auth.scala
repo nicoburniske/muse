@@ -37,7 +37,8 @@ object Auth {
             {
               for {
                 redirect     <- getRedirectFromState(state)
-                redirectUrl  <- ZIO.fromEither(URL.decode(redirect)).orDieWith(e => new Exception("Failed to decode redirect url.", e))
+                redirectUrl  <-
+                  ZIO.fromEither(URL.decode(redirect)).orDieWith(e => new Exception("Failed to decode redirect url.", e))
                 newSessionId <- handleUserLogin(code)
                 config       <- ZIO.service[ServerConfig]
                 _            <- ZIO.logInfo(s"Successfully added session.")
@@ -65,24 +66,27 @@ object Auth {
     }
 
   // @@ csrfGenerate() // TODO: get this working?
-  val sessionEndpoints = Http.collectZIO[Request] {
-    case Method.POST -> !! / "logout" =>
-      for {
-        session <- ZIO.service[UserSession]
-        _       <- UserSessionService.deleteUserSession(session.sessionId)
-        _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId}")
-      } yield Response.ok
-    case Method.GET -> !! / "session" =>
-      for {
-        session <- ZIO.service[UserSession]
-      } yield Response.text(session.sessionId)
-    case Method.GET -> !! / "token"   =>
-      // Guaranteed to have a valid access token for next 60 min.
-      for {
-        session     <- ZIO.service[UserSession]
-        accessToken <- UserSessionService.getFreshAccessToken(session.sessionId)
-      } yield Response.text(accessToken)
-  }
+  val sessionEndpoints = Http
+    .collectZIO[Request] {
+      case Method.POST -> !! / "logout" =>
+        for {
+          session <- ZIO.service[UserSession]
+          _       <- UserSessionService.deleteUserSession(session.sessionId)
+          _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId}")
+        } yield Response.ok
+      case Method.GET -> !! / "session" =>
+        for {
+          session <- ZIO.service[UserSession]
+        } yield Response.text(session.sessionId)
+      case Method.GET -> !! / "token"   =>
+        // Guaranteed to have a valid access token for next 60 min.
+        for {
+          session     <- ZIO.service[UserSession]
+          accessToken <- UserSessionService.getFreshAccessToken(session.sessionId)
+        } yield Response.text(accessToken)
+    }
+    .tapErrorCauseZIO { c => ZIO.logErrorCause(s"Failed to handle session request.", c) }
+    .mapError { t => Response.fromHttpError(HttpError.InternalServerError(cause = Some(t))) }
 
   private val retrySchedule = Schedule.exponential(10.millis).jittered && Schedule.recurs(4)
 

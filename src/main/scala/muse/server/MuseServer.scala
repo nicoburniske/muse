@@ -7,7 +7,7 @@ import caliban.interop.tapir.HttpInterpreter
 import com.stuart.zcaffeine.Cache
 import io.netty.handler.codec.http.HttpHeaderNames
 import muse.config.{AppConfig, ServerConfig, SpotifyConfig, SpotifyServiceConfig}
-import muse.domain.error.{RateLimited, Unauthorized}
+import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify
 import muse.server.MuseMiddleware
@@ -33,25 +33,20 @@ val COOKIE_KEY = "XSESSION"
 
 object MuseServer {
   val live = for {
-    _                  <- MigrationService.runMigrations
-    protectedEndpoints <- createProtectedEndpoints
-    cors               <- getCorsConfig
-    allEndpoints        = (Auth.loginEndpoints ++ protectedEndpoints) @@ cors @@ metrics()
-    _                  <- Server.serve(allEndpoints) <&> metricsServer
+    _            <- MigrationService.runMigrations
+    allEndpoints <- makeEndpoints
+    _            <- Server.serve(allEndpoints) <&> metricsServer
   } yield ()
 
-  def createProtectedEndpoints = endpointsGraphQL.map {
-    case (rest, websocket) =>
-      val protectedRest =
-        ((rest ++ Auth.sessionEndpoints)
-          @@ MuseMiddleware.InjectSessionAndRateLimit[MuseGraphQL.ServiceEnv & SpotifyService.Env]
-          @@ RequestHandlerMiddlewares.beautifyErrors)
-          .mapError {
-            case RateLimited     => RateLimited.response
-            case u: Unauthorized => u.response
-            case t: Throwable    => Response.fromHttpError(HttpError.InternalServerError(cause = Some(t)))
-          }
-      protectedRest ++ websocket
+  def makeEndpoints = for {
+    cors             <- getCorsConfig
+    gql              <- endpointsGraphQL
+    (rest, websocket) = gql
+  } yield {
+    val middleware       = MuseMiddleware.InjectSessionAndRateLimit[MuseGraphQL.ServiceEnv & SpotifyService.Env]
+    val protectedZioHttp = Auth.sessionEndpoints @@ middleware
+
+    (rest ++ websocket ++ protectedZioHttp ++ Auth.loginEndpoints) @@ cors @@ metrics()
   }
 
   val endpointsGraphQL = {
@@ -68,7 +63,7 @@ object MuseServer {
               HttpInterpreter(interpreter)
                 .configure(Configurator.setQueryExecution(QueryExecution.Batched))
                 .intercept(interceptor)
-            )
+            ).mapError { case t: Throwable => Response.fromHttpError(HttpError.InternalServerError(cause = Some(t))) }
       } ->
         Http.collectHttp[Request] {
           case _ -> !! / "ws" / "graphql" =>

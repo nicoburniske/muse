@@ -32,11 +32,6 @@ object SpotifyAuthService {
 
 case class SpotifyAuthLive(config: SpotifyConfig, client: Client) extends SpotifyAuthService {
 
-  val TOKEN_ENDPOINT = URL(
-    Path.decode("/api/token"),
-    URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
-  )
-
   val layer = ZLayer.succeed(client)
 
   override def getClientCredentials = (for {
@@ -85,12 +80,18 @@ case class SpotifyAuthLive(config: SpotifyConfig, client: Client) extends Spotif
         ZIO.fail(_)
       ).mapError(SpotifyAuthError(status, _))
 
+  private val TOKEN_ENDPOINT   = URL(
+    Path.decode("/api/token"),
+    URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
+  )
+  private val ENDPOINT_ENCODED = TOKEN_ENDPOINT.encode
+
   private def executePost(body: Map[String, String]) = {
     val headers = Headers(
       Header.Authorization.Basic(config.clientID, config.clientSecret),
       Header.ContentType(MediaType.application.`x-www-form-urlencoded`)
     )
-    Client.request(TOKEN_ENDPOINT.encode, Method.POST, headers, Body.fromString(encodeFormBody(body)))
+    Client.request(ENDPOINT_ENCODED, Method.POST, headers, Body.fromString(encodeFormBody(body)))
   }
 
   // TODO: add to ZIO-HTTP

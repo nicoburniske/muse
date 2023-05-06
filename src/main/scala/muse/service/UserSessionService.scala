@@ -26,6 +26,7 @@ trait UserSessionService {
   def getFreshAccessToken(sessionId: SessionId): IO[Throwable, AccessToken]
   def deleteUserSession(sessionId: SessionId): IO[Throwable, Boolean]
   def refreshUserSession(sessionId: SessionId): IO[Throwable, UserSession]
+  def isRateLimited(userId: UserId): IO[Throwable, Boolean]
 }
 
 object UserSessionService {
@@ -41,7 +42,9 @@ object UserSessionService {
   }
 
   def retrieveSession(sessionId: SessionId) = {
-    val retrySchedule = Schedule.recurs(4) && Schedule.exponential(50.millis).jittered && Schedule.recurWhile {
+    val retry = Schedule.recurs(4) && Schedule.exponential(50.millis).jittered
+
+    val retrySpotify = retry && Schedule.recurWhile {
       case SpotifyAuthError(status, _) if status.isServerError => true
       case _                                                   => false
     }
@@ -51,16 +54,17 @@ object UserSessionService {
       session      <- ZIO.fromOption(maybeSession).orElseFail(Unauthorized(s"Invalid User Session."))
       authInfo     <- SpotifyAuthService
                         .requestNewAccessToken(session.refreshToken)
-                        .retry(retrySchedule)
+                        .retry(retrySpotify)
     } yield UserSession(SessionId(sessionId), UserId(session.userId), AccessToken(authInfo.accessToken))
 
-    execute.retry(retrySchedule)
+    execute.retry(retry)
   }
 
   def getUserSession(sessionId: SessionId)      = ZIO.serviceWithZIO[UserSessionService](_.getUserSession(sessionId))
   def getFreshAccessToken(sessionId: SessionId) = ZIO.serviceWithZIO[UserSessionService](_.getFreshAccessToken(sessionId))
   def deleteUserSession(sessionId: SessionId)   = ZIO.serviceWithZIO[UserSessionService](_.deleteUserSession(sessionId))
   def refreshUserSession(sessionId: SessionId)  = ZIO.serviceWithZIO[UserSessionService](_.refreshUserSession(sessionId))
+  def isRateLimited(userId: UserId)             = ZIO.serviceWithZIO[UserSessionService](_.isRateLimited(userId))
 }
 
 final case class UserSessionsLive(
@@ -87,4 +91,7 @@ final case class UserSessionsLive(
     _       <- redisService.delete(sessionId).retry(Schedule.recurs(2))
     deleted <- databaseService.deleteUserSession(sessionId).retry(Schedule.recurs(2))
   } yield deleted
+
+  override def isRateLimited(userId: UserId) = redisService
+    .rateLimited(userId).retry(Schedule.recurs(3) && Schedule.spaced(15.millis).jittered)
 }
