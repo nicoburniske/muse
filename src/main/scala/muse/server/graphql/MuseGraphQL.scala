@@ -238,7 +238,7 @@ object MuseGraphQL {
   val api = caliban.graphQL[Env, Queries, Mutations, Subscriptions](
     RootResolver(Queries.live, Mutations.live, Subscriptions.live)) @@ printErrors @@ apolloTracing
 
-  val interpreter: ZIO[Any, ValidationError, GraphQLInterpreter[Env, CalibanError]] = api.interpreter.map(errorHandler)
+  val interpreter = api.interpreter.map(errorHandler)
 
   // TODO: Consider handling Spotify 404 error.
   private def errorHandler[R](
