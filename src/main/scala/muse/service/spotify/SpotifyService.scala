@@ -1,6 +1,5 @@
 package muse.service.spotify
 
-import com.stuart.zcaffeine
 import muse.config.SpotifyConfig
 import muse.domain.common.EntityType
 import muse.domain.common.Types.UserId

@@ -13,9 +13,6 @@ object Version {
   val zioSchema  = "0.4.10"
   val zioQuery   = "0.4.0"
 
-  val rezilience = "0.9.3"
-  val zcaffiene  = "1.0.0-M2"
-
   val protoQuill = "4.6.0.1"
   val postgresql = "42.5.4"
   val flyway     = "9.16.0"

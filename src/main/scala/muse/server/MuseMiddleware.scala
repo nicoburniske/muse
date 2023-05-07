@@ -14,8 +14,6 @@ import muse.service.cache.RedisService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService, SpotifyServiceLive}
 import muse.utils.Utils
-import nl.vroste.rezilience.Bulkhead
-import nl.vroste.rezilience.Bulkhead.{BulkheadError, BulkheadException, WrappedError}
 import sttp.client3.SttpBackend
 import sttp.model.StatusCode
 import sttp.tapir.model.ServerRequest

@@ -2,7 +2,6 @@ package muse.domain.session
 
 import muse.domain.common.Types.{AccessToken, SessionId, UserId}
 import muse.service.spotify.SpotifyService
-import nl.vroste.rezilience.Bulkhead
 
 import java.time.Instant
 

@@ -41,8 +41,6 @@ lazy val root = (project in file("."))
       "dev.zio"                       %% "zio-redis"                     % Version.zioRedis,
       "dev.zio"                       %% "zio-metrics-prometheus"        % Version.zioMetrics,
       "dev.zio"                       %% "zio-metrics-connectors"        % Version.zioMetrics,
-      "com.stuart"                    %% "zcaffeine"                     % Version.zcaffiene,
-      "nl.vroste"                     %% "rezilience"                    % Version.rezilience,
       // ZIO Config.
       "dev.zio"                       %% "zio-config"                    % Version.zioConfig,
       "dev.zio"                       %% "zio-config-magnolia"           % Version.zioConfig,

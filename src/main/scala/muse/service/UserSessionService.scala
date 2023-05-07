@@ -7,7 +7,6 @@ import muse.service.cache.RedisService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import muse.utils.Utils
-import nl.vroste.rezilience.Bulkhead
 import sttp.client3.SttpBackend
 import zio.*
 import zio.cache.{Cache, Lookup}

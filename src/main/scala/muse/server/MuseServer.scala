@@ -3,7 +3,6 @@ package muse.server
 import caliban.*
 import caliban.execution.QueryExecution
 import caliban.interop.tapir.{HttpInterpreter, WebSocketInterpreter}
-import com.stuart.zcaffeine.Cache
 import io.netty.handler.codec.http.HttpHeaderNames
 import muse.config.{AppConfig, ServerConfig, SpotifyConfig, SpotifyServiceConfig}
 import muse.domain.session.UserSession

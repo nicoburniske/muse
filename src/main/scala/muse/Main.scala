@@ -12,7 +12,7 @@ import muse.service.UserSessionService
 import muse.service.cache.RedisService
 import muse.service.event.{EventService, ReviewUpdateService}
 import muse.service.persist.{DatabaseService, MigrationService, QuillContext}
-import muse.service.spotify.{RateLimitRef, SpotifyAuthService, SpotifyCache}
+import muse.service.spotify.{RateLimitRef, SpotifyAuthService}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.Duration.*
@@ -29,7 +29,6 @@ object Main extends ZIOAppDefault {
   override def run = MuseServer
     .live
     .provide(
-//      ZLayer.succeed(()).asInstanceOf[ZLayer[Any, Nothing, Nothing]],
       ZLayer.Debug.mermaid,
       Scope.default,
       AsyncHttpClientZioBackend.layer(),
