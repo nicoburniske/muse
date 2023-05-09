@@ -2,6 +2,7 @@ package muse.server.graphql
 
 import muse.domain.event.{CreatedComment, DeletedComment, UpdatedComment}
 import muse.domain.session.UserSession
+import muse.server.graphql.Helpers.getSpotify
 import muse.domain.spotify.{PlaybackDevice, Track, PlaybackState as SpotPlaybackState}
 import muse.server.graphql.resolver.GetPlaylistTracks
 import muse.server.graphql.subgraph.{Comment, PlaybackState, PlaylistTrack, ReviewUpdate}
@@ -24,7 +25,7 @@ case class NowPlayingInput(tickInterval: Int)
 case class ReviewUpdatesInput(reviewIds: Set[UUID])
 
 object Subscriptions {
-  type Env = ReviewUpdateService & SpotifyService & UserSession
+  type Env = ReviewUpdateService & Reloadable[SpotifyService] & Reloadable[UserSession]
   val live: Subscriptions = Subscriptions(
     a => playbackState(a.tickInterval),
     availableDevices,
@@ -82,7 +83,7 @@ object Subscriptions {
     case DeletedComment(reviewId, commentId)             =>
       ReviewUpdate.DeletedComment(reviewId, commentId)
 
-  private def getSpotifyPipeline = ZPipeline.mapZIO(_ => ZIO.service[SpotifyService])
+  private def getSpotifyPipeline = ZPipeline.mapZIO(_ => getSpotify)
 
   private def flattenOption[T] =
     ZPipeline.filter[Option[T]](_.isDefined) >>>

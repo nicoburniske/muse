@@ -13,7 +13,7 @@ final case class PlaylistTrack(
     addedBy: User,
     isLocal: Boolean,
     track: Track,
-    playlist: ZQuery[SpotifyService, Nothing, Playlist]
+    playlist: ZQuery[GetPlaylist.Env, Nothing, Playlist]
 )
 
 object PlaylistTrack {

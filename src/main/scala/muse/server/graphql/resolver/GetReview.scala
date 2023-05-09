@@ -1,10 +1,11 @@
 package muse.server.graphql.resolver
 
 import muse.domain.session.UserSession
+import muse.server.graphql.Helpers.getUserId
 import muse.server.graphql.subgraph.Review
 import muse.service.persist.DatabaseService
 import muse.utils.Utils
-import zio.ZIO
+import zio.{Reloadable, ZIO}
 import zio.query.{DataSource, Request, ZQuery}
 
 import java.sql.SQLException
@@ -14,7 +15,7 @@ import java.util.UUID
 case class GetReview(reviewId: UUID) extends Request[SQLException, Option[Review]]
 
 object GetReview {
-  type Env = DatabaseService & UserSession
+  type Env = DatabaseService & Reloadable[UserSession]
   val MAX_REVIEWS_PER_REQUEST = 100
 
   def query(reviewId: UUID)             = ZQuery.fromRequest(GetReview(reviewId))(ReviewDataSource)
@@ -29,17 +30,17 @@ object GetReview {
         MAX_REVIEWS_PER_REQUEST,
         req =>
           for {
-            session <- ZIO.service[UserSession]
-            review  <- DatabaseService
-                         .getReviewWithPermissions(req.reviewId, session.userId)
+            userId <- getUserId
+            review <- DatabaseService
+                        .getReviewWithPermissions(req.reviewId, userId)
           } yield review,
         // We are wrapping in 'Some' because single request returns 'Option' and batched request returns 'List'
         reqs =>
           for {
-            session <- ZIO.service[UserSession]
+            userId  <- getUserId
             reviews <-
               DatabaseService
-                .getReviewsWithPermissions(reqs.map(_.reviewId).toList, session.userId)
+                .getReviewsWithPermissions(reqs.map(_.reviewId).toList, userId)
           } yield reviews.map { Some(_) }.toVector,
         maybeReview => maybeReview.map(Review.fromTable),
         _.reviewId.toString,

@@ -2,16 +2,17 @@ package muse.server.graphql.resolver
 
 import caliban.schema.Schema
 import muse.domain.common.Types.UserId
+import muse.server.graphql.Helpers.getSpotify
 import muse.server.graphql.Pagination
 import muse.server.graphql.subgraph.Playlist
 import muse.service.spotify.SpotifyService
-import zio.ZIO
+import zio.{Reloadable, ZIO}
 import zio.query.ZQuery
 
 final case class UserPlaylistsInput(pagination: Option[Pagination])
 
 object GetUserPlaylists:
-  type Env = SpotifyService
+  type Env = Reloadable[SpotifyService]
   def boxedQuery(userId: UserId)(input: UserPlaylistsInput): ZQuery[Env, Throwable, List[Playlist]] =
     query(userId)(input.pagination)
 
@@ -20,7 +21,7 @@ object GetUserPlaylists:
   }
 
   def userPlaylistsZIO(userId: UserId, p: Option[Pagination]) = for {
-    spotify  <- ZIO.service[SpotifyService]
+    spotify  <- getSpotify
     indices  <- getUserPlaylistIndices(userId, p)
     results  <- ZIO.foreachPar(indices)(index => spotify.getUserPlaylists(userId, 50, Some(index)))
     playlists = results.flatMap(_.items).toList
@@ -31,7 +32,7 @@ object GetUserPlaylists:
       ZIO.succeed(getIndicesPagination(p))
     case None    =>
       for {
-        spotify <- ZIO.service[SpotifyService]
+        spotify <- getSpotify
         total   <- spotify.getUserPlaylists(userId, 1).map(_.total)
       } yield (0 until total).grouped(50).map(_.start).toVector
 

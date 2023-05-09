@@ -40,9 +40,9 @@ final case class Queries(
     comment: CommentInput => ZQuery[GetComment.Env, Throwable, Option[Comment]],
     comments: CommentsInput => ZQuery[GetComment.Env, Throwable, List[Comment]],
     //    search: SearchArgs => ZQuery[SpotifyService, Throwable, SearchResult],
-    getPlaylist: SpotifyEntityInput => ZQuery[SpotifyService, Throwable, Playlist],
-    getAlbum: SpotifyEntityInput => ZQuery[SpotifyService, Throwable, Album],
-    getTrack: SpotifyEntityInput => ZQuery[SpotifyService, Throwable, Track]
+    getPlaylist: SpotifyEntityInput => ZQuery[GetPlaylist.Env, Throwable, Playlist],
+    getAlbum: SpotifyEntityInput => ZQuery[GetAlbum.Env, Throwable, Album],
+    getTrack: SpotifyEntityInput => ZQuery[GetTrack.Env, Throwable, Track]
 )
 
 object Queries {

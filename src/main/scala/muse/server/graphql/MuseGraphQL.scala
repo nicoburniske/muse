@@ -39,9 +39,10 @@ object MuseGraphQL {
 
   type Env        = SessionEnv & ServiceEnv
   // To be provided by GraphQL Interceptor.
-  type SessionEnv = UserSession & SpotifyService
+  type SessionEnv = Reloadable[UserSession] & Reloadable[SpotifyService]
   // Global Services.
-  type ServiceEnv = DatabaseService & ReviewUpdateService 
+  type ServiceEnv = DatabaseService & ReviewUpdateService
+  
 
   given Schema[Env, spotify.PlaybackDevice]  = Schema.gen
   given Schema[Env, spotify.ExternalIds]     = Schema.gen

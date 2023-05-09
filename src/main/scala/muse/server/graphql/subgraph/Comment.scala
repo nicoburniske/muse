@@ -22,7 +22,7 @@ final case class Comment(
     childCommentIds: List[Long],
     commenter: User,
     comment: Option[String],
-    entities: ZQuery[SpotifyService, Throwable, List[ReviewEntity]],
+    entities: ZQuery[GetEntity.Env, Throwable, List[ReviewEntity]],
     parentComment: ZQuery[GetComment.Env, Throwable, Option[Comment]],
     childComments: ZQuery[GetComment.Env, Throwable, List[Comment]],
     allChildComments: ZQuery[GetComment.Env, Throwable, List[Comment]]

@@ -5,13 +5,15 @@ import muse.domain.session.UserSession
 import muse.server.graphql.subgraph.{SpotifyProfile, User}
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
-import zio.ZIO
+import muse.server.graphql.Helpers.*
+import zio.{Reloadable, ZIO}
 import zio.query.{DataSource, Request, ZQuery}
 
 case class GetUser(id: UserId) extends Request[Nothing, User]
 
 object GetUser {
-  type Env = UserSession & DatabaseService
+  type Env = Reloadable[UserSession] & DatabaseService
+
   def query(maybeId: Option[UserId]) = maybeId match
     case None     => currentUser
     case Some(id) => ZQuery.succeed(queryByUserId(id))
@@ -20,17 +22,17 @@ object GetUser {
     User(userId, GetUserReviews.query(userId), GetSpotifyProfile.query(userId), GetUserPlaylists.boxedQuery(userId))
 
   def currentUser = for {
-    userId <- ZQuery.fromZIO(ZIO.service[UserSession]).map(_.userId)
+    userId <- ZQuery.fromZIO(getUserId)
   } yield User(userId, GetUserReviews.query(userId, All), GetSpotifyProfile.query(userId), GetUserPlaylists.boxedQuery(userId))
 
   // TODO: This needs to be revised.
   // Incorporate a limit of how many users can be returned.
 
-  type SearchEnv = SpotifyService with DatabaseService
+  type SearchEnv = Reloadable[SpotifyService] with DatabaseService
 
   def fromDisplayName(search: String) = ZQuery.fromZIO {
     for {
-      spotify        <- ZIO.service[SpotifyService]
+      spotify        <- getSpotify
       allUserIds     <- DatabaseService.getUsers.map(_.map(_.userId))
       profiles       <- ZIO.foreachPar(allUserIds)(spotify.getUserProfile)
       lowercaseSearch = search.toLowerCase()

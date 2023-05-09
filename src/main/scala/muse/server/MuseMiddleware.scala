@@ -43,7 +43,7 @@ object MuseMiddleware {
     Status.Unauthorized
   )
 
-  def getSessionZioHttp(headers: Headers) = getSession(extractRequestAuth(headers))
+  private def getSessionZioHttp(headers: Headers) = getSession(extractRequestAuth(headers))
     .mapBoth(
       {
         case u: Unauthorized => Response.fromHttpError(HttpError.Unauthorized(u.message))
@@ -61,6 +61,14 @@ object MuseMiddleware {
       case _                           => None
     }
     cookie.orElse(token)
+  }
+
+  def isValidSession(header: Headers) = {
+    extractRequestAuth(header).fold(ZIO.succeed(false)) { sessionId =>
+      UserSessionService
+        .getUserSession(SessionId(sessionId))
+        .fold(_ => false, _ => true)
+    }
   }
 
   /**
@@ -95,13 +103,21 @@ object MuseMiddleware {
       }
     }
 
+  val makeSpotify: ZLayer[SpotifyService.Env & Reloadable[UserSession], Nothing, SpotifyService] = ZLayer.fromZIO {
+    for {
+      sessionRef <- ZIO.service[Reloadable[UserSession]]
+      session    <- sessionRef.get
+      spotify    <- SpotifyService.live(session.spotifyData.accessToken)
+    } yield spotify
+  }
+
   // TODO: This will fail after an hour when the access token expires. Make it reloadable?
   def getSessionAndSpotifyTapir[R] = ZLayer.makeSome[
     R with UserSessionService with SpotifyService.Env with ServerRequest,
-    R with UserSession with SpotifyService
+    R with Reloadable[UserSession] with Reloadable[SpotifyService]
   ](
-    getSessionTapir,
-    ZLayer.fromZIO(ZIO.serviceWithZIO[UserSession](session => SpotifyService.live(session.spotifyData.accessToken)))
+    getSessionTapir.reloadableManual,
+    makeSpotify.reloadableManual
   )
 
   /**

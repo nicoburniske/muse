@@ -17,12 +17,13 @@ import muse.domain.spotify.{
 }
 import muse.domain.{spotify, table}
 import muse.server.graphql.subgraph.{Comment, Review}
+import muse.server.graphql.Helpers.*
 import muse.service.event.ReviewUpdateService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyError, SpotifyService}
 import muse.utils.Utils.*
 import sttp.model.{Method, Uri}
-import zio.{Hub, IO, Task, UIO, ZIO}
+import zio.*
 
 import java.sql.SQLException
 import java.time.temporal.ChronoUnit
@@ -30,7 +31,7 @@ import java.util.UUID
 
 // TODO: add checking for what constitutes a valid comment. What does rating represent?
 // TODO: Consider adding ZQuery for batched operations to DB.
-type MutationEnv   = UserSession & SpotifyService & DatabaseService & ReviewUpdateService
+type MutationEnv   = Reloadable[UserSession] & Reloadable[SpotifyService] & DatabaseService & ReviewUpdateService
 type MutationError = Throwable | MuseError
 type Mutation[A]   = ZIO[MutationEnv, MutationError, A]
 
@@ -68,7 +69,7 @@ object Mutations {
 
   // TODO: Wrap this in a single transaction.
   def createReview(create: CreateReview) = for {
-    user       <- ZIO.service[UserSession].map(_.userId)
+    user       <- getUserId
     r          <- DatabaseService.createReview(user, create)
     _          <- ZIO.logInfo(s"Successfully created review! ${r.reviewName}")
     maybeEntity = create.entity.map(e => table.ReviewEntity(r.reviewId, e.entityType, e.entityId))
@@ -89,7 +90,7 @@ object Mutations {
 
   val createCommentMetric                  = timer("createComment", ChronoUnit.MILLIS)
   def createComment(create: CreateComment) = (for {
-    user      <- ZIO.service[UserSession]
+    user      <- getSession
     _         <- ZIO
                    .fail(BadRequest(Some("Comment must have a non-empty body")))
                    .when(create.comment.isEmpty)
@@ -103,14 +104,14 @@ object Mutations {
   } yield Comment.fromTable.tupled(result)) @@ createCommentMetric.trackDuration
 
   def linkReviews(link: LinkReviews) = for {
-    user   <- ZIO.service[UserSession]
+    user   <- getSession
     _      <- ZIO.fail(BadRequest(Some("Can't link a review to itself"))).when(link.parentReviewId == link.childReviewId)
     _      <- validateReviewPermissions(user.userId, link.parentReviewId)
     result <- DatabaseService.linkReviews(link)
   } yield result
 
   def updateReviewLink(link: UpdateReviewLink) = for {
-    user   <- ZIO.service[UserSession]
+    user   <- getSession
     _      <- ZIO.fail(BadRequest(Some("Can't link a review to itself"))).when(link.parentReviewId == link.childReviewId)
     _      <- ZIO.fail(BadRequest(Some("Can't have negative index"))).when(link.linkIndex < 0)
     _      <- validateReviewPermissions(user.userId, link.parentReviewId)
@@ -118,14 +119,14 @@ object Mutations {
   } yield result
 
   def updateReview(update: UpdateReview) = for {
-    user    <- ZIO.service[UserSession]
+    user    <- getSession
     _       <- validateReviewPermissions(user.userId, update.reviewId)
     review  <- DatabaseService.updateReview(update)
     details <- DatabaseService.getReviewEntity(update.reviewId)
   } yield Review.fromTable(review, details)
 
   def updateReviewEntity(update: UpdateReviewEntity) = for {
-    user        <- ZIO.service[UserSession]
+    user        <- getSession
     _           <- validateReviewPermissions(user.userId, update.reviewId)
     asTable      = update.toTable
     maybeReview <- DatabaseService.getReview(update.reviewId) <&> updateReviewEntityFromTable(asTable)
@@ -134,7 +135,7 @@ object Mutations {
 
   val updateCommentMetric                  = timer("UpdateComment", ChronoUnit.MILLIS)
   def updateComment(update: UpdateComment) = (for {
-    user        <- ZIO.service[UserSession]
+    user        <- getSession
     _           <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
     _           <- DatabaseService.updateComment(update)
     commentData <- DatabaseService
@@ -148,7 +149,7 @@ object Mutations {
   val updateCommentIndexMetric = timer("UpdateCommentIndex", ChronoUnit.MILLIS)
 
   def updateCommentIndex(update: UpdateCommentIndex) = (for {
-    user <- ZIO.service[UserSession]
+    user <- getSession
     _    <- ZIO.fail(BadRequest(Some("Can't have negative index"))).when(update.index < 0)
     _    <- validateCommentEditingPermissions(user.userId, update.reviewId, update.commentId)
 
@@ -168,7 +169,7 @@ object Mutations {
       } yield published
 
   def deleteComment(d: DeleteComment): Mutation[Boolean] = (for {
-    user              <- ZIO.service[UserSession]
+    user              <- getSession
     _                 <- validateCommentEditingPermissions(user.userId, d.reviewId, d.commentId)
     result            <- DatabaseService.deleteComment(d)
     (deleted, updated) = result
@@ -185,26 +186,26 @@ object Mutations {
   } yield publishDeletesResult
 
   def deleteReview(d: DeleteReview): Mutation[Boolean] = for {
-    user   <- ZIO.service[UserSession]
+    user   <- getSession
     _      <- validateReviewPermissions(user.userId, d.id)
     result <- DatabaseService.deleteReview(d)
   } yield result
 
   def deleteReviewLink(link: DeleteReviewLink) = for {
-    user   <- ZIO.service[UserSession]
+    user   <- getSession
     _      <- validateReviewPermissions(user.userId, link.parentReviewId)
     result <- DatabaseService.deleteReviewLink(link)
   } yield result
 
   def shareReview(s: ShareReview): ZIO[MutationEnv, MutationError | InvalidUser, Boolean] = for {
-    userId <- ZIO.service[UserSession].map(_.userId)
+    userId <- getUserId
     _      <- ZIO.fail(InvalidUser("You cannot share a review you own with yourself")).when(userId == s.userId)
     _      <- validateReviewPermissions(userId, s.reviewId) <&> validateUser(s.userId)
     result <- DatabaseService.shareReview(s)
   } yield result
 
-  private def validateEntity(entityId: String, entityType: EntityType): ZIO[SpotifyService, Throwable | InvalidEntity, Unit] =
-    ZIO.service[SpotifyService].flatMap(_.isValidEntity(entityId, entityType)).flatMap {
+  private def validateEntity(entityId: String, entityType: EntityType) =
+    getSpotify.flatMap(_.isValidEntity(entityId, entityType)).flatMap {
       case true  => ZIO.unit
       case false => ZIO.fail(InvalidEntity(entityId, entityType))
     }

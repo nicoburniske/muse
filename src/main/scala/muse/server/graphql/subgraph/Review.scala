@@ -22,8 +22,8 @@ final case class Review(
     reviewName: String,
     isPublic: Boolean,
     comments: ZQuery[GetReviewComments.Env, Throwable, List[Comment]],
-    entity: ZQuery[SpotifyService, Throwable, Option[ReviewEntity]],
-    childReviews: ZQuery[DatabaseService, Throwable, List[Review]],
+    entity: ZQuery[GetEntity.Env, Throwable, Option[ReviewEntity]],
+    childReviews: ZQuery[GetChildReviews.Env, Throwable, List[Review]],
     // TODO: this can be forbidden.
     collaborators: ZQuery[GetCollaborators.Env, Throwable, List[Collaborator]]
 )

@@ -1,13 +1,14 @@
 package muse.server.graphql.resolver
 
 import muse.domain.common.EntityType
+import muse.server.graphql.Helpers.getSpotify
 import muse.domain.error.InvalidEntity
 import muse.domain.session.UserSession
 import muse.server.graphql.subgraph.User
 import muse.service.spotify.SpotifyService
 import muse.utils.Utils
 import muse.utils.Utils.*
-import zio.ZIO
+import zio.{Reloadable, ZIO}
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
 
 import java.time.temporal.ChronoUnit
@@ -15,18 +16,18 @@ import java.time.temporal.ChronoUnit
 case class CheckUserLikedSong(trackId: String) extends Request[Nothing, Boolean]
 
 object CheckUserLikedSong {
-  val MAX_PER_REQUEST        = 50
+  val MAX_PER_REQUEST = 50
+  type Env = Reloadable[SpotifyService]
   def query(trackId: String) =
     ZQuery.fromRequest(CheckUserLikedSong(trackId))(dataSource)
 
   def metric = Utils.timer("GetPlaylist", ChronoUnit.MILLIS)
 
-  val dataSource: DataSource[SpotifyService, CheckUserLikedSong] =
+  val dataSource: DataSource[Env, CheckUserLikedSong] =
     DataSource.Batched.make("CheckUserLikedSong") { req =>
       ZIO
         .foreachPar(req.toVector.grouped(MAX_PER_REQUEST).toVector) { batch =>
-          ZIO
-            .service[SpotifyService]
+          getSpotify
             .flatMap(_.checkUserSavedTracks(batch.map(_.trackId)))
             .either.map(batch -> _)
         }.map { results =>

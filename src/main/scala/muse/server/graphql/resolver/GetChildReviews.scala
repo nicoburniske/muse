@@ -15,6 +15,7 @@ import java.util.UUID
 case class GetChildReviews(reviewId: UUID) extends Request[SQLException, List[Review]]
 
 object GetChildReviews {
+  type Env = DatabaseService
 
   val MAX_CHILD_REVIEWS_PER_REQUEST = 20
 
