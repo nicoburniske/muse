@@ -18,11 +18,18 @@ object Auth {
 
   val loginEndpoints = Http
     .collectZIO[Request] {
+      // If user is already signed in, redirect to frontend.
       case request @ Method.GET -> !! / "login" =>
         val redirectTo = request.url.queryParams.get("redirect").flatMap(_.headOption)
-        generateRedirectUrl(redirectTo).mapBoth(
-          e => Response.fromHttpError(HttpError.InternalServerError("Failed to generate redirect url.", Some(e))),
-          url => Response.redirect(url, false))
+        (getFrontendRedirectUrl(redirectTo) <&> MuseMiddleware.isValidSession(request.headers)).flatMap {
+          case (frontendRedirect, isValid) =>
+            if isValid then ZIO.succeed(Response.redirect(frontendRedirect, false))
+            else
+              makeSpotifyRedirect(frontendRedirect.toString).mapBoth(
+                e => Response.fromHttpError(HttpError.InternalServerError("Failed to generate redirect url.", Some(e))),
+                url => Response.redirect(url, false))
+
+        }
       case req @ Method.GET -> !! / "callback"  =>
         val queryParams = req.url.queryParams
         val code        = queryParams.get("code").flatMap(_.headOption)
@@ -95,14 +102,12 @@ object Auth {
       .get[String, String](state).retry(retrySchedule).zipLeft(RedisService.delete(state).ignore)
       .someOrFail(Response.fromHttpError(HttpError.BadRequest("Invalid 'state' query parameter")))
 
-  def generateRedirectUrl(redirectMaybe: Option[String]) = for {
+  // Store State -> Redirect URL in Redis.
+  // On callback, Redirect will be retrieved from Redis.
+  def makeSpotifyRedirect(frontendUrl: String) = for {
     spotifyConfig <- ZIO.service[SpotifyConfig]
-    serverConfig  <- ZIO.service[ServerConfig]
     state         <- Random.nextUUID.map(_.toString.take(30))
-    redirect       = redirectMaybe
-                       .filter(r => URL.decode(r).isRight)
-                       .getOrElse(serverConfig.frontendUrl)
-    _             <- RedisService.set(state, redirect, Some(10.seconds)).retry(retrySchedule)
+    _             <- RedisService.set(state, frontendUrl, Some(10.seconds)).retry(retrySchedule)
   } yield URL(
     Path.decode("/authorize"),
     URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443),
@@ -114,6 +119,11 @@ object Auth {
       "state"         -> Chunk(state)
     )
   )
+
+  // If no redirect is provided, use the frontend url from config.
+  def getFrontendRedirectUrl(redirectMaybe: Option[String]) = for {
+    serverConfig <- ZIO.service[ServerConfig]
+  } yield redirectMaybe.flatMap(u => URL.decode(u).toOption).getOrElse(serverConfig.frontendUrl)
 
   /**
    * Handles a user login.
