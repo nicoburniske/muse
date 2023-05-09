@@ -17,7 +17,7 @@ import java.util.UUID
 final case class Subscriptions(
     nowPlaying: NowPlayingInput => ZStream[Subscriptions.Env, Throwable, PlaybackState],
     availableDevices: ZStream[Subscriptions.Env, Throwable, List[PlaybackDevice]],
-    reviewUpdates: ReviewUpdatesInput => ZStream[Subscriptions.Env & Scope, Throwable, ReviewUpdate]
+    reviewUpdates: ReviewUpdatesInput => ZStream[Subscriptions.Env, Throwable, ReviewUpdate]
 )
 
 case class NowPlayingInput(tickInterval: Int)
@@ -69,9 +69,10 @@ object Subscriptions {
       .filter(_.nonEmpty)
       .tapErrorCause(cause => ZIO.logErrorCause(s"Error while getting availableDevices: $cause", cause))
 
+  // TODO: have to filter out reviews that the user doesn't have access to.
   def reviewUpdates(reviewIds: Set[UUID]) = for {
     service <- ZStream.service[ReviewUpdateService]
-    events  <- ZStream.fromZIO(service.subscribe(reviewIds))
+    events  <- ZStream.scoped(service.subscribe(reviewIds))
     event   <- events
   } yield event match
     case CreatedComment(r, index, parentChild, entities) =>

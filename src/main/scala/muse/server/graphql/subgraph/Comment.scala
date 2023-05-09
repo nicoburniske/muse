@@ -1,7 +1,6 @@
 package muse.server.graphql.subgraph
 
 import muse.domain.common.EntityType
-import muse.domain.session.UserSession
 import muse.domain.table
 import muse.server.graphql.resolver.{GetComment, GetEntity, GetReviewComments, GetUser}
 import muse.service.persist.DatabaseService

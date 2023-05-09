@@ -25,7 +25,7 @@ final case class Review(
     entity: ZQuery[SpotifyService, Throwable, Option[ReviewEntity]],
     childReviews: ZQuery[DatabaseService, Throwable, List[Review]],
     // TODO: this can be forbidden.
-    collaborators: ZQuery[UserSession & DatabaseService, Throwable, List[Collaborator]]
+    collaborators: ZQuery[GetCollaborators.Env, Throwable, List[Collaborator]]
 )
 
 case class Collaborator(user: User, accessLevel: AccessLevel, review: ZQuery[GetReview.Env, Throwable, Review])

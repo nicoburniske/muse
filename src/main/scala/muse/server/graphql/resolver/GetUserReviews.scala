@@ -4,7 +4,7 @@ import muse.domain.common.Types.UserId
 import muse.domain.session.UserSession
 import muse.server.graphql.subgraph.Review
 import muse.service.persist.DatabaseService
-import zio.ZIO
+import zio.*
 import zio.query.{DataSource, Request, ZQuery}
 
 import java.sql.SQLException

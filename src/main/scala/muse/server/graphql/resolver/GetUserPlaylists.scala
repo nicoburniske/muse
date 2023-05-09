@@ -2,7 +2,6 @@ package muse.server.graphql.resolver
 
 import caliban.schema.Schema
 import muse.domain.common.Types.UserId
-import muse.domain.session.UserSession
 import muse.server.graphql.Pagination
 import muse.server.graphql.subgraph.Playlist
 import muse.service.spotify.SpotifyService
@@ -12,8 +11,8 @@ import zio.query.ZQuery
 final case class UserPlaylistsInput(pagination: Option[Pagination])
 
 object GetUserPlaylists:
-  type Env = SpotifyService & UserSession
-  def boxedQuery(userId: UserId)(input: UserPlaylistsInput): ZQuery[SpotifyService & UserSession, Throwable, List[Playlist]] =
+  type Env = SpotifyService
+  def boxedQuery(userId: UserId)(input: UserPlaylistsInput): ZQuery[Env, Throwable, List[Playlist]] =
     query(userId)(input.pagination)
 
   def query(userId: UserId)(p: Option[Pagination]) = ZQuery.fromZIO {

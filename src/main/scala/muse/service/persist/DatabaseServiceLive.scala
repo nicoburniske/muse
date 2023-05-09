@@ -211,12 +211,12 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       liftQuery(reviewIds.toSet)
         .contains(c.reviewId)
     }
-  }.provideLayer(layer)
+  }.provide(layer)
 
   override def getCommentEntities(commentId: Long) = run {
     commentEntity
       .filter(entity => entity.commentId == lift(commentId))
-  }.provideLayer(layer)
+  }.provide(layer)
 
   def getFeed(userId: UserId, offset: Option[UUID], limit: Int) = {
     for {
@@ -238,7 +238,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
                       } yield (review, entity)).take(lift(limit))
                     }
     } yield result
-  }.provideLayer(layer)
+  }.provide(layer)
 
   private inline def getFeedReviews(inline userId: UserId, inline newestTime: Instant) = {
     userSharedReviews(userId) union
@@ -254,7 +254,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       .insert(
         _.userId -> lift(userId)
       ).onConflictIgnore
-  }.provideLayer(layer).unit
+  }.provide(layer).unit
 
   override def createUserSession(sessionId: SessionId, refreshToken: RefreshToken, userId: UserId) = run {
     userSession.insert(
@@ -262,7 +262,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       _.refreshToken -> lift(refreshToken),
       _.userId       -> lift(userId)
     )
-  }.provideLayer(layer).unit
+  }.provide(layer).unit
 
   override def createReview(userId: UserId, create: CreateReview) = run {
     review

@@ -86,12 +86,12 @@ object MuseMiddleware {
                              else None
                            }
           maybeSessionId = maybeCookie.orElse(maybeAuth)
-          session       <- getSession(maybeSessionId)
+          session       <- getSession(maybeSessionId).mapError {
+                             case u: Unauthorized => TapirResponse(StatusCode.Unauthorized, u.message)
+                             case RateLimited     => TapirResponse(StatusCode.TooManyRequests)
+                             case e: Throwable    => TapirResponse(StatusCode.InternalServerError, e.getMessage)
+                           }
         } yield session
-      }.mapError {
-        case u: Unauthorized => TapirResponse(StatusCode.Unauthorized, u.message)
-        case RateLimited     => TapirResponse(StatusCode.TooManyRequests)
-        case e: Throwable    => TapirResponse(StatusCode.InternalServerError, e.getMessage)
       }
     }
 
@@ -101,7 +101,7 @@ object MuseMiddleware {
     R with UserSession with SpotifyService
   ](
     getSessionTapir,
-    ZLayer.fromZIO(ZIO.serviceWithZIO[UserSession](session => SpotifyService.live(session.accessToken)))
+    ZLayer.fromZIO(ZIO.serviceWithZIO[UserSession](session => SpotifyService.live(session.spotifyData.accessToken)))
   )
 
   /**

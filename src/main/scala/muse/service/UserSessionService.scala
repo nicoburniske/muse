@@ -1,7 +1,7 @@
 package muse.service
 
-import muse.domain.common.Types.{AccessToken, SessionId, UserId}
-import muse.domain.session.UserSession
+import muse.domain.common.Types.{AccessToken, RefreshToken, SessionId, UserId}
+import muse.domain.session.{UserSession, SpotifyData}
 import muse.domain.spotify.auth.{AuthCodeFlowData, SpotifyAuthError, SpotifyAuthErrorResponse}
 import muse.service.cache.RedisService
 import muse.service.persist.DatabaseService
@@ -22,6 +22,7 @@ import java.time.temporal.ChronoUnit
 trait UserSessionService {
   def getUserSession(sessionId: SessionId): IO[Throwable, Option[UserSession]]
   def getFreshAccessToken(sessionId: SessionId): IO[Throwable, Option[AccessToken]]
+  def refreshAndGetUserSession(sessionId: SessionId): IO[Throwable, Option[UserSession]]
   def deleteUserSession(sessionId: SessionId): IO[Throwable, Boolean]
   def isRateLimited(userId: UserId): IO[Throwable, Boolean]
 }
@@ -58,8 +59,11 @@ object UserSessionService {
           UserSession(
             SessionId(sessionId),
             UserId(session.userId),
-            AccessToken(authInfo.accessToken),
-            now.plusSeconds(authInfo.expiresIn)
+            SpotifyData(
+              AccessToken(authInfo.accessToken),
+              RefreshToken(session.refreshToken),
+              now.plusSeconds(authInfo.expiresIn)
+            )
           )
         )
     }
@@ -67,10 +71,12 @@ object UserSessionService {
     execute.retry(retry)
   }
 
-  def getUserSession(sessionId: SessionId)      = ZIO.serviceWithZIO[UserSessionService](_.getUserSession(sessionId))
-  def getFreshAccessToken(sessionId: SessionId) = ZIO.serviceWithZIO[UserSessionService](_.getFreshAccessToken(sessionId))
-  def deleteUserSession(sessionId: SessionId)   = ZIO.serviceWithZIO[UserSessionService](_.deleteUserSession(sessionId))
-  def isRateLimited(userId: UserId)             = ZIO.serviceWithZIO[UserSessionService](_.isRateLimited(userId))
+  def getUserSession(sessionId: SessionId)           = ZIO.serviceWithZIO[UserSessionService](_.getUserSession(sessionId))
+  def getFreshAccessToken(sessionId: SessionId)      = ZIO.serviceWithZIO[UserSessionService](_.getFreshAccessToken(sessionId))
+  def refreshAndGetUserSession(sessionId: SessionId) =
+    ZIO.serviceWithZIO[UserSessionService](_.refreshAndGetUserSession(sessionId))
+  def deleteUserSession(sessionId: SessionId)        = ZIO.serviceWithZIO[UserSessionService](_.deleteUserSession(sessionId))
+  def isRateLimited(userId: UserId)                  = ZIO.serviceWithZIO[UserSessionService](_.isRateLimited(userId))
 }
 
 final case class UserSessionsLive(
@@ -88,7 +94,10 @@ final case class UserSessionsLive(
     redisService.cacheOrExecute(sessionId, 59.minutes)(retrievalCache.get(sessionId))
 
   override def getFreshAccessToken(sessionId: SessionId) =
-    UserSessionService.retrieveSession(sessionId).map(_.map(_.accessToken)).provide(layer)
+    UserSessionService.retrieveSession(sessionId).map(_.map(_.spotifyData.accessToken)).provide(layer)
+
+  override def refreshAndGetUserSession(sessionId: SessionId) =
+    deleteUserSession(sessionId) *> getUserSession(sessionId)
 
   override def deleteUserSession(sessionId: SessionId) = for {
     _       <- redisService.delete(sessionId).retry(Schedule.recurs(2))
