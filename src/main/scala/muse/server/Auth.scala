@@ -46,7 +46,6 @@ object Auth {
                 redirectUrl  <- getRedirectFromState(state)
                 newSessionId <- handleUserLogin(code)
                 config       <- ZIO.service[ServerConfig]
-                _            <- ZIO.logInfo(s"Successfully added session.")
               } yield {
                 val cookie = Cookie.Response(
                   COOKIE_KEY,
@@ -60,10 +59,10 @@ object Auth {
                 Response.redirect(redirectUrl).addCookie(cookie)
               }
             }
-              .tapErrorCause(cause => ZIO.logErrorCause("Failed to login user.", cause))
+              .tapErrorCause(cause => ZIO.logErrorCause("Failed to login user on callback.", cause))
               .mapError {
-                case r: Response  => r
-                case t: Throwable => Response.fromHttpError(HttpError.InternalServerError("Failed to login user.", Some(t)))
+                case error: HttpError => Response.fromHttpError(error)
+                case t: Throwable     => Response.fromHttpError(HttpError.InternalServerError("Failed to login user.", Some(t)))
               }
         }
     }
@@ -85,13 +84,13 @@ object Auth {
           accessToken <- UserSessionService
                            .getFreshAccessToken(session.sessionId)
                            // This should never happen.
-                           .someOrFail(Response.fromHttpError(HttpError.Unauthorized("Invalid Session.")))
+                           .someOrFail(HttpError.Unauthorized("Invalid Session."))
         } yield Response.text(accessToken)
     }
     .tapErrorCauseZIO { c => ZIO.logErrorCause(s"Failed to handle session request.", c) }
     .mapError {
-      case r: Response  => r
-      case t: Throwable => Response.fromHttpError(HttpError.InternalServerError(cause = Some(t)))
+      case error: HttpError => Response.fromHttpError(error)
+      case t: Throwable     => Response.fromHttpError(HttpError.InternalServerError(cause = Some(t)))
     }
 
   private val retrySchedule = Schedule.exponential(10.millis).jittered && Schedule.recurs(4)
@@ -99,10 +98,11 @@ object Auth {
   private given Schema[URL] =
     Schema.primitive[String].transformOrFail(URL.decode(_).left.map(_.toString), url => Right(url.encode))
 
-  private def getRedirectFromState(state: String): ZIO[RedisService, RedisService.Error | Response, URL] =
+  private def getRedirectFromState(state: String) =
     RedisService
       .get[String, URL](state).retry(retrySchedule).zipLeft(RedisService.delete(state).ignore)
-      .someOrFail(Response.fromHttpError(HttpError.BadRequest("Invalid 'state' query parameter")))
+      .someOrFail[URL, HttpError | RedisService.Error](HttpError.BadRequest("Invalid 'state' query parameter"))
+      .tapSomeError { case _: HttpError => ZIO.logError(s"Received invalid state on callback. $state") }
 
   // Store State -> Redirect URL in Redis.
   // On callback, Redirect will be retrieved from Redis.
@@ -132,25 +132,26 @@ object Auth {
    *
    * @param code
    *   Auth code from Spotify.
-   *
    * @return
    *   the new session id.
    */
-  def handleUserLogin(code: String) =
+  type UserLoginEnv = SpotifyService.Env & DatabaseService & SpotifyAuthService
+  def handleUserLogin(code: String): ZIO[UserLoginEnv, HttpError | Throwable, SessionId] =
     for {
       auth        <- SpotifyAuthService.getAuthCode(code).retry(retrySchedule)
       spotify     <- SpotifyService.live(auth.accessToken)
       userProfile <- spotify.getCurrentUserProfile.retry(retrySchedule)
       userId       = userProfile.id
       _           <- ZIO
-                       .fail(Response.fromHttpError(HttpError.BadRequest(s"User $userId is not a premium subscriber.")))
+                       .fail(HttpError.BadRequest(s"User $userId is not a premium subscriber."))
                        .when(!userProfile.product.contains("premium"))
+                       .tapError(_ => ZIO.logInfo(s"User $userId is not a premium subscriber."))
 
       newSessionId <- Random.nextUUID.map(_.toString).map(SessionId(_))
       _            <- DatabaseService
                         .createOrUpdateUser(newSessionId, RefreshToken(auth.refreshToken), UserId(userId))
                         .tapErrorCause(e => ZIO.logErrorCause(s"Failed to process user $userId login.", e))
-                        .zipLeft(ZIO.logInfo(s"Successfully logged in $userId."))
+      _            <- ZIO.logInfo(s"Successfully logged in $userId.")
     } yield newSessionId
 
   val scopes = List(

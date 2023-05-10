@@ -40,7 +40,17 @@ object MuseServer {
     val protectedZioHttp = Auth.sessionEndpoints @@ middleware
 
     // ORDER MATTERS HERE. LOGIN ENDPOINTS MUST BE BEFORE PROTECTED ENDPOINTS.
-    (gql ++ Auth.loginEndpoints ++ protectedZioHttp) @@ cors @@ metrics()
+    // For some reason beautify errors is not working?
+    (gql ++ Auth.loginEndpoints ++ protectedZioHttp).mapError { response =>
+      if response.status.isError then
+        Response.GetError.unapply(response).fold(response) { error =>
+          response.copy(
+            body = Body.fromString(error.message),
+            headers = Headers(Header.ContentType(MediaType.text.`plain`))
+          )
+        }
+      else response
+    } @@ cors @@ metrics()
   }
 
   def endpointsGraphQL = {
