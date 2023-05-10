@@ -80,13 +80,16 @@ object MuseServer {
     import zio.http.internal.middlewares.Cors.CorsConfig
 
     for {
-      domain <- ZIO.serviceWith[ServerConfig](_.domain)
+      maybeDomain <- ZIO.serviceWith[ServerConfig](_.domain)
     } yield cors(CorsConfig(allowedOrigin = origin => {
-      if (domain.contains(origin.renderedValue)) {
-        Some(Header.AccessControlAllowOrigin.Specific(origin))
-      } else {
-        None
-      }
+      maybeDomain match
+        case None         => Some(Header.AccessControlAllowOrigin.All)
+        case Some(domain) =>
+          if (origin.renderedValue.contains(domain)) {
+            Some(Header.AccessControlAllowOrigin.Specific(origin))
+          } else {
+            None
+          }
     }))
   }
 

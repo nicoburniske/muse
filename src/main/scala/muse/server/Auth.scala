@@ -12,6 +12,7 @@ import muse.service.spotify.{SpotifyAuthService, SpotifyService}
 import sttp.client3.SttpBackend
 import zio.http.*
 import zio.json.*
+import zio.schema.Schema
 import zio.{Cause, Chunk, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer, durationInt}
 
 object Auth {
@@ -25,7 +26,7 @@ object Auth {
           case (frontendRedirect, isValid) =>
             if isValid then ZIO.succeed(Response.redirect(frontendRedirect, false))
             else
-              makeSpotifyRedirect(frontendRedirect.toString).mapBoth(
+              makeSpotifyRedirect(frontendRedirect).mapBoth(
                 e => Response.fromHttpError(HttpError.InternalServerError("Failed to generate redirect url.", Some(e))),
                 url => Response.redirect(url, false))
 
@@ -42,9 +43,7 @@ object Auth {
           case (Some(code), Some(state)) =>
             {
               for {
-                redirect     <- getRedirectFromState(state)
-                redirectUrl  <-
-                  ZIO.fromEither(URL.decode(redirect)).orDieWith(e => new Exception("Failed to decode redirect url.", e))
+                redirectUrl  <- getRedirectFromState(state)
                 newSessionId <- handleUserLogin(code)
                 config       <- ZIO.service[ServerConfig]
                 _            <- ZIO.logInfo(s"Successfully added session.")
@@ -97,14 +96,17 @@ object Auth {
 
   private val retrySchedule = Schedule.exponential(10.millis).jittered && Schedule.recurs(4)
 
-  private def getRedirectFromState(state: String): ZIO[RedisService, RedisService.Error | Response, String] =
+  private given Schema[URL] =
+    Schema.primitive[String].transformOrFail(URL.decode(_).left.map(_.toString), url => Right(url.encode))
+
+  private def getRedirectFromState(state: String): ZIO[RedisService, RedisService.Error | Response, URL] =
     RedisService
-      .get[String, String](state).retry(retrySchedule).zipLeft(RedisService.delete(state).ignore)
+      .get[String, URL](state).retry(retrySchedule).zipLeft(RedisService.delete(state).ignore)
       .someOrFail(Response.fromHttpError(HttpError.BadRequest("Invalid 'state' query parameter")))
 
   // Store State -> Redirect URL in Redis.
   // On callback, Redirect will be retrieved from Redis.
-  def makeSpotifyRedirect(frontendUrl: String) = for {
+  def makeSpotifyRedirect(frontendUrl: URL) = for {
     spotifyConfig <- ZIO.service[SpotifyConfig]
     state         <- Random.nextUUID.map(_.toString.take(30))
     _             <- RedisService.set(state, frontendUrl, Some(10.seconds)).retry(retrySchedule)

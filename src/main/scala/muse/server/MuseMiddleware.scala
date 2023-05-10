@@ -37,11 +37,7 @@ object MuseMiddleware {
     UserSessionService & R,
     Response,
     UserSession,
-  ](
-    getSessionZioHttp,
-    Headers.empty,
-    Status.Unauthorized
-  )
+  ](getSessionZioHttp, Headers.empty, Status.Unauthorized)
 
   private def getSessionZioHttp(headers: Headers) = getSession(extractRequestAuth(headers))
     .mapBoth(
@@ -67,7 +63,7 @@ object MuseMiddleware {
     extractRequestAuth(header).fold(ZIO.succeed(false)) { sessionId =>
       UserSessionService
         .getUserSession(SessionId(sessionId))
-        .fold(_ => false, _ => true)
+        .fold(_ => false, _.isDefined)
     }
   }
 
@@ -111,7 +107,6 @@ object MuseMiddleware {
     } yield spotify
   }
 
-  // TODO: This will fail after an hour when the access token expires. Make it reloadable?
   def getSessionAndSpotifyTapir[R] = ZLayer.makeSome[
     R with UserSessionService with SpotifyService.Env with ServerRequest,
     R with Reloadable[UserSession] with Reloadable[SpotifyService]
