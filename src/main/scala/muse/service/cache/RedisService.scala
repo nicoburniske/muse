@@ -1,15 +1,15 @@
 package muse.service.cache
 
 import muse.config.{RateLimitConfig, RedisCacheConfig}
-import zio.{Duration, Reloadable, Semaphore, ZIO, ZLayer, Schedule, durationInt}
-import zio.redis.{CodecSupplier, Redis, RedisConfig, RedisError, SingleNodeExecutor}
+import zio.redis.*
 import zio.schema.Schema
 import zio.schema.codec.{BinaryCodec, JsonCodec}
+import zio.{Duration, Reloadable, Schedule, Semaphore, ZIO, ZLayer, durationInt}
 
 import scala.util.control.NoStackTrace
 
 trait RedisService {
-  import RedisService._
+  import RedisService.*
 
   def get[K: Schema, V: Schema](key: K): ZIO[Any, Error, Option[V]]
   def set[K: Schema, V: Schema](key: K, value: V, expiration: Option[Duration]): ZIO[Any, Error, Boolean]

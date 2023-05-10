@@ -1,15 +1,15 @@
 package muse.service.persist
 
-import io.getquill.jdbczio.Quill
 import io.getquill.*
+import io.getquill.jdbczio.Quill
 import muse.domain.common.EntityType
 import muse.domain.common.Types.{RefreshToken, SessionId, UserId}
 import muse.domain.table.AccessLevel
 import muse.service.persist.QuillContext.{Decoder, Encoder, decoder, encoder}
 import zio.{Schedule, durationInt}
 
-import java.time.Instant
 import java.sql.Types
+import java.time.Instant
 
 object QuillContext extends PostgresZioJdbcContext(NamingStrategy(SnakeCase, LowerCase)) {
   // Exponential backoff retry strategy for connecting to Postgres DB.

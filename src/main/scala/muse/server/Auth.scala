@@ -5,25 +5,32 @@ import muse.domain.common.Types.{RefreshToken, SessionId, UserId}
 import muse.domain.session.UserSession
 import muse.domain.spotify.auth.AuthCodeFlowData
 import muse.domain.table.User
+import muse.service.UserSessionService
+import muse.service.cache.RedisService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyAuthService, SpotifyService}
-import muse.service.{RequestSession, UserSessions}
-import muse.service.cache.RedisService
 import sttp.client3.SttpBackend
-import zio.http.model.{Cookie, HttpError, Method, Scheme}
 import zio.http.*
 import zio.json.*
+import zio.schema.Schema
 import zio.{Cause, Chunk, Layer, Random, Ref, Schedule, System, Task, URIO, ZIO, ZIOAppDefault, ZLayer, durationInt}
 
 object Auth {
 
   val loginEndpoints = Http
     .collectZIO[Request] {
+      // If user is already signed in, redirect to frontend.
       case request @ Method.GET -> !! / "login" =>
         val redirectTo = request.url.queryParams.get("redirect").flatMap(_.headOption)
-        generateRedirectUrl(redirectTo).mapBoth(
-          e => Response.fromHttpError(HttpError.InternalServerError("Failed to generate redirect url.", Some(e))),
-          url => Response.redirect(url.encode, false))
+        (getFrontendRedirectUrl(redirectTo) <&> MuseMiddleware.isValidSession(request.headers)).flatMap {
+          case (frontendRedirect, isValid) =>
+            if isValid then ZIO.succeed(Response.redirect(frontendRedirect, false))
+            else
+              makeSpotifyRedirect(frontendRedirect).mapBoth(
+                e => Response.fromHttpError(HttpError.InternalServerError("Failed to generate redirect url.", Some(e))),
+                url => Response.redirect(url, false))
+
+        }
       case req @ Method.GET -> !! / "callback"  =>
         val queryParams = req.url.queryParams
         val code        = queryParams.get("code").flatMap(_.headOption)
@@ -36,68 +43,73 @@ object Auth {
           case (Some(code), Some(state)) =>
             {
               for {
-                redirect     <- getRedirectFromState(state)
+                redirectUrl  <- getRedirectFromState(state)
                 newSessionId <- handleUserLogin(code)
                 config       <- ZIO.service[ServerConfig]
                 _            <- ZIO.logInfo(s"Successfully added session.")
               } yield {
-                val cookie = Cookie(
+                val cookie = Cookie.Response(
                   COOKIE_KEY,
                   newSessionId,
                   isSecure = true,
                   isHttpOnly = true,
-                  maxAge = Some(365.days.toSeconds),
+                  maxAge = Some(7.days),
                   // On localhost dev, we don't want a cookie domain.
                   domain = config.domain
                 )
-                Response.redirect(redirect).addCookie(cookie)
+                Response.redirect(redirectUrl).addCookie(cookie)
               }
-              // TODO: this seems a little weird. Revise.
-              // Success channel can be responses that are failures.
-              // Errors are only server errors.
-            }.catchSome { case r: Response => ZIO.succeed(r) }
+            }
               .tapErrorCause(cause => ZIO.logErrorCause("Failed to login user.", cause))
               .mapError {
+                case r: Response  => r
                 case t: Throwable => Response.fromHttpError(HttpError.InternalServerError("Failed to login user.", Some(t)))
               }
         }
     }
 
   // @@ csrfGenerate() // TODO: get this working?
-  val sessionEndpoints = Http.collectZIO[Request] {
-    case Method.POST -> !! / "logout" =>
-      for {
-        session <- RequestSession.get[UserSession]
-        _       <- UserSessions.deleteUserSession(session.sessionId)
-        _       <- ZIO.logInfo(s"Successfully logged out user ${session.userId}")
-      } yield Response.ok
-    case Method.GET -> !! / "session" =>
-      for {
-        session <- RequestSession.get[UserSession]
-      } yield Response.text(session.sessionId)
-    case Method.GET -> !! / "token"   =>
+  val sessionEndpoints = Http
+    .collectZIO[Request] {
+      case Method.POST -> !! / "logout" =>
+        for {
+          session      <- ZIO.service[UserSession]
+          _            <- UserSessionService.deleteUserSession(session.sessionId)
+          _            <- ZIO.logInfo(s"Successfully logged out user ${session.userId}")
+          expiredCookie = Cookie.Response(COOKIE_KEY, "", isSecure = true, isHttpOnly = true, maxAge = Some(0.seconds))
+        } yield Response.ok.addCookie(expiredCookie)
       // Guaranteed to have a valid access token for next 60 min.
-      for {
-        session     <- RequestSession.get[UserSession]
-        accessToken <- UserSessions.getFreshAccessToken(session.sessionId)
-      } yield Response.text(accessToken)
-  }
+      case Method.GET -> !! / "token"   =>
+        for {
+          session     <- ZIO.service[UserSession]
+          accessToken <- UserSessionService
+                           .getFreshAccessToken(session.sessionId)
+                           // This should never happen.
+                           .someOrFail(Response.fromHttpError(HttpError.Unauthorized("Invalid Session.")))
+        } yield Response.text(accessToken)
+    }
+    .tapErrorCauseZIO { c => ZIO.logErrorCause(s"Failed to handle session request.", c) }
+    .mapError {
+      case r: Response  => r
+      case t: Throwable => Response.fromHttpError(HttpError.InternalServerError(cause = Some(t)))
+    }
 
   private val retrySchedule = Schedule.exponential(10.millis).jittered && Schedule.recurs(4)
 
-  private def getRedirectFromState(state: String): ZIO[RedisService, RedisService.Error | Response, String] =
+  private given Schema[URL] =
+    Schema.primitive[String].transformOrFail(URL.decode(_).left.map(_.toString), url => Right(url.encode))
+
+  private def getRedirectFromState(state: String): ZIO[RedisService, RedisService.Error | Response, URL] =
     RedisService
-      .get[String, String](state).retry(retrySchedule).zipLeft(RedisService.delete(state).ignore)
+      .get[String, URL](state).retry(retrySchedule).zipLeft(RedisService.delete(state).ignore)
       .someOrFail(Response.fromHttpError(HttpError.BadRequest("Invalid 'state' query parameter")))
 
-  def generateRedirectUrl(redirectMaybe: Option[String]) = for {
+  // Store State -> Redirect URL in Redis.
+  // On callback, Redirect will be retrieved from Redis.
+  def makeSpotifyRedirect(frontendUrl: URL) = for {
     spotifyConfig <- ZIO.service[SpotifyConfig]
-    serverConfig  <- ZIO.service[ServerConfig]
     state         <- Random.nextUUID.map(_.toString.take(30))
-    redirect       = redirectMaybe
-                       .filter(r => URL.fromString(r).isRight)
-                       .getOrElse(serverConfig.frontendUrl)
-    _             <- RedisService.set(state, redirect, Some(10.seconds)).retry(retrySchedule)
+    _             <- RedisService.set(state, frontendUrl, Some(10.seconds)).retry(retrySchedule)
   } yield URL(
     Path.decode("/authorize"),
     URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443),
@@ -109,6 +121,11 @@ object Auth {
       "state"         -> Chunk(state)
     )
   )
+
+  // If no redirect is provided, use the frontend url from config.
+  def getFrontendRedirectUrl(redirectMaybe: Option[String]) = for {
+    serverConfig <- ZIO.service[ServerConfig]
+  } yield redirectMaybe.flatMap(u => URL.decode(u).toOption).getOrElse(serverConfig.frontendUrl)
 
   /**
    * Handles a user login.

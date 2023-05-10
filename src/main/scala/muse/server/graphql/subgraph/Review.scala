@@ -2,12 +2,11 @@ package muse.server.graphql.subgraph
 
 import caliban.schema.Schema
 import muse.domain.common.EntityType
-import muse.domain.error.{Forbidden, Unauthorized}
+import muse.domain.error.Forbidden
 import muse.domain.session.UserSession
 import muse.domain.table
 import muse.domain.table.AccessLevel
 import muse.server.graphql.resolver.*
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import zio.ZIO
@@ -22,17 +21,14 @@ final case class Review(
     creator: User,
     reviewName: String,
     isPublic: Boolean,
-    comments: ZQuery[DatabaseService, Throwable, List[Comment]],
-    entity: ZQuery[RequestSession[SpotifyService], Throwable, Option[ReviewEntity]],
-    childReviews: ZQuery[DatabaseService, Throwable, List[Review]],
+    comments: ZQuery[GetReviewComments.Env, Throwable, List[Comment]],
+    entity: ZQuery[GetEntity.Env, Throwable, Option[ReviewEntity]],
+    childReviews: ZQuery[GetChildReviews.Env, Throwable, List[Review]],
     // TODO: this can be forbidden.
-    collaborators: ZQuery[RequestSession[UserSession] & DatabaseService, Throwable, List[Collaborator]]
+    collaborators: ZQuery[GetCollaborators.Env, Throwable, List[Collaborator]]
 )
 
-case class Collaborator(
-    user: User,
-    accessLevel: AccessLevel,
-    review: ZQuery[DatabaseService & RequestSession[UserSession], Throwable, Review])
+case class Collaborator(user: User, accessLevel: AccessLevel, review: ZQuery[GetReview.Env, Throwable, Review])
 
 object Collaborator {
   def fromTable(r: table.ReviewAccess) = Collaborator(

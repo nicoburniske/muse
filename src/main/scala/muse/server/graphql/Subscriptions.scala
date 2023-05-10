@@ -2,29 +2,30 @@ package muse.server.graphql
 
 import muse.domain.event.{CreatedComment, DeletedComment, UpdatedComment}
 import muse.domain.session.UserSession
+import muse.server.graphql.Helpers.getSpotify
 import muse.domain.spotify.{PlaybackDevice, Track, PlaybackState as SpotPlaybackState}
 import muse.server.graphql.resolver.GetPlaylistTracks
 import muse.server.graphql.subgraph.{Comment, PlaybackState, PlaylistTrack, ReviewUpdate}
+import muse.service.UserSessionService
 import muse.service.event.ReviewUpdateService
 import muse.service.spotify.SpotifyService
-import muse.service.{RequestSession, UserSessions}
 import muse.utils.Utils.*
-import zio.stream.{ZPipeline, ZStream}
 import zio.*
+import zio.stream.{ZPipeline, ZStream}
 
 import java.util.UUID
 
 final case class Subscriptions(
     nowPlaying: NowPlayingInput => ZStream[Subscriptions.Env, Throwable, PlaybackState],
     availableDevices: ZStream[Subscriptions.Env, Throwable, List[PlaybackDevice]],
-    reviewUpdates: ReviewUpdatesInput => ZStream[Subscriptions.Env & Scope, Throwable, ReviewUpdate]
+    reviewUpdates: ReviewUpdatesInput => ZStream[Subscriptions.Env, Throwable, ReviewUpdate]
 )
 
 case class NowPlayingInput(tickInterval: Int)
 case class ReviewUpdatesInput(reviewIds: Set[UUID])
 
 object Subscriptions {
-  type Env = UserSessions & ReviewUpdateService & RequestSession[SpotifyService] & RequestSession[UserSession]
+  type Env = ReviewUpdateService & Reloadable[SpotifyService] & Reloadable[UserSession]
   val live: Subscriptions = Subscriptions(
     a => playbackState(a.tickInterval),
     availableDevices,
@@ -69,9 +70,10 @@ object Subscriptions {
       .filter(_.nonEmpty)
       .tapErrorCause(cause => ZIO.logErrorCause(s"Error while getting availableDevices: $cause", cause))
 
+  // TODO: have to filter out reviews that the user doesn't have access to.
   def reviewUpdates(reviewIds: Set[UUID]) = for {
     service <- ZStream.service[ReviewUpdateService]
-    events  <- ZStream.fromZIO(service.subscribe(reviewIds))
+    events  <- ZStream.scoped(service.subscribe(reviewIds))
     event   <- events
   } yield event match
     case CreatedComment(r, index, parentChild, entities) =>
@@ -81,7 +83,7 @@ object Subscriptions {
     case DeletedComment(reviewId, commentId)             =>
       ReviewUpdate.DeletedComment(reviewId, commentId)
 
-  private def getSpotifyPipeline = ZPipeline.mapZIO(_ => ZIO.serviceWithZIO[RequestSession[SpotifyService]](_.get))
+  private def getSpotifyPipeline = ZPipeline.mapZIO(_ => getSpotify)
 
   private def flattenOption[T] =
     ZPipeline.filter[Option[T]](_.isDefined) >>>

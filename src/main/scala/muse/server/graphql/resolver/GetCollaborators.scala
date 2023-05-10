@@ -1,10 +1,8 @@
 package muse.server.graphql.resolver
 
-import muse.domain.session.UserSession
 import muse.domain.table
 import muse.domain.table.ReviewAccess
 import muse.server.graphql.subgraph.Collaborator
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.utils.Utils
 import zio.ZIO
@@ -17,6 +15,7 @@ import java.util.UUID
 case class GetCollaborators(reviewId: UUID) extends Request[Throwable, List[table.ReviewAccess]]
 
 object GetCollaborators {
+  type Env = DatabaseService
 
   val MAX_COLLABORATORS_PER_REQUEST = 20
 
@@ -25,7 +24,7 @@ object GetCollaborators {
 
   def metric = Utils.timer("GetCollaborators", ChronoUnit.MILLIS)
 
-  val CollaboratorsDataSource: DataSource[DatabaseService & RequestSession[UserSession], GetCollaborators] =
+  val CollaboratorsDataSource: DataSource[Env, GetCollaborators] =
     DataSource.Batched.make("CollaboratorsDataSource") { reqs =>
       ZIO
         .foreachPar(reqs.grouped(MAX_COLLABORATORS_PER_REQUEST).toVector) { batch =>

@@ -5,15 +5,14 @@ import caliban.relay.*
 import caliban.schema.ArgBuilder.auto.*
 import muse.domain.session.UserSession
 import muse.server.graphql.ElasticCursor
+import muse.server.graphql.Helpers.getUserId
 import muse.server.graphql.subgraph.Review
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import zio.*
 import zio.query.*
 
 import java.sql.SQLException
-import java.util.Base64
-import java.util.UUID
+import java.util.{Base64, UUID}
 import scala.util.{Success, Try}
 
 /**
@@ -35,7 +34,7 @@ case class FeedInput(
     with Request[SQLException, ReviewConnection]
 
 object GetFeed {
-  type Env = DatabaseService with RequestSession[UserSession]
+  type Env = DatabaseService with Reloadable[UserSession]
   def query(input: FeedInput) = ZQuery.fromRequest(input)(feedDataSource)
   val DEFAULT_LIMIT           = 10
 
@@ -44,7 +43,7 @@ object GetFeed {
       val limit  = Math.min(req.first.getOrElse(DEFAULT_LIMIT), DEFAULT_LIMIT)
       val offset = req.after.flatMap(s => Try(UUID.fromString(s)).toOption)
       for {
-        userId <- RequestSession.get[UserSession].map(_.userId)
+        userId <- getUserId
         feed   <-
           DatabaseService.getFeed(userId, offset, limit).map {
             case (remaining, reviews) =>

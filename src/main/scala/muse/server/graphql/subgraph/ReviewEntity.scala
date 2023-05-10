@@ -5,8 +5,8 @@ import muse.domain.common.Types.UserId
 import muse.domain.spotify
 import muse.server.graphql.resolver.*
 import muse.server.graphql.subgraph
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
+import zio.Reloadable
 import zio.query.ZQuery
 
 /**
@@ -20,7 +20,7 @@ sealed trait ReviewEntity {
   def name: String
 }
 
-type SpotQuery[T] = ZQuery[RequestSession[SpotifyService], Throwable, T]
+type SpotQuery[T] = ZQuery[Reloadable[SpotifyService], Throwable, T]
 
 case class Artist(
     href: String,

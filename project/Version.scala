@@ -8,12 +8,10 @@ object Version {
   val zioCache   = "0.2.3"
   val zioMetrics = "2.0.1"
   val zioLogging = "2.1.12"
-  val zioHttp    = "0.0.5"
+  val zioHttp    = "3.0.0-RC1"
   val zioRedis   = "0.2.0+9-266abfb3-SNAPSHOT"
   val zioSchema  = "0.4.10"
-
-  val rezilience = "0.9.3"
-  val zcaffiene  = "1.0.0-M2"
+  val zioQuery   = "0.4.0"
 
   val protoQuill = "4.6.0.1"
   val postgresql = "42.5.4"
@@ -22,7 +20,7 @@ object Version {
 
   val slf4j   = "2.0.5"
   val logback = "1.4.6"
-  val caliban = "2.1.0"
+  val caliban = "2.2.0"
 
   val jnats = "2.16.10"
 }

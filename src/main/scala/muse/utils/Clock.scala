@@ -1,6 +1,6 @@
 package muse.utils
 
 trait Clock[F[_]] {
-  // Current time in milliseconds.
+  // Current time in seconds.
   def now: F[Long]
 }

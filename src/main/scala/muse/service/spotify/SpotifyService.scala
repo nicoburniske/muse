@@ -1,14 +1,12 @@
 package muse.service.spotify
 
-import com.stuart.zcaffeine
 import muse.config.SpotifyConfig
 import muse.domain.common.EntityType
 import muse.domain.common.Types.UserId
-import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.domain.spotify.*
+import muse.service.UserSessionService
 import muse.service.cache.{RedisService, RedisServiceLive}
-import muse.service.{RequestSession, UserSessions}
 import muse.utils.Givens
 import muse.utils.Givens.given
 import muse.utils.Utils.addTimeLog
@@ -59,6 +57,8 @@ trait SpotifyService {
 }
 
 object SpotifyService {
+
+  type Env = SttpBackend[Task, Any] & RedisService & Ref[Option[Long]]
 
   def live(accessToken: String) = for {
     backend    <- ZIO.service[SttpBackend[Task, Any]]

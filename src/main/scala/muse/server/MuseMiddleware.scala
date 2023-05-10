@@ -1,25 +1,26 @@
 package muse.server
 
-import caliban.Value.StringValue
-import caliban.interop.tapir.{StreamTransformer, WebSocketHooks}
 import caliban.*
+import caliban.Value.StringValue
+import caliban.interop.tapir.TapirAdapter.TapirResponse
+import caliban.interop.tapir.{StreamTransformer, WebSocketHooks, WebSocketInterpreter}
 import io.netty.handler.codec.http.HttpHeaderNames
 import muse.domain.common.Types.SessionId
-import muse.domain.error.{MuseError, RateLimited, Unauthorized}
+import muse.domain.error.MuseError
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
+import muse.service.UserSessionService
 import muse.service.cache.RedisService
-import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService}
-import muse.service.{RequestSession, UserSessions}
+import muse.service.persist.DatabaseService
+import muse.service.spotify.{SpotifyAPI, SpotifyAuthService, SpotifyService, SpotifyServiceLive}
 import muse.utils.Utils
-import nl.vroste.rezilience.Bulkhead
-import nl.vroste.rezilience.Bulkhead.{BulkheadError, BulkheadException, WrappedError}
 import sttp.client3.SttpBackend
+import sttp.model.StatusCode
+import sttp.tapir.model.ServerRequest
 import zio.*
-import zio.http.Http.Route
-import zio.http.middleware.*
-import zio.http.model.HttpError
 import zio.http.*
+import zio.http.Header.Authorization
+import zio.http.Http.Route
 import zio.redis.Redis
 import zio.stream.ZStream
 
@@ -27,140 +28,121 @@ import java.time.Instant
 
 object MuseMiddleware {
 
-  type SessionEnv = RedisService & UserSessions & RequestSession[UserSession] & RequestSession[SpotifyService] &
-    SttpBackend[Task, Any] & Ref[Option[Long]]
-
-  final def InjectSessionAndRateLimit: RequestHandlerMiddleware.Simple[SessionEnv, Throwable] =
-    new RequestHandlerMiddleware.Simple[SessionEnv, Throwable] {
-      override def apply[Env <: SessionEnv, Err >: Throwable](handler: Handler[Env, Err, Request, Response])(
-          implicit trace: Trace): Handler[Env, Err, Request, Response] =
-        Handler.fromFunctionZIO[Request] { request =>
-          for {
-            // Initialize Session.
-            session       <- {
-              extractRequestAuth(request) match
-                case None            => ZIO.fail(Unauthorized("Missing Auth Header"))
-                case Some(sessionId) => UserSessions.getUserSession(SessionId(sessionId))
-            }
-            _             <- RequestSession.set[UserSession](Some(session))
-            spotify       <- SpotifyService.live(session.accessToken)
-            _             <- RequestSession.set[SpotifyService](Some(spotify))
-            // Rate Limiting.
-            isRateLimited <- RedisService.rateLimited(session.userId).orDie
-            _             <- ZIO.logError(s"Rate Limited ${session.userId}").when(isRateLimited)
-            result        <- if isRateLimited then ZIO.fail(RateLimited)
-                             else handler.runZIO(request)
-          } yield result
-        }
-    }
-
-  private def extractRequestAuth(request: Request) = request
-    .cookieValue(COOKIE_KEY)
-    .orElse(request.authorization)
-    .map(_.toString)
-
   /**
-   * Logs the requests made to the server.
-   *
-   * It also adds a request ID to the logging context, so any further logging that occurs in the handler can be associated with
-   * the same request.
+   * ZIO Http related middleware
    */
 
+  def InjectSessionAndRateLimit[R] = HttpAppMiddleware.customAuthProvidingZIO[
+    UserSessionService,
+    UserSessionService & R,
+    Response,
+    UserSession,
+  ](getSessionZioHttp, Headers.empty, Status.Unauthorized)
+
+  private def getSessionZioHttp(headers: Headers) = getSession(extractRequestAuth(headers))
+    .mapBoth(
+      {
+        case u: Unauthorized => Response.fromHttpError(HttpError.Unauthorized(u.message))
+        case RateLimited     => Response.fromHttpError(HttpError.TooManyRequests("Too many concurrent requests"))
+        case e: Throwable    => Response.fromHttpError(HttpError.InternalServerError(cause = Some(e)))
+      },
+      Some(_)
+    )
+
+  private def extractRequestAuth(headers: Headers) = {
+    val cookie = headers.header(Header.Cookie).flatMap { c => c.value.find { c => c.name == COOKIE_KEY }.map(_.content) }
+
+    val token = headers.header(Header.Authorization).flatMap {
+      case Authorization.Bearer(token) => Some(token)
+      case _                           => None
+    }
+    cookie.orElse(token)
+  }
+
+  def isValidSession(header: Headers) = {
+    extractRequestAuth(header).fold(ZIO.succeed(false)) { sessionId =>
+      UserSessionService
+        .getUserSession(SessionId(sessionId))
+        .fold(_ => false, _.isDefined)
+    }
+  }
+
   /**
-   * Add log status, method, url and time taken from req to res
+   * Caliban / Tapir related middleware
    */
-  final def debug: RequestHandlerMiddleware.Simple[Any, Nothing] =
-    new RequestHandlerMiddleware.Simple[Any, Nothing] {
-      override def apply[R1 <: Any, Err1 >: Nothing](
-          handler: Handler[R1, Err1, Request, Response]
-      )(implicit trace: Trace): Handler[R1, Err1, Request, Response] =
-        Handler.fromFunctionZIO { request =>
-          for {
-            traceId             <- Random.nextUUID
-            withTime            <- ZIO.logAnnotate("trace-id", traceId.toString) {
-                                     handler.runZIO(request).timed
-                                   }
-            (duration, response) = withTime
-            _                   <- ZIO.logInfo(s"${response.status.code} ${request.method} ${request.url.encode} ${duration.toMillis}ms")
-          } yield response
-        }
-    }
 
-  object Websockets {
-
-    private val makeSessionRef = Ref.make[Option[UserSession]](None)
-
-    def live[R](interpreter: GraphQLInterpreter[R, CalibanError]) =
-      Http.fromHttpZIO[Request] { request =>
-        val maybeAuth = extractRequestAuth(request)
-        MuseMiddleware.Websockets.configure(interpreter, maybeAuth)
-      }
-
-    def configure[R](interpreter: GraphQLInterpreter[R, CalibanError], maybeUserSessionId: Option[String]) = for {
-      ref        <- makeSessionRef
-      authSession = createSession[UserSession](ref)
-
-      // Authorize with cookie! Ignored because we can also authorize with payload.
-      _ <- initSession(authSession, maybeUserSessionId).ignore
-    } yield {
-      // Authorize with input value!
-      val connectionInit = WebSocketHooks.init { payload =>
-        val maybeSessionId = payload match
-          case InputValue.ObjectValue(fields) =>
-            fields.get("Authorization").flatMap {
-              case StringValue(s) => Some(s)
-              case _              => None
-            }
-          case _                              => None
-        initSession(authSession, maybeSessionId)
-      }
-
-      // Ensure that each message has latest sessions in environment.
-      val transformService = WebSocketHooks.message(new StreamTransformer[SessionEnv, Throwable] {
-        def transform[R1 <: SessionEnv, E1 >: Throwable](
-            stream: ZStream[R1, E1, GraphQLWSOutput]
-        ): ZStream[R1, E1, GraphQLWSOutput] =
-          ZStream.fromZIO(
-            for {
-              sessionId     <- authSession.get.map(_.sessionId)
-              latestSession <- UserSessions.getUserSession(sessionId)
-              spotify       <- SpotifyService.live(latestSession.accessToken)
-              _             <- authSession.set(Some(latestSession)) <&>
-                                 RequestSession.set[UserSession](Some(latestSession)) <&>
-                                 RequestSession.set[SpotifyService](Some(spotify))
-            } yield ()
-          ) *> stream
-      })
-
-      import sttp.tapir.json.zio.*
-
-      ZHttpAdapter.makeWebSocketService(
-        interpreter,
-        webSocketHooks = connectionInit ++ transformService
-      )
-    }
-
-    // If the session is already set, do nothing. Otherwise, attempt to initialize UserSession.
-    private def initSession(ref: RequestSession[UserSession], maybeUserSessionId: Option[String]) = ref.get.isSuccess.flatMap {
-      case true  => ZIO.unit
-      case false =>
-        ZIO
-          .fromOption(maybeUserSessionId).orElseFail(Unauthorized("Missing Auth: Unable to decode payload"))
-          .flatMap(auth => UserSessions.getUserSession(SessionId(auth)))
-          .flatMap(session => ref.set(Some(session)))
-    }
-
-    private def createSession[R: Tag](ref: Ref[Option[R]]) = {
-      new RequestSession[R] {
-        def get: IO[Unauthorized, R] =
-          ref.get.flatMap {
-            case Some(v) => ZIO.succeed(v)
-            case None    => ZIO.fail(Unauthorized("Missing Websocket Auth"))
-          }
-
-        def set(session: Option[R]): UIO[Unit] = ref.set(session)
+  val getSessionTapir: ZLayer[UserSessionService with ServerRequest, TapirResponse, UserSession] =
+    ZLayer.fromZIO {
+      {
+        for {
+          request       <- ZIO.service[ServerRequest]
+          maybeCookie    = request.header(sttp.model.HeaderNames.Cookie).flatMap { value =>
+                             value
+                               .split(";")
+                               .map(_.trim)
+                               .map(_.split("="))
+                               .filter(_.length == 2)
+                               .find(_(0) == COOKIE_KEY).map(_(1))
+                           }
+          maybeAuth      = request.header(sttp.model.HeaderNames.Authorization).flatMap { value =>
+                             val split = value.split(" ")
+                             if (split.length == 2 && split(0).toLowerCase == "bearer") Some(split(1))
+                             else None
+                           }
+          maybeSessionId = maybeCookie.orElse(maybeAuth)
+          session       <- getSession(maybeSessionId).mapError {
+                             case u: Unauthorized => TapirResponse(StatusCode.Unauthorized, u.message)
+                             case RateLimited     => TapirResponse(StatusCode.TooManyRequests)
+                             case e: Throwable    => TapirResponse(StatusCode.InternalServerError, e.getMessage)
+                           }
+        } yield session
       }
     }
+
+  val makeSpotify: ZLayer[SpotifyService.Env & Reloadable[UserSession], Nothing, SpotifyService] = ZLayer.fromZIO {
+    for {
+      sessionRef <- ZIO.service[Reloadable[UserSession]]
+      session    <- sessionRef.get
+      spotify    <- SpotifyService.live(session.spotifyData.accessToken)
+    } yield spotify
+  }
+
+  def getSessionAndSpotifyTapir[R] = ZLayer.makeSome[
+    R with UserSessionService with SpotifyService.Env with ServerRequest,
+    R with Reloadable[UserSession] with Reloadable[SpotifyService]
+  ](
+    getSessionTapir.reloadableManual,
+    makeSpotify.reloadableManual
+  )
+
+  /**
+   * Implementation.
+   */
+
+  private case object RateLimited
+  private case class Unauthorized(message: String)
+
+  private type GetSession = ZIO[UserSessionService, Throwable | RateLimited.type | Unauthorized, UserSession]
+
+  private def getSession(maybeSessionId: Option[String]): GetSession = {
+    val retrieveSession = maybeSessionId.fold(ZIO.fail(Unauthorized("Missing Session ID."))) { sessionId =>
+      UserSessionService
+        .getUserSession(SessionId(sessionId))
+        .someOrFail[UserSession, Throwable | Unauthorized](Unauthorized("Invalid Session ID."))
+        .tapErrorCause { c => ZIO.logErrorCause("Failed to get user session", c) }
+    }
+
+    for {
+      session <- retrieveSession
+      _       <- ZIO
+                   .whenZIO[UserSessionService, Throwable | RateLimited.type] {
+                     UserSessionService
+                       .isRateLimited(session.userId)
+                       .tapErrorCause { c => ZIO.logErrorCause("Failed to check rate limit", c) }
+                   } {
+                     ZIO.logError(s"Rate Limited ${session.userId}") *> ZIO.fail(RateLimited)
+                   }
+    } yield session
   }
 
 }

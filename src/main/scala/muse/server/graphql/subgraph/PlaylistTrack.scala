@@ -3,7 +3,6 @@ package muse.server.graphql.subgraph
 import muse.domain.common.Types.UserId
 import muse.domain.spotify
 import muse.server.graphql.resolver.{GetPlaylist, GetUser}
-import muse.service.RequestSession
 import muse.service.spotify.SpotifyService
 import zio.query.ZQuery
 
@@ -14,7 +13,7 @@ final case class PlaylistTrack(
     addedBy: User,
     isLocal: Boolean,
     track: Track,
-    playlist: ZQuery[RequestSession[SpotifyService], Nothing, Playlist]
+    playlist: ZQuery[GetPlaylist.Env, Nothing, Playlist]
 )
 
 object PlaylistTrack {

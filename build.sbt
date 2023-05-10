@@ -33,20 +33,18 @@ lazy val root = (project in file("."))
       "dev.zio"                       %% "zio-schema"                    % Version.zioSchema,
       "dev.zio"                       %% "zio-schema-json"               % Version.zioSchema,
       "dev.zio"                       %% "zio-schema-protobuf"           % Version.zioSchema,
+      "dev.zio"                       %% "zio-query"                     % Version.zioQuery,
+      "dev.zio"                       %% "zio-http"                      % Version.zioHttp,
       "dev.zio"                       %% "zio-json"                      % Version.zioJson,
       "dev.zio"                       %% "zio-nio"                       % Version.zioNio,
       "dev.zio"                       %% "zio-cache"                     % Version.zioCache,
       "dev.zio"                       %% "zio-redis"                     % Version.zioRedis,
       "dev.zio"                       %% "zio-metrics-prometheus"        % Version.zioMetrics,
       "dev.zio"                       %% "zio-metrics-connectors"        % Version.zioMetrics,
-      "com.stuart"                    %% "zcaffeine"                     % Version.zcaffiene,
-      "nl.vroste"                     %% "rezilience"                    % Version.rezilience,
       // ZIO Config.
       "dev.zio"                       %% "zio-config"                    % Version.zioConfig,
       "dev.zio"                       %% "zio-config-magnolia"           % Version.zioConfig,
       "dev.zio"                       %% "zio-config-typesafe"           % Version.zioConfig,
-      // HTTP Server.
-      "dev.zio"                       %% "zio-http"                      % Version.zioHttp,
       // HTTP Client.
       "com.softwaremill.sttp.client3" %% "core"                          % Version.sttp,
       "com.softwaremill.sttp.client3" %% "async-http-client-backend-zio" % Version.sttp,

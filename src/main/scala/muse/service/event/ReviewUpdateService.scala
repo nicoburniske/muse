@@ -2,9 +2,9 @@ package muse.service.event
 
 import muse.domain.event.ReviewUpdateEvent
 import muse.domain.table.ReviewComment
-import zio.stream.{UStream, ZStream}
 import zio.*
 import zio.schema.{DeriveSchema, Schema}
+import zio.stream.{UStream, ZStream}
 
 import java.util.UUID
 

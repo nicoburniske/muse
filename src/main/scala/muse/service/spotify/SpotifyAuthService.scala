@@ -2,9 +2,8 @@ package muse.service.spotify
 
 import muse.config.SpotifyConfig
 import muse.domain.spotify.auth.*
-import muse.service.UserSessions
-import zio.http.model.*
-import zio.http.{Body, Client, Path, URL}
+import muse.service.UserSessionService
+import zio.http.*
 import zio.json.*
 import zio.{Task, ZIO, ZLayer}
 
@@ -32,11 +31,6 @@ object SpotifyAuthService {
 }
 
 case class SpotifyAuthLive(config: SpotifyConfig, client: Client) extends SpotifyAuthService {
-
-  val TOKEN_ENDPOINT = URL(
-    Path.decode("/api/token"),
-    URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
-  )
 
   val layer = ZLayer.succeed(client)
 
@@ -86,10 +80,18 @@ case class SpotifyAuthLive(config: SpotifyConfig, client: Client) extends Spotif
         ZIO.fail(_)
       ).mapError(SpotifyAuthError(status, _))
 
+  private val TOKEN_ENDPOINT   = URL(
+    Path.decode("/api/token"),
+    URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443)
+  )
+  private val ENDPOINT_ENCODED = TOKEN_ENDPOINT.encode
+
   private def executePost(body: Map[String, String]) = {
-    val headers = Headers.basicAuthorizationHeader(config.clientID, config.clientSecret) ++
-      Headers.contentType(HeaderValues.applicationXWWWFormUrlencoded)
-    Client.request(TOKEN_ENDPOINT.encode, Method.POST, headers, Body.fromString(encodeFormBody(body)))
+    val headers = Headers(
+      Header.Authorization.Basic(config.clientID, config.clientSecret),
+      Header.ContentType(MediaType.application.`x-www-form-urlencoded`)
+    )
+    Client.request(ENDPOINT_ENCODED, Method.POST, headers, Body.fromString(encodeFormBody(body)))
   }
 
   // TODO: add to ZIO-HTTP

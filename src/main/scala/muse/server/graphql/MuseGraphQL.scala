@@ -20,10 +20,12 @@ import muse.domain.{spotify, table}
 import muse.server.graphql.resolver.GetSearch.PaginationResult
 import muse.server.graphql.resolver.{FeedInput, ReviewConnection, ReviewEdge, UserPlaylistsInput}
 import muse.server.graphql.subgraph.*
+import muse.service.UserSessionService
+import muse.service.cache.RedisService
 import muse.service.event.ReviewUpdateService
 import muse.service.persist.DatabaseService
 import muse.service.spotify.{SpotifyError, SpotifyService}
-import muse.service.{RequestSession, UserSessions}
+import sttp.client3.SttpBackend
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.*
 import zio.query.{CompletedRequestMap, DataSource, Request, ZQuery}
@@ -34,7 +36,13 @@ import java.util.UUID
 import scala.util.Try
 
 object MuseGraphQL {
-  type Env = RequestSession[UserSession] & RequestSession[SpotifyService] & DatabaseService & UserSessions & ReviewUpdateService & Scope
+
+  type Env        = SessionEnv & ServiceEnv
+  // To be provided by GraphQL Interceptor.
+  type SessionEnv = Reloadable[UserSession] & Reloadable[SpotifyService]
+  // Global Services.
+  type ServiceEnv = DatabaseService & ReviewUpdateService
+  
 
   given Schema[Env, spotify.PlaybackDevice]  = Schema.gen
   given Schema[Env, spotify.ExternalIds]     = Schema.gen
@@ -109,8 +117,8 @@ object MuseGraphQL {
   given ArgBuilder[FeedInput]         = ArgBuilder.gen
   given Schema[Env, ReviewConnection] = Schema.gen
   given Schema[Env, ReviewEdge]       = Schema.gen
-  given Schema[Env, PageInfo]      = Schema.gen
-  given ArgBuilder[PageInfo]       = ArgBuilder.gen
+  given Schema[Env, PageInfo]         = Schema.gen
+  given ArgBuilder[PageInfo]          = ArgBuilder.gen
 
   // Mutation.
   given Schema[Env, CreateReview]      = Schema.gen
@@ -231,7 +239,7 @@ object MuseGraphQL {
   val api = caliban.graphQL[Env, Queries, Mutations, Subscriptions](
     RootResolver(Queries.live, Mutations.live, Subscriptions.live)) @@ printErrors @@ apolloTracing
 
-  val interpreter = api.interpreter.map(errorHandler(_))
+  val interpreter = api.interpreter.map(errorHandler)
 
   // TODO: Consider handling Spotify 404 error.
   private def errorHandler[R](

@@ -13,12 +13,11 @@ import muse.domain.spotify.{
   PositionOffset as SpotifyPostionOffset
 }
 import muse.server.graphql.subgraph.ReviewUpdate
-import muse.service.RequestSession
 import muse.service.persist.DatabaseService
 import muse.service.spotify.SpotifyService
 import zio.{Hub, ZIO}
 
-type SpotifyMutationEnv = RequestSession[UserSession] & RequestSession[SpotifyService]
+type SpotifyMutationEnv = UserSession & SpotifyService
 case class SpotifyMutations(
     play: PlayInput => ZIO[SpotifyMutationEnv, Throwable, Boolean],
     transferPlayback: Input[TransferPlayback] => ZIO[SpotifyMutationEnv, Throwable, Boolean],
@@ -51,24 +50,24 @@ object SpotifyMutations {
   )
 
   def play(play: Play) = for {
-    spotify <- RequestSession.get[SpotifyService]
+    spotify <- ZIO.service[SpotifyService]
     res     <- spotify.startPlayback(play.deviceId, None)
   } yield res
 
   def transferPlayback(transferPlayback: TransferPlayback) = for {
-    spotify <- RequestSession.get[SpotifyService]
+    spotify <- ZIO.service[SpotifyService]
     res     <- spotify.transferPlayback(transferPlayback.deviceId)
   } yield res
 
   def playTracks(play: PlayTracks) = for {
-    spotify <- RequestSession.get[SpotifyService]
+    spotify <- ZIO.service[SpotifyService]
     uris     = play.trackIds.map(toUri(EntityType.Track, _))
     body     = StartPlaybackBody(None, Some(uris), None, play.positionMs)
     res     <- spotify.startPlayback(play.deviceId, Some(body))
   } yield res
 
   def playOffsetContext(play: PlayOffsetContext) = for {
-    spotifyService <- RequestSession.get[SpotifyService]
+    spotifyService <- ZIO.service[SpotifyService]
     offset          = SpotifyPostionOffset(play.offset.position)
     contextUri      = toUri(play.offset.context)
     body            = StartPlaybackBody(Some(contextUri), None, Some(offset), play.positionMs)
@@ -76,7 +75,7 @@ object SpotifyMutations {
   } yield res
 
   def playEntityContext(play: PlayEntityContext) = for {
-    spotify <- RequestSession.get[SpotifyService]
+    spotify <- ZIO.service[SpotifyService]
     outerUri = toUri(play.offset.outer)
     innerUri = toUri(play.offset.inner)
     body     = StartPlaybackBody(Some(outerUri), None, Some(UriOffset(innerUri)), play.positionMs)
@@ -86,35 +85,35 @@ object SpotifyMutations {
   def seekPlayback(playback: SeekPlayback) = for {
     _       <- ZIO.fail(BadRequest(Some("Playback offset cannot be negative"))).when(playback.positionMs < 0)
     _       <- ZIO.logInfo(s"Seeking playback to ${playback.positionMs}ms")
-    spotify <- RequestSession.get[SpotifyService]
+    spotify <- ZIO.service[SpotifyService]
     res     <- spotify.seekPlayback(playback.deviceId, playback.positionMs)
   } yield res
 
   def pausePlayback(deviceId: Option[String]) = for {
-    spotify <- RequestSession.get[SpotifyService]
+    spotify <- ZIO.service[SpotifyService]
     res     <- spotify.pausePlayback(deviceId)
   } yield res
 
   def skipToNext(deviceId: Option[String]) = for {
-    spotify <- RequestSession.get[SpotifyService]
+    spotify <- ZIO.service[SpotifyService]
     res     <- spotify.skipToNext(deviceId)
   } yield res
 
   def skipToPrevious(deviceId: Option[String]) = for {
-    spotify <- RequestSession.get[SpotifyService]
+    spotify <- ZIO.service[SpotifyService]
     res     <- spotify.skipToPrevious(deviceId)
   } yield res
 
   def toggleShuffle(shuffleState: Boolean) = for {
-    spotify <- RequestSession.get[SpotifyService]
+    spotify <- ZIO.service[SpotifyService]
     res     <- spotify.toggleShuffle(shuffleState)
   } yield res
 
   def saveTracks(trackIds: List[String]) =
-    RequestSession.get[SpotifyService].flatMap(_.saveTracks(trackIds.toVector))
+    ZIO.service[SpotifyService].flatMap(_.saveTracks(trackIds.toVector))
 
   def removeSavedTracks(trackIds: List[String]) =
-    RequestSession.get[SpotifyService].flatMap(_.removeSavedTracks(trackIds.toVector))
+    ZIO.service[SpotifyService].flatMap(_.removeSavedTracks(trackIds.toVector))
 
   private def toUri(e: Context): String                       = toUri(e.entityType, e.entityId)
   private def toUri(entityType: EntityType, entityId: String) = entityType match

@@ -5,15 +5,14 @@ import caliban.CalibanError.{ExecutionError, ParsingError, ValidationError}
 import caliban.ResponseValue.ObjectValue
 import caliban.Value.StringValue
 import muse.config.{AppConfig, ServerConfig}
-import muse.domain.error.Unauthorized
 import muse.domain.session.UserSession
 import muse.server.graphql.MuseGraphQL
 import muse.server.{Auth, MuseMiddleware, MuseServer}
+import muse.service.UserSessionService
 import muse.service.cache.RedisService
 import muse.service.event.{EventService, ReviewUpdateService}
 import muse.service.persist.{DatabaseService, MigrationService, QuillContext}
-import muse.service.spotify.{RateLimitRef, SpotifyAuthService, SpotifyCache}
-import muse.service.{RequestSession, UserSessions}
+import muse.service.spotify.{RateLimitRef, SpotifyAuthService}
 import muse.utils.Utils
 import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
 import zio.Duration.*
@@ -48,9 +47,7 @@ object Main extends ZIOAppDefault {
       RedisService.connectionLayer,
       RedisService.redisLayer,
       // Session layers.
-      UserSessions.layer,
-      RequestSession.userSessionLayer,
-      RequestSession.spotifySessionLayer,
+      UserSessionService.layer,
       // Event layers.
       EventService.layer,
       EventService.natsLayer,

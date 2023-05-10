@@ -88,7 +88,7 @@ final case class RedisServiceLive(redisRef: Reloadable[Redis], config: RateLimit
         redis.call("PEXPIRE", currentKey, window * 2 + 1000) -- Enough time to overlap with a new window + 1 second
       end
       return tokens - newValue
-    |""".stripMargin
+                |""".stripMargin
 
     import zio.redis.Input.*
     import zio.redis.Output.*

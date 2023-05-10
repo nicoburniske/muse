@@ -1,8 +1,7 @@
 package muse.domain.session
 
-import muse.domain.common.Types.{AccessToken, SessionId, UserId}
+import muse.domain.common.Types.{AccessToken, SessionId, UserId, RefreshToken}
 import muse.service.spotify.SpotifyService
-import nl.vroste.rezilience.Bulkhead
 
 import java.time.Instant
 
@@ -17,5 +16,11 @@ import java.time.Instant
 final case class UserSession(
     sessionId: SessionId,
     userId: UserId,
-    accessToken: AccessToken
+    spotifyData: SpotifyData
+)
+
+final case class SpotifyData(
+    accessToken: AccessToken,
+    refreshToken: RefreshToken,
+    expiration: Instant
 )

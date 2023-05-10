@@ -3,6 +3,7 @@ package muse.config
 import com.typesafe.config.ConfigFactory
 import zio.Config.*
 import zio.config.*
+import zio.*
 import zio.config.typesafe.TypesafeConfigProvider
 import zio.redis.RedisConfig
 import zio.{Config, Duration, ZIO, ZLayer}
@@ -17,7 +18,7 @@ final case class AppConfig(
     nats: NatsConfig,
     rateLimit: RateLimitConfig)
 
-final case class ServerConfig(domain: Option[String], frontendUrl: String, port: Int, schemaFile: String)
+final case class ServerConfig(domain: Option[String], frontendUrl: zio.http.URL, port: Int, schemaFile: String)
 final case class SpotifyConfig(clientID: String, clientSecret: String, redirectURI: String, service: SpotifyServiceConfig)
 final case class SqlConfig(database: String, host: String, port: Int, user: String, password: String)
 final case class RedisCacheConfig(host: String, port: Int, username: String, password: String)
@@ -51,6 +52,11 @@ object AppConfig {
 
   import zio.config.magnolia.*
 
-  lazy val appDescriptor = deriveConfig[AppConfig]
+  given Config[zio.http.URL] =
+    string.mapOrFail { f =>
+      zio.http.URL.decode(f).left.map(e => Config.Error.InvalidData(message = s"Invalid URL: ${e.getMessage}"))
+    }
+
+  val appDescriptor = deriveConfig[AppConfig]
 
 }
