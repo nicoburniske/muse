@@ -128,8 +128,8 @@ object MuseMiddleware {
     val retrieveSession = maybeSessionId.fold(ZIO.fail(Unauthorized("Missing Session ID."))) { sessionId =>
       UserSessionService
         .getUserSession(SessionId(sessionId))
-        .someOrFail[UserSession, Throwable | Unauthorized](Unauthorized("Invalid Session ID."))
         .tapErrorCause { c => ZIO.logErrorCause("Failed to get user session", c) }
+        .someOrFail[UserSession, Throwable | Unauthorized](Unauthorized("Invalid Session ID."))
     }
 
     for {

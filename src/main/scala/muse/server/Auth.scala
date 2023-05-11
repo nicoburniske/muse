@@ -109,7 +109,7 @@ object Auth {
   def makeSpotifyRedirect(frontendUrl: URL) = for {
     spotifyConfig <- ZIO.service[SpotifyConfig]
     state         <- Random.nextUUID.map(_.toString.take(30))
-    _             <- RedisService.set(state, frontendUrl, Some(10.seconds)).retry(retrySchedule)
+    _             <- RedisService.set(state, frontendUrl, Some(10.minutes)).retry(retrySchedule)
   } yield URL(
     Path.decode("/authorize"),
     URL.Location.Absolute(Scheme.HTTPS, "accounts.spotify.com", 443),
