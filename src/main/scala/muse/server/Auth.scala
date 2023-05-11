@@ -191,6 +191,9 @@ object Auth {
     // So music can be streamed to Muse's integrated player.
     "streaming",
     // To ensure users have premium subscriptions.
-    "user-read-private"
+    "user-read-private",
+    // For some reason this is required by streaming.
+    // See https://github.com/spotify/spotify-web-playback-sdk-example/blob/d22700174073dec831635aac452acbf5b4186853/server/index.js#L30
+    "user-read-email"
   ).mkString(" ")
 }
