@@ -30,7 +30,6 @@ object Main extends ZIOAppDefault {
     .live
     .provide(
       ZLayer.Debug.mermaid,
-      Scope.default,
       AsyncHttpClientZioBackend.layer(),
       serverConfig,
       Client.default,

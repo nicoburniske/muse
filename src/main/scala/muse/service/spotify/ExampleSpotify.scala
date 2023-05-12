@@ -135,7 +135,7 @@ case class WeeklyAnalysis(spotify: SpotifyAPI[Task]) {
     names          = sortedOldToNew.reverse.map(_.name).mkString(", ")
     ids            = sortedOldToNew.map(_.id)
     _             <- printLine(s"${weeklies.size} Playlists Found: $names")
-    tracks        <- ZIO.foreachPar(ids)(spotify.getAllPlaylistTracks).map(_.flatten)
+    tracks        <- ZIO.foreachPar(ids)(spotify.getAllPlaylistTracks).map(_.flatten.flatMap(_.toOption))
     _             <- printLine(s"${tracks.size} Tracks Found")
   } yield tracks
 

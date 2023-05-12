@@ -35,8 +35,11 @@ trait SpotifyService {
   def getUserPlaylists(userId: UserId, limit: Int, offset: Option[Int] = None): Task[Paging[BulkPlaylist]]
   def getCurrentUserPlaylists(limit: Int, offset: Option[Int] = None): Task[Paging[BulkPlaylist]]
   def getAllUserPlaylists(userId: UserId): Task[Vector[BulkPlaylist]]
-  def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): Task[Paging[PlaylistTrack]]
-  def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]]
+  def getSomePlaylistTracks(
+      playlistId: String,
+      limit: Int,
+      offset: Option[Int] = None): Task[Paging[Either[Throwable, PlaylistTrack]]]
+  def getAllPlaylistTracks(playlistId: String): Task[Vector[Either[Throwable, PlaylistTrack]]]
   def getSomeAlbumTracks(album: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[SimpleTrack]]
   def getAllAlbumTracks(albumId: String): Task[Vector[SimpleTrack]]
   def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None): Task[Paging[Album]]
@@ -157,7 +160,7 @@ object SpotifyService {
     ZIO.serviceWithZIO[SpotifyService](_.seekPlayback(deviceId, positionMs))
 }
 
-case class SpotifyServiceLive(
+final case class SpotifyServiceLive(
     s: SpotifyAPI[Task],
     redisService: RedisService
 ) extends SpotifyService {
@@ -246,7 +249,7 @@ case class SpotifyServiceLive(
   def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None) =
     s.getSomePlaylistTracks(playlistId, limit, offset)
 
-  def getAllPlaylistTracks(playlistId: String): Task[Vector[PlaylistTrack]] =
+  def getAllPlaylistTracks(playlistId: String) =
     s.getAllPlaylistTracks(playlistId)
 
   def getCurrentUserPlaylists(limit: Int, offset: Option[Int] = None) =
@@ -261,12 +264,12 @@ case class SpotifyServiceLive(
   def getSomeArtistAlbums(artistId: String, limit: Option[Int] = None, offset: Option[Int] = None) =
     s.getSomeArtistAlbums(artistId, limit, offset)
 
-  def getAllArtistAlbums(artistId: String): Task[Vector[Album]] = s.getAllArtistAlbums(artistId)
+  def getAllArtistAlbums(artistId: String) = s.getAllArtistAlbums(artistId)
 
-  def getArtistTopTracks(artistId: String, country: String = "US"): Task[Vector[Track]] =
+  def getArtistTopTracks(artistId: String, country: String = "US") =
     s.getArtistTopTracks(artistId, country)
 
-  def checkUserSavedTracks(trackIds: Vector[String]): Task[Vector[(String, Boolean)]] =
+  def checkUserSavedTracks(trackIds: Vector[String]) =
     s.checkUserSavedTracks(trackIds)
 
   def startPlayback(device: Option[String], startPlaybackBody: Option[StartPlaybackBody]) =

@@ -17,13 +17,9 @@ object GetUser {
   def query(maybeId: Option[UserId]) = maybeId match
     case None     => currentUser
     case Some(id) => ZQuery.succeed(queryByUserId(id))
-
-  def queryByUserId(userId: UserId) =
-    User(userId, GetUserReviews.query(userId), GetSpotifyProfile.query(userId), GetUserPlaylists.boxedQuery(userId))
-
-  def currentUser = for {
-    userId <- ZQuery.fromZIO(getUserId)
-  } yield User(userId, GetUserReviews.query(userId, All), GetSpotifyProfile.query(userId), GetUserPlaylists.boxedQuery(userId))
+    
+  def queryByUserId(userId: UserId) = User.fromId(userId)
+  def currentUser = ZQuery.fromZIO(getUserId).map(userId => User.fromId(userId))
 
   // TODO: This needs to be revised.
   // Incorporate a limit of how many users can be returned.

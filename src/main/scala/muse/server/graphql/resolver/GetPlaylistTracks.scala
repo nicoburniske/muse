@@ -44,7 +44,10 @@ object GetPlaylistTracks {
   private def getTracks(playlistId: String, offset: Int) = {
       getSpotify
       .flatMap(_.getSomePlaylistTracks(playlistId, MAX_PLAYLIST_TRACKS_PER_REQUEST, Some(offset)))
-      .map(_.items)
-      .map(_.map(PlaylistTrack.fromSpotify(_, playlistId)))
+      .map { page =>
+        val (_, success) = page.items.partitionMap(identity)
+        success
+      }
+        .map(_.map(PlaylistTrack.fromSpotify(_, playlistId)))
   }
 }

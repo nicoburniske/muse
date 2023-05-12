@@ -98,11 +98,24 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], retryAfterRef: R
     getAllPaging(request, MAX_PER_REQUEST)
 
   // Seems like sometimes the inner tracks can be null?
-  def getSomePlaylistTracks(playlistId: String, limit: Int, offset: Option[Int] = None): F[Paging[PlaylistTrack]] =
+  // When people include local tracks in playlist.
+  def getSomePlaylistTracks(
+      playlistId: String,
+      limit: Int,
+      offset: Option[Int] = None): F[Paging[Either[Throwable, PlaylistTrack]]] =
     val uri = uri"${SpotifyAPI.API_BASE}/playlists/$playlistId/tracks?limit=$limit&offset=$offset"
+
+    // TODO: figure out if there's a better way to do this!
+    val maybePlaylistTrackDecoder = JsonDecoder[zio.json.ast.Json].map { json =>
+      SpotifyAPI.DeserializationException(json.toString(), "Failed to Deserialize Playlist Track")
+    }
+
+    given JsonDecoder[Either[Throwable, PlaylistTrack]] =
+      JsonDecoder[PlaylistTrack].orElseEither(maybePlaylistTrackDecoder).map(_.swap)
+
     execute(uri, Method.GET)
 
-  def getAllPlaylistTracks(playlistId: String): F[Vector[PlaylistTrack]] =
+  def getAllPlaylistTracks(playlistId: String): F[Vector[Either[Throwable, PlaylistTrack]]] =
     val MAX_PER_REQUEST = 100
     val request         = (offset: Int) => getSomePlaylistTracks(playlistId, MAX_PER_REQUEST, Some(offset))
     getAllPaging(request, MAX_PER_REQUEST)
@@ -182,7 +195,7 @@ final case class SpotifyAPI[F[_]](backend: SttpBackend[F, Any], retryAfterRef: R
     val uri = uri"${SpotifyAPI.API_BASE}/me/player/shuffle?state=$shuffleState"
     executeAndIgnoreResponse(uri, Method.PUT).as(true)
 
-  def getAllPaging[T: JsonDecoder](request: Int => F[Paging[T]], pageSize: Int = 50): F[Vector[T]] = {
+  def getAllPaging[T](request: Int => F[Paging[T]], pageSize: Int = 50): F[Vector[T]] = {
     def go(acc: Vector[T], offset: Int): F[Vector[T]] =
       request(offset).flatMap { (paging: Paging[T]) =>
         paging.next match
@@ -310,9 +323,9 @@ object SpotifyAPI {
 
   sealed abstract class ResponseException[+HE, +DE](error: String) extends Exception(error)
 
-  case class HttpError[HE](body: HE, metadata: ResponseMetadata)
+  final case class HttpError[HE](body: HE, metadata: ResponseMetadata)
       extends ResponseException[HE, Nothing](s"statusCode: ${metadata.code}, response: $body")
 
-  case class DeserializationException[DE: ShowError](body: String, error: DE)
+  final case class DeserializationException[DE: ShowError](body: String, error: DE)
       extends ResponseException[Nothing, DE](implicitly[ShowError[DE]].show(error))
 }

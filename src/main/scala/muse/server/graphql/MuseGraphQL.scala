@@ -42,7 +42,6 @@ object MuseGraphQL {
   type SessionEnv = Reloadable[UserSession] & Reloadable[SpotifyService]
   // Global Services.
   type ServiceEnv = DatabaseService & ReviewUpdateService
-  
 
   given Schema[Env, spotify.PlaybackDevice]  = Schema.gen
   given Schema[Env, spotify.ExternalIds]     = Schema.gen
@@ -77,9 +76,10 @@ object MuseGraphQL {
 //  given Schema[Env, PaginationResult[Playlist]] = Schema.gen
 //  given Schema[Env, PaginationResult[Track]]    = Schema.gen
 
-  given Schema[Env, Review]  = Schema.gen
-  given Schema[Env, Comment] = Schema.gen
-  given Schema[Env, User]    = Schema.gen
+  given Schema[Env, Review]      = Schema.gen
+  given Schema[Env, Comment]     = Schema.gen
+  given Schema[Env, User]        = Schema.gen
+  given Schema[Env, PrivateUser] = Schema.gen
 
   given Schema[Env, Collaborator]                        = Schema.gen
   given Schema[Env, table.AccessLevel]                   = Schema.gen
@@ -107,11 +107,12 @@ object MuseGraphQL {
   given Schema[Env, ReviewUpdate.DeletedComment] = Schema.gen
 
   // Queries.
-  given Schema[Env, UserPlaylistsInput] = Schema.gen
-  given ArgBuilder[UserPlaylistsInput]  = ArgBuilder.gen
-  given Schema[Env, SpotifyProfile]     = Schema.gen
-  given Schema[Env, Pagination]         = Schema.gen
-  given ArgBuilder[Pagination]          = ArgBuilder.gen
+  given Schema[Env, UserPlaylistsInput]    = Schema.gen
+  given ArgBuilder[UserPlaylistsInput]     = ArgBuilder.gen
+  given Schema[Env, SpotifyProfile]        = Schema.gen
+  given Schema[Env, PrivateSpotifyProfile] = Schema.gen
+  given Schema[Env, Pagination]            = Schema.gen
+  given ArgBuilder[Pagination]             = ArgBuilder.gen
 
   given Schema[Env, FeedInput]        = Schema.gen
   given ArgBuilder[FeedInput]         = ArgBuilder.gen

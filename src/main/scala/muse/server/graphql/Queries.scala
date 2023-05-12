@@ -24,15 +24,15 @@ final case class CommentInput(id: Long)
 final case class CommentsInput(commentIds: List[Long])
 final case class SpotifyEntityInput(id: String)
 
+// TODO: add search with Relay Pagination.
 final case class SearchArgs(
     query: String,
     types: Set[EntityType],
     @GQLDefault(Default.Search.annotation) pagination: Option[Pagination])
 
-// TODO: Integrate "Input" for arguments.
 final case class Queries(
+    me: ZQuery[GetUser.Env, Nothing, PrivateUser],
     user: UserInput => ZQuery[GetUser.Env, Nothing, User],
-    userMaybe: UserInput => ZQuery[GetUser.Env, Throwable, User],
     searchUser: SearchUserInput => ZQuery[GetUser.SearchEnv, Throwable, List[User]],
     review: ReviewInput => ZQuery[GetReview.Env, Throwable, Option[Review]],
     reviews: ReviewsInput => ZQuery[GetReview.Env, Throwable, List[Review]],
@@ -47,7 +47,7 @@ final case class Queries(
 
 object Queries {
   val live = Queries(
-    args => GetUser.query(args.id),
+    PrivateUser.query,
     args => GetUser.query(args.id),
     args => GetUser.fromDisplayName(args.displayName),
     args => GetReview.query(args.id),
