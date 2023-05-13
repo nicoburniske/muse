@@ -233,9 +233,11 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
                       // Need to account for how many were requested!
                     }.map(s => Math.max(0, s - limit).toInt) <&> run {
                       (for {
-                        review <- getFeedReviews(userId, newestTime).sortBy(_.createdAt)(Ord.desc)
+                        review <- getFeedReviews(userId, newestTime)
                         entity <- reviewEntity.leftJoin(_.reviewId == review.reviewId)
-                      } yield (review, entity)).take(lift(limit))
+                      } yield (review, entity))
+                        .take(lift(limit))
+                        .sortBy(r => r._1.createdAt)(Ord.desc)
                     }
     } yield result
   }.provide(layer)
