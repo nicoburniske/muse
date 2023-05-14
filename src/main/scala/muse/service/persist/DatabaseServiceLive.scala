@@ -221,11 +221,13 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   def getFeed(userId: UserId, offset: Option[UUID], limit: Int) = {
     for {
       now        <- Clock.instant
-      newestTime <- run {
-                      for {
-                        review <- review.filter(r => lift(offset).contains(r.reviewId))
-                      } yield review.createdAt
-                    }.map(_.headOption.getOrElse(now))
+      newestTime <- offset.fold(ZIO.succeed(now)) { reviewId =>
+                      run {
+                        for {
+                          review <- review.filter(r => lift(reviewId) == r.reviewId)
+                        } yield review.createdAt
+                      }.map(_.headOption.getOrElse(now))
+                    }
       result     <- run {
                       getFeedReviews(userId, newestTime)
                         .distinctOn(_.reviewId)

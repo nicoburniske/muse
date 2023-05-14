@@ -27,7 +27,7 @@ object ReviewEdge {
 
 final case class ReviewConnection(pageInfo: PageInfo, edges: List[ReviewEdge]) extends Connection[ReviewEdge]
 
-case class FeedInput(
+final case class FeedInput(
     first: Option[Int],
     after: Option[String]
 ) extends ForwardPaginationArgs[ElasticCursor]
@@ -36,13 +36,18 @@ case class FeedInput(
 object GetFeed {
   type Env = DatabaseService with Reloadable[UserSession]
   def query(input: FeedInput) = ZQuery.fromRequest(input)(feedDataSource)
-  val DEFAULT_LIMIT           = 10
+  val DEFAULT_LIMIT           = 20
 
   val feedDataSource: DataSource[Env, FeedInput] =
     DataSource.fromFunctionZIO("GetComment") { req =>
-      val limit  = Math.min(req.first.getOrElse(DEFAULT_LIMIT), DEFAULT_LIMIT)
-      val offset = req.after.flatMap(s => Try(UUID.fromString(s)).toOption)
+      val limit = Math.min(req.first.getOrElse(DEFAULT_LIMIT), DEFAULT_LIMIT)
       for {
+        page   <- req.toPagination
+        offset  = page.cursor match {
+                    case PaginationCursor.After(cursor) => Try(UUID.fromString(cursor.value)).toOption
+                    case PaginationCursor.Before(_)     => None
+                    case PaginationCursor.NoCursor      => None
+                  }
         userId <- getUserId
         feed   <-
           DatabaseService.getFeed(userId, offset, limit).map {
