@@ -178,20 +178,8 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
   }.provide(layer)
 
   override def getAllCommentChildren(commentId: Long, userId: UserId) = run {
-    val allChildrenIds: Query[Long] = sql"""
-        WITH RECURSIVE children AS (
-           SELECT ${lift(commentId)} AS comment_id
-           UNION ALL 
-           SELECT c.child_comment_id
-           FROM children 
-             JOIN ${lift(commentParentChildTable)} c
-             ON children.comment_id = c.parent_comment_id
-        )
-        -- Exclude the original comment.
-        SELECT * FROM children WHERE comment_id != ${lift(commentId)}
-       """.as[Query[Long]]
-
-    val childComments = allViewableComments(userId).filter(c => allChildrenIds.contains(c.commentId))
+    val allChildrenIds: Query[Long] = getChildComments(lift(commentId))
+    val childComments               = allViewableComments(userId).filter(c => allChildrenIds.contains(c.commentId))
     getAllCommentData(childComments)
   }.provide(layer)
 
@@ -409,53 +397,50 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       }
     }.provide(layer)
 
-  override def updateCommentIndex(commentId: Long, newCommentIndex: Int) = Clock
-    .instant.flatMap { now =>
-      transaction {
-        for {
-          current <- run {
-                       commentIndex
-                         .filter(_.commentId == lift(commentId))
-                     }.map(_.headOption) <&> run {
-                       commentParentChild
-                         .filter(_.childCommentId == lift(commentId))
-                         .map(_.parentCommentId)
-                     }.map(_.headOption)
+  override def updateCommentIndex(commentId: Long, newCommentIndex: Int) = transaction {
+    for {
+      current <- run {
+                   commentIndex
+                     .filter(_.commentId == lift(commentId))
+                 }.map(_.headOption) <&> run {
+                   commentParentChild
+                     .filter(_.childCommentId == lift(commentId))
+                     .map(_.parentCommentId)
+                 }.map(_.headOption)
 
-          (currentIndex, parentCommentId: Option[Long]) = current
-          currentCommentIndex: Option[Int]              = currentIndex.map(_.commentIndex)
-          reviewId: Option[UUID]                        = currentIndex.map(_.reviewId)
+      (currentIndex, parentCommentId: Option[Long]) = current
+      currentCommentIndex: Option[Int]              = currentIndex.map(_.commentIndex)
+      reviewId: Option[UUID]                        = currentIndex.map(_.reviewId)
 
-          // Move entries above current placement down.
-          movedDownComments <- run {
-                                 commentIndex
-                                   .filter(comment => lift(reviewId).contains(comment.reviewId))
-                                   .filter(_.parentCommentId == lift(parentCommentId))
-                                   .filter(comment => lift(currentCommentIndex).exists(comment.commentIndex > _))
-                                   .update(comment => comment.commentIndex -> (comment.commentIndex - 1))
-                                   .returningMany(c => c.commentId -> c.commentIndex)
-                               }
-          // Move entries below new placement up.
-          movedUpComments   <- run {
-                                 commentIndex
-                                   .filter(comment => lift(reviewId).contains(comment.reviewId))
-                                   .filter(_.parentCommentId == lift(parentCommentId))
-                                   .filter(_.commentIndex >= lift(newCommentIndex))
-                                   .update(c => c.commentIndex -> (c.commentIndex + 1))
-                                   .returningMany(c => c.commentId -> c.commentIndex)
-                               }
-          // Update index.
-          updatedComment    <- run {
-                                 commentIndex
-                                   .filter(_.commentId == lift(commentId))
-                                   .update(
-                                     _.commentIndex -> lift(newCommentIndex)
-                                   )
-                                   .returning(c => c.commentId -> c.commentIndex)
-                               }
-        } yield updatedComment :: (movedDownComments ++ movedUpComments)
-      }
-    }.provide(layer)
+      // Move entries above current placement down.
+      movedDownComments <- run {
+                             commentIndex
+                               .filter(comment => lift(reviewId).contains(comment.reviewId))
+                               .filter(_.parentCommentId == lift(parentCommentId))
+                               .filter(comment => lift(currentCommentIndex).exists(comment.commentIndex > _))
+                               .update(comment => comment.commentIndex -> (comment.commentIndex - 1))
+                               .returningMany(c => c.commentId -> c.commentIndex)
+                           }
+      // Move entries below new placement up.
+      movedUpComments   <- run {
+                             commentIndex
+                               .filter(comment => lift(reviewId).contains(comment.reviewId))
+                               .filter(_.parentCommentId == lift(parentCommentId))
+                               .filter(_.commentIndex >= lift(newCommentIndex))
+                               .update(c => c.commentIndex -> (c.commentIndex + 1))
+                               .returningMany(c => c.commentId -> c.commentIndex)
+                           }
+      // Update index.
+      updatedComment    <- run {
+                             commentIndex
+                               .filter(_.commentId == lift(commentId))
+                               .update(
+                                 _.commentIndex -> lift(newCommentIndex)
+                               )
+                               .returning(c => c.commentId -> c.commentIndex)
+                           }
+    } yield updatedComment :: (movedDownComments ++ movedUpComments)
+  }.provide(layer)
 
   override def shareReview(share: ShareReview) =
     (share.accessLevel match
@@ -605,6 +590,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
       case false =>
         transaction {
           for {
+            // This has to be first because it will be deleted on cascade.
             parentCommentId: Option[Long] <- run {
                                                commentParentChild
                                                  .filter(_.childCommentId == lift(d.commentId))
@@ -625,7 +611,7 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
                                                  .delete
                                                  .returning(_.commentId)
                                              }
-            // Move all comments (with same parent  &&  above the deleted comment) down.
+            // Move all comments (with same parent && above the deleted comment) down.
             movedDownIds                  <- run {
                                                commentIndex
                                                  .filter(_.reviewId == lift(d.reviewId))
@@ -635,41 +621,80 @@ final case class DatabaseServiceLive(d: DataSource) extends DatabaseService {
                                                  .returningMany(_.commentId)
                                              }
 
-            // Find parent that is deleted and is not referenced by any other comments.
-            maybeParentIndexToDelete      <- run {
-                                               for {
-                                                 parentIndex   <- commentIndex.filter { index =>
-                                                                    lift(parentCommentId).contains(index.commentId)
-                                                                  }
-                                                 parentComment <- comment.join(_.commentId == parentIndex.commentId)
-                                                 if parentComment.deleted
-                                                 if commentParentChild.filter(_.parentCommentId == parentComment.commentId).size == 0
-                                               } yield parentIndex
-                                             }.map(_.headOption)
-            maybeParentIdToDelete          = maybeParentIndexToDelete.map(_.commentId)
+            dangling                          <- deleteDanglingComments(d.reviewId)
+            (danglingDeleted, danglingUpdated) = dangling
 
-            // Delete dangling parent.
-            _ <- run {
-                   comment
-                     .filter(c => lift(maybeParentIdToDelete).contains(c.commentId))
-                     .delete
-                 }
-
-            maybeReviewId                = maybeParentIndexToDelete.map(_.reviewId)
-            maybeGrandparentId           = maybeParentIndexToDelete.flatMap(_.parentCommentId)
-            maybeParentIndex             = maybeParentIndexToDelete.map(_.commentIndex)
-            // Move all comments on parent level down if it was deleted.
-            adjustedParents: List[Long] <- run {
-                                             commentIndex
-                                               .filter(index => lift(maybeReviewId).contains(index.reviewId))
-                                               .filter(index => lift(maybeGrandparentId) == index.parentCommentId)
-                                               .filter(index => lift(maybeParentIndex).exists(_ <= index.commentIndex))
-                                               .update(index => index.commentIndex -> (index.commentIndex - 1))
-                                               .returningMany(_.commentId)
-                                           }
-          } yield (deletedCommentId :: maybeParentIdToDelete.fold(Nil)(List(_))) -> (movedDownIds ++ adjustedParents)
+          } yield (deletedCommentId :: danglingDeleted) -> (movedDownIds ++ danglingUpdated)
         }
     }.provide(layer)
+
+  // Deleted -> Updated.
+  private def deleteDanglingComments(reviewId: UUID): ZIO[DataSource, SQLException, (List[Long], List[Long])] = for {
+    danglingCommentIds <- run(getDanglingComments(reviewId))
+
+    executeDeleteAndUpdate = run {
+                               // delete dangling.
+                               comment
+                                 .filter(c => liftQuery(danglingCommentIds).contains(c.commentId))
+                                 .delete
+                                 .returningMany(_.commentId)
+                             } <&> {
+                               for {
+                                 indices <- run {
+                                              commentIndex
+                                                .filter(_.reviewId == lift(reviewId))
+                                                .filter(c => liftQuery(danglingCommentIds).contains(c.commentId))
+                                            }
+                                 result  <- ZIO.foreachPar(indices) { index =>
+                                              run {
+                                                commentIndex
+                                                  .filter(_.parentCommentId == lift(index.parentCommentId))
+                                                  .filter(_.commentIndex > lift(index.commentIndex))
+                                                  .update(index => index.commentIndex -> (index.commentIndex - 1))
+                                                  .returningMany(_.commentId)
+                                              }
+                                            }
+                               } yield result
+                             }.map(_.flatten)
+
+    result <- danglingCommentIds match
+                case Nil => ZIO.succeed(Nil -> Nil)
+                case _   =>
+                  for {
+                    current <- executeDeleteAndUpdate
+                    next    <- deleteDanglingComments(reviewId)
+                  } yield (current._1 ++ next._1) -> (current._2 ++ next._2)
+  } yield result
+
+  private inline def getDanglingComments(inline reviewId: UUID) = {
+    comment
+      .filter(_.reviewId == lift(reviewId))
+      .filter(_.deleted)
+      .map(_.commentId)
+      .filter { deleted =>
+        val children = getChildComments(deleted)
+        comment
+          .filter(c => children.contains(c.commentId))
+          .filter(c => !c.deleted)
+          .size == 0
+      }
+  }
+
+  // purposefully including `lift` at the call site because one usage is dynamic another is compile time.
+  // result does not include the given commentId
+  private inline def getChildComments(inline commentId: Long): Query[Long] = {
+    sql"""
+     WITH RECURSIVE children AS (
+        SELECT $commentId AS comment_id
+        UNION ALL
+        SELECT c.child_comment_id
+        FROM children
+          JOIN muse.review_comment_parent_child c
+          ON children.comment_id = c.parent_comment_id
+     )
+     SELECT * FROM children WHERE comment_id != $commentId
+   """.as[Query[Long]]
+  }
 
   override def deleteReviewLink(link: DeleteReviewLink) = transaction {
     for {
